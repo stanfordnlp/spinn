@@ -48,12 +48,16 @@ class HardStack(object):
         stack_shape = (batch_size, max_stack_size, self.embedding_dim)
         stack_init = T.zeros(stack_shape)
 
+        # Allocate two helper stack copies (passed as non_seqs into scan.)
+        stack_pushed = T.zeros(stack_shape)
+        stack_merged = T.zeros(stack_shape)
+
         # TODO
         # Precompute embedding lookups.
         # embedding_lookups = self.embeddings[self.X]
         # print embedding_lookups.ndim
 
-        def step(x_t, stack_t):
+        def step(x_t, stack_t, stack_pushed, stack_merged):
             x_t_clean = T.maximum(0, x_t)
             embs_t = self.W[x_t_clean]
 
@@ -61,21 +65,17 @@ class HardStack(object):
             # has received a push op, and one where every stack has
             # received a merge op.
             #
-            # TODO monitor mem alloc. This should be reused, but we
-            # probably shouldn't expect Theano to figure that out
-            # automatically
+            # TODO is set_subtensor slow?
             #
             # Copy 1: Push.
-            stack_pushed = T.concatenate(
-                [embs_t.reshape((-1, 1, self.embedding_dim)),
-                 stack_t[:, :-1, :]], axis=1)
+            stack_pushed = T.set_subtensor(stack_pushed[:, 0], embs_t)
+            stack_pushed = T.set_subtensor(stack_pushed[:, 1:], stack_t[:, 1:])
 
             # Copy 2: Merge.
             els_to_merge = stack_t[:, :2].reshape((-1, self.embedding_dim * 2))
             merged = els_to_merge.dot(self.W)
-            stack_merged = T.concatenate(
-                [merged.reshape((-1, 1, self.embedding_dim)), stack_t[:, 2:],
-                 T.zeros((-1, 1, self.embedding_dim))], axis=1)
+            stack_merged = T.set_subtensor(stack_merged[:, 0], merged)
+            stack_merged = T.set_subtensor(stack_merged[:, 1:], stack_t[:, 2:])
 
             # Use special input flag -1 to switch between two stacks.
             stack_next = T.switch(T.eq(x_t, -1), stack_merged,
@@ -83,11 +83,13 @@ class HardStack(object):
             return stack_next
 
         if self.unroll_scan:
-            stacks = util.unroll_scan(step, self.X, non_sequences=[],
-                                    outputs_info=[stack_init],
-                                    n_steps=self.seq_length)
+            stacks = util.unroll_scan(
+                step, self.X, non_sequences=[stack_pushed, stack_merged],
+                outputs_info=[stack_init], n_steps=self.seq_length)
         else:
-            stacks = theano.scan(step, self.X, outputs_info=[stack_init])[0]
+            stacks = theano.scan(step, self.X,
+                                 non_sequences=[stack_pushed, stack_merged],
+                                 outputs_info=[stack_init])[0]
 
         self.final_stack = stacks[-1]
 
