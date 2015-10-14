@@ -57,9 +57,14 @@ class HardStack(object):
         # embedding_lookups = self.embeddings[self.X]
         # print embedding_lookups.ndim
 
+        # TODO support masking
+
         def step(x_t, stack_t, stack_pushed, stack_merged):
-            x_t_clean = T.maximum(0, x_t)
-            embs_t = self.W[x_t_clean]
+            # NB: x_t may contain sentinel -1 values. Luckily -1 is a
+            # valid index, and the below lookup doesn't fail. In any
+            # case, where x_t we won't use the resultant embedding
+            # anyway!
+            embs_t = self.embeddings[x_t]
 
             # Build two copies of the stack batch: one where every stack
             # has received a push op, and one where every stack has
@@ -69,25 +74,29 @@ class HardStack(object):
             #
             # Copy 1: Push.
             stack_pushed = T.set_subtensor(stack_pushed[:, 0], embs_t)
-            stack_pushed = T.set_subtensor(stack_pushed[:, 1:], stack_t[:, 1:])
+            stack_pushed = T.set_subtensor(stack_pushed[:, 1:], stack_t[:, :-1])
 
             # Copy 2: Merge.
             els_to_merge = stack_t[:, :2].reshape((-1, self.embedding_dim * 2))
             merged = els_to_merge.dot(self.W)
             stack_merged = T.set_subtensor(stack_merged[:, 0], merged)
-            stack_merged = T.set_subtensor(stack_merged[:, 1:], stack_t[:, 2:])
+            stack_merged = T.set_subtensor(stack_merged[:, 1:-1], stack_t[:, 2:])
 
             # Use special input flag -1 to switch between two stacks.
-            stack_next = T.switch(T.eq(x_t, -1), stack_merged,
-                                  stack_pushed)
+            mask = T.eq(x_t, -1).dimshuffle(0, "x", "x")
+            stack_next = mask * stack_merged + (1 - mask) * stack_pushed
+
             return stack_next
+
+        # Dimshuffle inputs to seq_len * batch_size for scanning
+        X = self.X.dimshuffle(1, 0)
 
         if self.unroll_scan:
             stacks = util.unroll_scan(
-                step, self.X, non_sequences=[stack_pushed, stack_merged],
-                outputs_info=[stack_init], n_steps=self.seq_length)
+                step, X, non_sequences=[stack_pushed, stack_merged],
+                outputs_info=[stack_init], n_steps=self.seq_length)[0]
         else:
-            stacks = theano.scan(step, self.X,
+            stacks = theano.scan(step, X,
                                  non_sequences=[stack_pushed, stack_merged],
                                  outputs_info=[stack_init])[0]
 
