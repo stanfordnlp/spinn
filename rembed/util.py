@@ -1,4 +1,6 @@
 
+from collections import OrderedDict
+
 import numpy as np
 import theano
 from theano import tensor as T
@@ -9,6 +11,9 @@ def UniformInitializer(range):
 
 def NormalInitializer(std):
     return lambda shape: np.random.normal(0.0, std, shape)
+
+def ZeroInitializer():
+    return lambda shape: np.zeros(shape)
 
 
 class VariableStore(object):
@@ -22,6 +27,28 @@ class VariableStore(object):
             self.vars[name] = theano.shared(initializer(shape),
                                             name="%s/%s" % (self.prefix, name))
         return self.vars[name]
+
+
+def Linear(inp, inp_dim, outp_dim, vs, name="linear", use_bias=True):
+    W = vs.add_param("%s_W" % name, (inp_dim, outp_dim))
+    outp = inp.dot(W)
+
+    if use_bias:
+        b = vs.add_param("%s_b" % name, (outp_dim,),
+                         initializer=ZeroInitializer())
+        outp += b
+
+    return outp
+
+
+def SGD(cost, params, lr=0.01):
+    grads = T.grad(cost, params)
+
+    updates = OrderedDict()
+    for param, grad in zip(params, grads):
+        updates[param] = -lr * grad
+
+    return updates
 
 
 def unroll_scan(fn, sequences, outputs_info, non_sequences, n_steps,
