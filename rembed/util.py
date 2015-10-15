@@ -48,7 +48,7 @@ def SGD(cost, params, lr=0.01):
 
     updates = OrderedDict()
     for param, grad in zip(params, grads):
-        updates[param] = -lr * grad
+        updates[param] = param - lr * grad
 
     return updates
 

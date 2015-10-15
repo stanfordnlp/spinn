@@ -25,14 +25,16 @@ def build_model(vocab_size, seq_length, inputs, vs):
 
     # Feed forward through a single output layer
     outputs = util.Linear(
-        embeddings, FLAGS.embedding_dim, 1, vs, use_bias=False)
+        embeddings, FLAGS.embedding_dim, 1, vs, use_bias=True)
     outputs = T.nnet.sigmoid(outputs)
     outputs = outputs.reshape((-1,))
     return outputs
 
 
 def build_cost(outputs, targets):
-    return T.nnet.binary_crossentropy(outputs, targets).mean()
+    costs = T.nnet.binary_crossentropy(outputs, targets)
+    cost = costs.mean()
+    return cost
 
 
 def tokens_to_ids(vocabulary, dataset):
@@ -98,7 +100,9 @@ def train():
     updates = util.SGD(cost, vs.vars.values(), lr)
     update_fn = theano.function([X, y, lr], cost, updates=updates)
 
-    for X_batch, y_batch in data_iter:
+    for step in range(FLAGS.training_steps):
+        X_batch, y_batch = data_iter.next()
+
         print update_fn(X_batch, y_batch, FLAGS.learning_rate)
 
 
@@ -113,7 +117,8 @@ if __name__ == '__main__':
     gflags.DEFINE_integer("embedding_dim", 20, "")
 
     # Optimization settings
-    gflags.DEFINE_integer("batch_size", 50, "")
+    gflags.DEFINE_integer("training_steps", 500, "")
+    gflags.DEFINE_integer("batch_size", 32, "")
     gflags.DEFINE_float("learning_rate", 0.1, "")
 
     # Parse command line flags
