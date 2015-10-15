@@ -17,13 +17,15 @@ FLAGS = gflags.FLAGS
 
 def build_model(vocab_size, seq_length, inputs, vs):
     # Build hard stack which scans over input sequence.
-    stack = HardStack(FLAGS.embedding_dim, vocab_size, seq_length, vs, X=inputs)
+    stack = HardStack(
+        FLAGS.embedding_dim, vocab_size, seq_length, vs, X=inputs)
 
     # Extract top element of final stack timestep.
     embeddings = stack.final_stack[:, 0].reshape((-1, FLAGS.embedding_dim))
 
     # Feed forward through a single output layer
-    outputs = util.Linear(embeddings, FLAGS.embedding_dim, 1, vs, use_bias=False)
+    outputs = util.Linear(
+        embeddings, FLAGS.embedding_dim, 1, vs, use_bias=False)
     outputs = T.nnet.sigmoid(outputs)
     outputs = outputs.reshape((-1,))
     return outputs
@@ -67,13 +69,14 @@ def load_data():
 
     # Build batched data iterator.
     def data_iter():
-        start = 0
         size = FLAGS.batch_size
+        start = -1 * size
 
         # TODO Don't be lazy and drop remainder of examples that don't fit into
         # a final batch
         while True:
-            if start + size > len(X):
+            start += size
+            if start > len(X):
                 start = 0
             yield X[start:start + size], y[start:start + size]
 
@@ -81,7 +84,6 @@ def load_data():
 
 
 def train():
-
     data_iter, vocab_size, seq_length = load_data()
 
     X = T.imatrix("X")
@@ -105,7 +107,7 @@ if __name__ == '__main__':
 
     # Data settings
     gflags.DEFINE_string("data_path", None, "")
-    gflags.DEFINE_integer("seq_length", 29, "")
+    gflags.DEFINE_integer("seq_length", 11, "")
 
     # Model architecture settings
     gflags.DEFINE_integer("embedding_dim", 20, "")

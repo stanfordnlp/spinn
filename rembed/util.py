@@ -9,8 +9,10 @@ from theano import tensor as T
 def UniformInitializer(range):
     return lambda shape: np.random.uniform(-range, range, shape)
 
+
 def NormalInitializer(std):
     return lambda shape: np.random.normal(0.0, std, shape)
+
 
 def ZeroInitializer():
     return lambda shape: np.zeros(shape)
