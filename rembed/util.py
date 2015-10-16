@@ -46,11 +46,11 @@ def Linear(inp, inp_dim, outp_dim, vs, name="linear", use_bias=True):
 def SGD(cost, params, lr=0.01):
     grads = T.grad(cost, params)
 
-    updates = OrderedDict()
+    new_values = OrderedDict()
     for param, grad in zip(params, grads):
-        updates[param] = param - lr * grad
+        new_values[param] = param - lr * grad
 
-    return updates
+    return new_values
 
 
 def unroll_scan(fn, sequences, outputs_info, non_sequences, n_steps,

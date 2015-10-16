@@ -74,12 +74,13 @@ def load_data():
                  dtype=np.int32)
 
     # Build batched data iterator.
+    # TODO(SB): Add shuffling.
     def data_iter():
         size = FLAGS.batch_size
         start = -1 * size
 
         # TODO Don't be lazy and drop remainder of examples that don't fit into
-        # a final batch
+        # a final batch [No need to do that if we shuffle. -SB]
         while True:
             start += size
             if start > len(X):
@@ -102,11 +103,12 @@ def train():
     cost = build_cost(model_outputs, y)
 
     # L2 regularization
+    # TODO(SB): Don't naively L2ify the embedding matrix. It'll break on NL.
     for value in vs.vars.values():
         cost += FLAGS.l2_lambda * T.sum(value ** 2)
 
-    updates = util.SGD(cost, vs.vars.values(), lr)
-    update_fn = theano.function([X, y, lr], cost, updates=updates)
+    new_values = util.SGD(cost, vs.vars.values(), lr)
+    update_fn = theano.function([X, y, lr], cost, updates=new_values)
 
     for step in range(FLAGS.training_steps):
         X_batch, y_batch = data_iter.next()
