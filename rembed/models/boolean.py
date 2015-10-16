@@ -101,6 +101,10 @@ def train():
     model_outputs = build_model(vocab_size, seq_length, X, vs)
     cost = build_cost(model_outputs, y)
 
+    # L2 regularization
+    for value in vs.vars.values():
+        cost += FLAGS.l2_lambda * T.sum(value ** 2)
+
     updates = util.SGD(cost, vs.vars.values(), lr)
     update_fn = theano.function([X, y, lr], cost, updates=updates)
 
@@ -125,6 +129,7 @@ if __name__ == '__main__':
     gflags.DEFINE_integer("batch_size", 32, "")
     gflags.DEFINE_float("learning_rate", 0.1, "")
     gflags.DEFINE_float("clipping_max_norm", 5.0, "")
+    gflags.DEFINE_float("l2_lambda", 0.001, "")
 
     # Parse command line flags
     FLAGS(sys.argv)
