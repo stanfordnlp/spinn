@@ -31,10 +31,6 @@ class HardStack(object):
         self.embeddings = self._vs.add_param(
             "embeddings", (self.vocab_size, self.embedding_dim))
 
-        # Embedding composition map
-        self.W = self._vs.add_param("composition_W", (self.embedding_dim * 2,
-                                                      self.embedding_dim))
-
     def _make_inputs(self):
         self.X = self.X or T.matrix("X")
 
@@ -74,13 +70,17 @@ class HardStack(object):
             #
             # Copy 1: Push.
             stack_pushed = T.set_subtensor(stack_pushed[:, 0], embs_t)
-            stack_pushed = T.set_subtensor(stack_pushed[:, 1:], stack_t[:, :-1])
+            stack_pushed = T.set_subtensor(
+                stack_pushed[:, 1:], stack_t[:, :-1])
 
             # Copy 2: Merge.
             els_to_merge = stack_t[:, :2].reshape((-1, self.embedding_dim * 2))
-            merged = els_to_merge.dot(self.W)
+            merged = util.Linear(els_to_merge, self.embedding_dim * 2,
+                                 self.embedding_dim, self._vs,
+                                 name="composition", use_bias=True)
             stack_merged = T.set_subtensor(stack_merged[:, 0], merged)
-            stack_merged = T.set_subtensor(stack_merged[:, 1:-1], stack_t[:, 2:])
+            stack_merged = T.set_subtensor(
+                stack_merged[:, 1:-1], stack_t[:, 2:])
 
             # Use special input flag -1 to switch between two stacks.
             mask = T.eq(x_t, -1).dimshuffle(0, "x", "x")
