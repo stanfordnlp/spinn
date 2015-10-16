@@ -24,19 +24,19 @@ def build_model(vocab_size, seq_length, inputs, vs):
     embeddings = stack.final_stack[:, 0].reshape((-1, FLAGS.embedding_dim))
 
     # Feed forward through a single output layer
-    outputs = util.Linear(
-        embeddings, FLAGS.embedding_dim, 1, vs, use_bias=True)
-    outputs = T.nnet.sigmoid(outputs)
-    outputs = outputs.reshape((-1,))
-    return outputs
+    logits = util.Linear(
+        embeddings, FLAGS.embedding_dim, 2, vs, use_bias=True)
+
+    return logits
 
 
-def build_cost(outputs, targets):
+def build_cost(logits, targets):
     # Clip gradients coming from the cost function.
-    outputs = theano.gradient.grad_clip(
-        outputs, -1 * FLAGS.clipping_max_norm, FLAGS.clipping_max_norm)
+    logits = theano.gradient.grad_clip(
+        logits, -1 * FLAGS.clipping_max_norm, FLAGS.clipping_max_norm)
 
-    costs = T.nnet.binary_crossentropy(outputs, targets)
+    predicted_dist = T.nnet.softmax(logits)
+    costs = T.nnet.categorical_crossentropy(predicted_dist, targets)
     cost = costs.mean()
     return cost
 
@@ -100,22 +100,26 @@ def train():
     logging.info("Building model.")
     vs = util.VariableStore(
         default_initializer=util.UniformInitializer(FLAGS.init_range))
-    model_outputs = build_model(vocab_size, seq_length, X, vs)
-    cost = build_cost(model_outputs, y)
+    logits = build_model(vocab_size, seq_length, X, vs)
+    xent_cost = build_cost(logits, y)
 
     # L2 regularization
     # TODO(SB): Don't naively L2ify the embedding matrix. It'll break on NL.
+    l2_cost = 0.0
     for value in vs.vars.values():
-        cost += FLAGS.l2_lambda * T.sum(value ** 2)
+        l2_cost += FLAGS.l2_lambda * T.sum(T.sqr(value))
+    total_cost = xent_cost + l2_cost
 
-    new_values = util.SGD(cost, vs.vars.values(), lr)
-    update_fn = theano.function([X, y, lr], cost, updates=new_values)
+    new_values = util.SGD(total_cost, vs.vars.values(), lr)
+    update_fn = theano.function(
+        [X, y, lr], [total_cost, xent_cost, l2_cost], updates=new_values)
 
     for step in range(FLAGS.training_steps):
         X_batch, y_batch = data_iter.next()
-        cost = update_fn(X_batch, y_batch, FLAGS.learning_rate)
+        total_cost_value, xent_cost_value, l2_cost_value = update_fn(
+            X_batch, y_batch, FLAGS.learning_rate)
         if step % FLAGS.statistics_interval_steps == 0:
-            print "Step: %i\tCost: %f" % (step, cost)
+            print "Step: %i\tCost: %f %f %f" % (step, total_cost_value, xent_cost_value, l2_cost_value)
 
 
 if __name__ == '__main__':
@@ -126,15 +130,15 @@ if __name__ == '__main__':
     gflags.DEFINE_integer("seq_length", 11, "")
 
     # Model architecture settings
-    gflags.DEFINE_integer("embedding_dim", 20, "")
+    gflags.DEFINE_integer("embedding_dim", 5, "")
 
     # Optimization settings
     gflags.DEFINE_integer("training_steps", 10000, "")
-    gflags.DEFINE_integer("batch_size", 32, "")
+    gflags.DEFINE_integer("batch_size", 8, "")
     gflags.DEFINE_float("learning_rate", 0.1, "")
     gflags.DEFINE_float("clipping_max_norm", 5.0, "")
-    gflags.DEFINE_float("l2_lambda", 0.001, "")
-    gflags.DEFINE_float("init_range", 0.01, "")
+    gflags.DEFINE_float("l2_lambda", 0.0005, "")
+    gflags.DEFINE_float("init_range", 0.1, "")
 
     # Display settings
     gflags.DEFINE_integer("statistics_interval_steps", 50, "")
