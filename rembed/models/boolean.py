@@ -18,7 +18,7 @@ FLAGS = gflags.FLAGS
 def build_model(vocab_size, seq_length, inputs, vs):
     # Build hard stack which scans over input sequence.
     stack = HardStack(
-        FLAGS.embedding_dim, vocab_size, seq_length, vs, X=inputs)
+        FLAGS.embedding_dim, vocab_size, seq_length, FLAGS.num_composition_layers, vs, X=inputs)
 
     # Extract top element of final stack timestep.
     embeddings = stack.final_stack[:, 0].reshape((-1, FLAGS.embedding_dim))
@@ -131,14 +131,15 @@ if __name__ == '__main__':
 
     # Model architecture settings
     gflags.DEFINE_integer("embedding_dim", 5, "")
+    gflags.DEFINE_integer("num_composition_layers", 2, "")
 
     # Optimization settings
-    gflags.DEFINE_integer("training_steps", 10000, "")
-    gflags.DEFINE_integer("batch_size", 8, "")
+    gflags.DEFINE_integer("training_steps", 50000, "")
+    gflags.DEFINE_integer("batch_size", 32, "")
     gflags.DEFINE_float("learning_rate", 0.1, "")
     gflags.DEFINE_float("clipping_max_norm", 5.0, "")
-    gflags.DEFINE_float("l2_lambda", 0.0005, "")
-    gflags.DEFINE_float("init_range", 0.1, "")
+    gflags.DEFINE_float("l2_lambda", 0.0001, "")
+    gflags.DEFINE_float("init_range", 0.2, "")
 
     # Display settings
     gflags.DEFINE_integer("statistics_interval_steps", 50, "")

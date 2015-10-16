@@ -9,11 +9,13 @@ from rembed import util
 
 class HardStack(object):
 
-    def __init__(self, embedding_dim, vocab_size, seq_length, vs,
-                 unroll_scan=True, X=None):
+    def __init__(
+        self, embedding_dim, vocab_size, seq_length, num_composition_layers, vs,
+        unroll_scan=True, X=None):
         self.embedding_dim = embedding_dim
         self.vocab_size = vocab_size
         self.seq_length = seq_length
+        self.num_composition_layers = num_composition_layers
 
         self._vs = vs
         self.unroll_scan = unroll_scan
@@ -74,11 +76,16 @@ class HardStack(object):
                 stack_pushed[:, 1:], stack_t[:, :-1])
 
             # Copy 2: Merge.
-            els_to_merge = stack_t[:, :2].reshape((-1, self.embedding_dim * 2))
-            merged = util.Linear(els_to_merge, self.embedding_dim * 2,
-                                 self.embedding_dim, self._vs,
-                                 name="composition", use_bias=True)
-            stack_merged = T.set_subtensor(stack_merged[:, 0], merged)
+            prev_layer = stack_t[:, :2].reshape((-1, self.embedding_dim * 2))
+            prev_dim = self.embedding_dim * 2
+            for layer in range(self.num_composition_layers):
+                prev_layer = util.ReLULayer(prev_layer, prev_dim,
+                                            self.embedding_dim, self._vs,
+                                            name="composition_layer_%i" % layer,
+                                            use_bias=True)
+                prev_dim = self.embedding_dim
+
+            stack_merged = T.set_subtensor(stack_merged[:, 0], prev_layer)
             stack_merged = T.set_subtensor(
                 stack_merged[:, 1:-1], stack_t[:, 2:])
 

@@ -35,6 +35,14 @@ class VariableStore(object):
         return self.vars[name]
 
 
+def ReLULayer(inp, inp_dim, outp_dim, vs, name="tanh_layer", use_bias=True):
+    pre_nl = Linear(inp, inp_dim, outp_dim, vs, name, use_bias)
+    # ReLU isn't present in this version of Theano.
+    outp = T.maximum(pre_nl, 0)
+
+    return outp
+
+
 def Linear(inp, inp_dim, outp_dim, vs, name="linear", use_bias=True):
     W = vs.add_param("%s_W" % name, (inp_dim, outp_dim))
     outp = inp.dot(W)
