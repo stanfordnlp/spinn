@@ -50,28 +50,42 @@ def tokens_to_ids(vocabulary, dataset):
     return dataset
 
 
+def crop_and_pad(dataset, length):
+    # NOTE: This can probably be done faster in NumPy if it winds up making a
+    # difference.
+    for example in dataset:
+        padding_amount = length - len(example["op_sequence"])
+        if padding_amount < 0:
+            print "Cropping len " + str(len(example["op_sequence"]))
+            example["op_sequence"] = example["op_sequence"][-padding_amount:-1]
+        else:
+            example["op_sequence"] = [0] * \
+                padding_amount + example["op_sequence"]
+    return dataset
+
+
 def load_data():
     dataset = import_data.import_binary_bracketed_data(FLAGS.data_path)
 
-    # Force a particular seq length
-    seq_length = FLAGS.seq_length
-    dataset = [example for example in dataset
-               if len(example["op_sequence"]) == seq_length]
-    logging.info("Retained %i examples of length %i", len(dataset), seq_length)
-
     # Build vocabulary from data
-    vocabulary = {import_data.REDUCE_OP: -1}
+    # TODO(SB): Use a fixed vocab file in case this takes especially long.
+    vocabulary = {import_data.REDUCE_OP: -1,
+                  '*PADDING*': 0}
     types = set(itertools.chain.from_iterable([example["op_sequence"]
                                                for example in dataset]))
     types.remove(import_data.REDUCE_OP)
-    vocabulary.update({type: i for i, type in enumerate(types)})
+    vocabulary.update({type: i + 1 for i, type in enumerate(types)})
 
     # Convert token sequences to integer sequences
     dataset = tokens_to_ids(vocabulary, dataset)
+    dataset = crop_and_pad(dataset, FLAGS.seq_length)
     X = np.array([example["op_sequence"] for example in dataset],
                  dtype=np.int32)
     y = np.array([0 if example["label"] == "F" else 1 for example in dataset],
                  dtype=np.int32)
+
+    logging.info("Loaded %i examples to sequences of length %i",
+                 len(dataset), FLAGS.seq_length)
 
     # Build batched data iterator.
     # TODO(SB): Add shuffling.
@@ -87,7 +101,7 @@ def load_data():
                 start = 0
             yield X[start:start + size], y[start:start + size]
 
-    return data_iter(), len(vocabulary) - 1, seq_length
+    return data_iter(), len(vocabulary) - 1, FLAGS.seq_length
 
 
 def train():
@@ -127,18 +141,18 @@ if __name__ == '__main__':
 
     # Data settings
     gflags.DEFINE_string("data_path", None, "")
-    gflags.DEFINE_integer("seq_length", 11, "")
+    gflags.DEFINE_integer("seq_length", 29, "")
 
     # Model architecture settings
     gflags.DEFINE_integer("embedding_dim", 5, "")
-    gflags.DEFINE_integer("num_composition_layers", 2, "")
+    gflags.DEFINE_integer("num_composition_layers", 1, "")
 
     # Optimization settings
     gflags.DEFINE_integer("training_steps", 50000, "")
     gflags.DEFINE_integer("batch_size", 32, "")
-    gflags.DEFINE_float("learning_rate", 0.1, "")
-    gflags.DEFINE_float("clipping_max_norm", 5.0, "")
-    gflags.DEFINE_float("l2_lambda", 0.0001, "")
+    gflags.DEFINE_float("learning_rate", 0.5, "")
+    gflags.DEFINE_float("clipping_max_norm", 1.0, "")
+    gflags.DEFINE_float("l2_lambda", 0.00001, "")
     gflags.DEFINE_float("init_range", 0.2, "")
 
     # Display settings
