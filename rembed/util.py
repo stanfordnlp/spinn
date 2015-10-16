@@ -20,11 +20,15 @@ def ZeroInitializer():
 
 class VariableStore(object):
 
-    def __init__(self, prefix="vs"):
+    def __init__(self, prefix="vs", default_initializer=UniformInitializer(0.1)):
         self.prefix = prefix
+        self.default_initializer = default_initializer
         self.vars = {}
 
-    def add_param(self, name, shape, initializer=UniformInitializer(0.1)):
+    def add_param(self, name, shape, initializer=None):
+        if not initializer:
+            initializer = self.default_initializer
+
         if name not in self.vars:
             self.vars[name] = theano.shared(initializer(shape),
                                             name="%s/%s" % (self.prefix, name))

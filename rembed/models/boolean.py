@@ -98,7 +98,8 @@ def train():
     lr = T.scalar("lr")
 
     logging.info("Building model.")
-    vs = util.VariableStore()
+    vs = util.VariableStore(
+        default_initializer=util.UniformInitializer(FLAGS.init_range))
     model_outputs = build_model(vocab_size, seq_length, X, vs)
     cost = build_cost(model_outputs, y)
 
@@ -132,6 +133,7 @@ if __name__ == '__main__':
     gflags.DEFINE_float("learning_rate", 0.1, "")
     gflags.DEFINE_float("clipping_max_norm", 5.0, "")
     gflags.DEFINE_float("l2_lambda", 0.001, "")
+    gflags.DEFINE_float("init_range", 0.01, "")
 
     # Parse command line flags
     FLAGS(sys.argv)
