@@ -30,8 +30,10 @@ class VariableStore(object):
             initializer = self.default_initializer
 
         if name not in self.vars:
+            full_name = "%s/%s" % (self.prefix, name)
+            print "Created variable " + full_name
             self.vars[name] = theano.shared(initializer(shape),
-                                            name="%s/%s" % (self.prefix, name))
+                                            name=full_name)
         return self.vars[name]
 
 
