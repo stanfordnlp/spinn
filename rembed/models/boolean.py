@@ -113,8 +113,9 @@ def train():
 
     for step in range(FLAGS.training_steps):
         X_batch, y_batch = data_iter.next()
-
-        print update_fn(X_batch, y_batch, FLAGS.learning_rate)
+        cost = update_fn(X_batch, y_batch, FLAGS.learning_rate)
+        if step % FLAGS.statistics_interval_steps == 0:
+            print "Step: %i\tCost: %f" % (step, cost)
 
 
 if __name__ == '__main__':
@@ -134,6 +135,9 @@ if __name__ == '__main__':
     gflags.DEFINE_float("clipping_max_norm", 5.0, "")
     gflags.DEFINE_float("l2_lambda", 0.001, "")
     gflags.DEFINE_float("init_range", 0.01, "")
+
+    # Display settings
+    gflags.DEFINE_integer("statistics_interval_steps", 50, "")
 
     # Parse command line flags
     FLAGS(sys.argv)
