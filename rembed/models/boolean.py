@@ -32,6 +32,10 @@ def build_model(vocab_size, seq_length, inputs, vs):
 
 
 def build_cost(outputs, targets):
+    # Clip gradients coming from the cost function.
+    outputs = theano.gradient.grad_clip(
+        outputs, -1 * FLAGS.clipping_max_norm, FLAGS.clipping_max_norm)
+
     costs = T.nnet.binary_crossentropy(outputs, targets)
     cost = costs.mean()
     return cost
@@ -117,9 +121,10 @@ if __name__ == '__main__':
     gflags.DEFINE_integer("embedding_dim", 20, "")
 
     # Optimization settings
-    gflags.DEFINE_integer("training_steps", 500, "")
+    gflags.DEFINE_integer("training_steps", 10000, "")
     gflags.DEFINE_integer("batch_size", 32, "")
     gflags.DEFINE_float("learning_rate", 0.1, "")
+    gflags.DEFINE_float("clipping_max_norm", 5.0, "")
 
     # Parse command line flags
     FLAGS(sys.argv)
