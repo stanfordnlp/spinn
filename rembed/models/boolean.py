@@ -1,5 +1,6 @@
 import itertools
 import logging
+import random
 import sys
 
 import gflags
@@ -92,14 +93,16 @@ def load_data():
     def data_iter():
         size = FLAGS.batch_size
         start = -1 * size
+        order = range(len(X))
+        random.shuffle(order)
 
-        # TODO Don't be lazy and drop remainder of examples that don't fit into
-        # a final batch [No need to do that if we shuffle. -SB]
         while True:
             start += size
             if start > len(X):
                 start = 0
-            yield X[start:start + size], y[start:start + size]
+                random.shuffle(order)
+            batch_indices = order[start:start + size]
+            yield X[batch_indices], y[batch_indices]
 
     return data_iter(), len(vocabulary) - 1, FLAGS.seq_length
 
@@ -150,10 +153,10 @@ if __name__ == '__main__':
     # Optimization settings
     gflags.DEFINE_integer("training_steps", 50000, "")
     gflags.DEFINE_integer("batch_size", 32, "")
-    gflags.DEFINE_float("learning_rate", 0.5, "")
+    gflags.DEFINE_float("learning_rate", 0.1, "")
     gflags.DEFINE_float("clipping_max_norm", 1.0, "")
-    gflags.DEFINE_float("l2_lambda", 0.00001, "")
-    gflags.DEFINE_float("init_range", 0.2, "")
+    gflags.DEFINE_float("l2_lambda", 1e-6, "")
+    gflags.DEFINE_float("init_range", 0.1, "")
 
     # Display settings
     gflags.DEFINE_integer("statistics_interval_steps", 50, "")
