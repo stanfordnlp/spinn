@@ -1,6 +1,10 @@
+"""From the project root directory (containing data files), this can be run with:
+python rembed/models/boolean.py --training_data_path bl_train.tsv \
+       --eval_data_path bl_dev.tsv
+"""
+
 import itertools
 import logging
-import random
 import sys
 
 import gflags
@@ -65,17 +69,19 @@ def crop_and_pad(dataset, length):
     return dataset
 
 
-def load_data():
-    dataset = import_data.import_binary_bracketed_data(FLAGS.data_path)
+def load_data(path, vocabulary=None, seq_length=None, eval_mode=False):
+    dataset = import_data.import_binary_bracketed_data(path)
 
-    # Build vocabulary from data
-    # TODO(SB): Use a fixed vocab file in case this takes especially long.
-    vocabulary = {import_data.REDUCE_OP: -1,
-                  '*PADDING*': 0}
-    types = set(itertools.chain.from_iterable([example["op_sequence"]
-                                               for example in dataset]))
-    types.remove(import_data.REDUCE_OP)
-    vocabulary.update({type: i + 1 for i, type in enumerate(types)})
+    if not vocabulary:
+        # Build vocabulary from data
+        # TODO(SB): Use a fixed vocab file in case this takes especially long, or we want
+        # to include vocab items that don't appear in the training data.
+        vocabulary = {import_data.REDUCE_OP: -1,
+                      '*PADDING*': 0}
+        types = set(itertools.chain.from_iterable([example["op_sequence"]
+                                                   for example in dataset]))
+        types.remove(import_data.REDUCE_OP)
+        vocabulary.update({type: i + 1 for i, type in enumerate(types)})
 
     # Convert token sequences to integer sequences
     dataset = tokens_to_ids(vocabulary, dataset)
@@ -89,27 +95,25 @@ def load_data():
                  len(dataset), FLAGS.seq_length)
 
     # Build batched data iterator.
-    # TODO(SB): Add shuffling.
-    def data_iter():
-        size = FLAGS.batch_size
-        start = -1 * size
-        order = range(len(X))
-        random.shuffle(order)
+    if eval_mode:
+        data_iter = util.MakeEvalIterator(X, y, FLAGS.batch_size)
+    else:
+        data_iter = util.MakeTrainingIterator(X, y, FLAGS.batch_size)
 
-        while True:
-            start += size
-            if start > len(X):
-                start = 0
-                random.shuffle(order)
-            batch_indices = order[start:start + size]
-            yield X[batch_indices], y[batch_indices]
-
-    return data_iter(), len(vocabulary) - 1, FLAGS.seq_length
+    return data_iter, vocabulary
 
 
 def train():
-    data_iter, vocab_size, seq_length = load_data()
+    # Load the data
+    training_data_iter, vocabulary = load_data(
+        FLAGS.training_data_path, seq_length=FLAGS.seq_length)
+    eval_data_iter, _ = load_data(
+        FLAGS.eval_data_path, vocabulary=vocabulary, seq_length=FLAGS.seq_length, eval_mode=True)
 
+    # Account for the *REDUCE* trigger token.
+    vocab_size = len(vocabulary) - 1
+
+    # Set up the placeholders.
     X = T.imatrix("X")
     y = T.ivector("y")
     lr = T.scalar("lr")
@@ -117,33 +121,45 @@ def train():
     logging.info("Building model.")
     vs = util.VariableStore(
         default_initializer=util.UniformInitializer(FLAGS.init_range))
-    logits = build_model(vocab_size, seq_length, X, vs)
+    logits = build_model(vocab_size, FLAGS.seq_length, X, vs)
     xent_cost = build_cost(logits, y)
 
-    # L2 regularization
+    # Set up L2 regularization.
     # TODO(SB): Don't naively L2ify the embedding matrix. It'll break on NL.
     l2_cost = 0.0
     for value in vs.vars.values():
         l2_cost += FLAGS.l2_lambda * T.sum(T.sqr(value))
     total_cost = xent_cost + l2_cost
 
+    # Set up optimization.
     new_values = util.SGD(total_cost, vs.vars.values(), lr)
     update_fn = theano.function(
         [X, y, lr], [total_cost, xent_cost, l2_cost], updates=new_values)
+    eval_fn = theano.function([X, y], xent_cost)
 
+    # Main training loop.
     for step in range(FLAGS.training_steps):
-        X_batch, y_batch = data_iter.next()
+        X_batch, y_batch = training_data_iter.next()
         total_cost_value, xent_cost_value, l2_cost_value = update_fn(
             X_batch, y_batch, FLAGS.learning_rate)
         if step % FLAGS.statistics_interval_steps == 0:
-            print "Step: %i\tCost: %f %f %f" % (step, total_cost_value, xent_cost_value, l2_cost_value)
-
+            print "Step: %i\tCost: %f %f %f" % (step, total_cost_value,
+                                                xent_cost_value, l2_cost_value)
+        if step % FLAGS.eval_interval_steps == 0:
+            # Evaluate
+            cost_accum = 0.0
+            eval_batches = 0.0
+            for (eval_X_batch, eval_y_batch) in eval_data_iter:
+                cost_accum += eval_fn(eval_X_batch, eval_y_batch)
+                eval_batches += 1.0
+            print "Step: %i\tEval cost: %f" % (step, cost_accum / eval_batches)
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)
 
     # Data settings
-    gflags.DEFINE_string("data_path", None, "")
+    gflags.DEFINE_string("training_data_path", None, "")
+    gflags.DEFINE_string("eval_data_path", None, "")
     gflags.DEFINE_integer("seq_length", 29, "")
 
     # Model architecture settings
@@ -160,6 +176,7 @@ if __name__ == '__main__':
 
     # Display settings
     gflags.DEFINE_integer("statistics_interval_steps", 50, "")
+    gflags.DEFINE_integer("eval_interval_steps", 50, "")
 
     # Parse command line flags
     FLAGS(sys.argv)
