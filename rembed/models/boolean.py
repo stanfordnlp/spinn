@@ -43,7 +43,11 @@ def build_cost(logits, targets):
     predicted_dist = T.nnet.softmax(logits)
     costs = T.nnet.categorical_crossentropy(predicted_dist, targets)
     cost = costs.mean()
-    return cost
+
+    pred = T.argmax(logits, axis=1)
+    acc = 1 - T.mean(T.neq(pred, targets))
+
+    return cost, acc
 
 
 def tokens_to_ids(vocabulary, dataset):
@@ -122,7 +126,7 @@ def train():
     vs = util.VariableStore(
         default_initializer=util.UniformInitializer(FLAGS.init_range))
     logits = build_model(vocab_size, FLAGS.seq_length, X, vs)
-    xent_cost = build_cost(logits, y)
+    xent_cost, acc = build_cost(logits, y)
 
     # Set up L2 regularization.
     # TODO(SB): Don't naively L2ify the embedding matrix. It'll break on NL.
@@ -134,25 +138,25 @@ def train():
     # Set up optimization.
     new_values = util.SGD(total_cost, vs.vars.values(), lr)
     update_fn = theano.function(
-        [X, y, lr], [total_cost, xent_cost, l2_cost], updates=new_values)
-    eval_fn = theano.function([X, y], xent_cost)
+        [X, y, lr], [total_cost, xent_cost, l2_cost, acc], updates=new_values)
+    eval_fn = theano.function([X, y], acc)
 
     # Main training loop.
     for step in range(FLAGS.training_steps):
         X_batch, y_batch = training_data_iter.next()
-        total_cost_value, xent_cost_value, l2_cost_value = update_fn(
+        total_cost_value, xent_cost_value, l2_cost_value, acc = update_fn(
             X_batch, y_batch, FLAGS.learning_rate)
         if step % FLAGS.statistics_interval_steps == 0:
-            print "Step: %i\tCost: %f %f %f" % (step, total_cost_value,
-                                                xent_cost_value, l2_cost_value)
+            print "Step: %i\tAcc: %f Cost: %f %f %f" % (step, acc, total_cost_value,
+                                                        xent_cost_value, l2_cost_value)
         if step % FLAGS.eval_interval_steps == 0:
             # Evaluate
-            cost_accum = 0.0
+            acc_accum = 0.0
             eval_batches = 0.0
             for (eval_X_batch, eval_y_batch) in eval_data_iter:
-                cost_accum += eval_fn(eval_X_batch, eval_y_batch)
+                acc_accum += eval_fn(eval_X_batch, eval_y_batch)
                 eval_batches += 1.0
-            print "Step: %i\tEval cost: %f" % (step, cost_accum / eval_batches)
+            print "Step: %i\tEval acc: %f" % (step, acc_accum / eval_batches)
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)
