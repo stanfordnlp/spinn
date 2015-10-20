@@ -68,6 +68,29 @@ def SGD(cost, params, lr=0.01):
     return new_values
 
 
+def tokens_to_ids(vocabulary, dataset):
+    """Replace strings in original boolean dataset with token IDs."""
+
+    for example in dataset:
+        example["op_sequence"] = [vocabulary[token]
+                                  for token in example["op_sequence"]]
+    return dataset
+
+
+def crop_and_pad(dataset, length):
+    # NOTE: This can probably be done faster in NumPy if it winds up making a
+    # difference.
+    for example in dataset:
+        padding_amount = length - len(example["op_sequence"])
+        if padding_amount < 0:
+            print "Cropping len " + str(len(example["op_sequence"]))
+            example["op_sequence"] = example["op_sequence"][-padding_amount:-1]
+        else:
+            example["op_sequence"] = [0] * \
+                padding_amount + example["op_sequence"]
+    return dataset
+
+
 def MakeTrainingIterator(X, y, batch_size):
     # Make an iterator that exposes a dataset as random minibatches.
 

@@ -3,24 +3,22 @@ python rembed/models/boolean.py --training_data_path bl_train.tsv \
        --eval_data_path bl_dev.tsv
 """
 
-import itertools
 import logging
 import sys
 
 import gflags
-import numpy as np
 from theano import tensor as T
 import theano
 
 from rembed import util
-from rembed.data.boolean import import_binary_bracketed_data as import_data
+from rembed.data.boolean import load_boolean_data
 from rembed.stack import HardStack
 
 
 FLAGS = gflags.FLAGS
 
 
-def build_model(vocab_size, seq_length, inputs, vs):
+def build_model(vocab_size, seq_length, inputs, num_classes, vs):
     # Build hard stack which scans over input sequence.
     stack = HardStack(
         FLAGS.embedding_dim, vocab_size, seq_length, FLAGS.num_composition_layers, vs, X=inputs)
@@ -30,7 +28,7 @@ def build_model(vocab_size, seq_length, inputs, vs):
 
     # Feed forward through a single output layer
     logits = util.Linear(
-        embeddings, FLAGS.embedding_dim, 2, vs, use_bias=True)
+        embeddings, FLAGS.embedding_dim, num_classes, vs, use_bias=True)
 
     return logits
 
@@ -50,69 +48,14 @@ def build_cost(logits, targets):
     return cost, acc
 
 
-def tokens_to_ids(vocabulary, dataset):
-    """Replace strings in original boolean dataset with token IDs."""
-
-    for example in dataset:
-        example["op_sequence"] = [vocabulary[token]
-                                  for token in example["op_sequence"]]
-    return dataset
-
-
-def crop_and_pad(dataset, length):
-    # NOTE: This can probably be done faster in NumPy if it winds up making a
-    # difference.
-    for example in dataset:
-        padding_amount = length - len(example["op_sequence"])
-        if padding_amount < 0:
-            print "Cropping len " + str(len(example["op_sequence"]))
-            example["op_sequence"] = example["op_sequence"][-padding_amount:-1]
-        else:
-            example["op_sequence"] = [0] * \
-                padding_amount + example["op_sequence"]
-    return dataset
-
-
-def load_data(path, vocabulary=None, seq_length=None, eval_mode=False):
-    dataset = import_data.import_binary_bracketed_data(path)
-
-    if not vocabulary:
-        # Build vocabulary from data
-        # TODO(SB): Use a fixed vocab file in case this takes especially long, or we want
-        # to include vocab items that don't appear in the training data.
-        vocabulary = {import_data.REDUCE_OP: -1,
-                      '*PADDING*': 0}
-        types = set(itertools.chain.from_iterable([example["op_sequence"]
-                                                   for example in dataset]))
-        types.remove(import_data.REDUCE_OP)
-        vocabulary.update({type: i + 1 for i, type in enumerate(types)})
-
-    # Convert token sequences to integer sequences
-    dataset = tokens_to_ids(vocabulary, dataset)
-    dataset = crop_and_pad(dataset, FLAGS.seq_length)
-    X = np.array([example["op_sequence"] for example in dataset],
-                 dtype=np.int32)
-    y = np.array([0 if example["label"] == "F" else 1 for example in dataset],
-                 dtype=np.int32)
-
-    logging.info("Loaded %i examples to sequences of length %i",
-                 len(dataset), FLAGS.seq_length)
-
-    # Build batched data iterator.
-    if eval_mode:
-        data_iter = util.MakeEvalIterator(X, y, FLAGS.batch_size)
-    else:
-        data_iter = util.MakeTrainingIterator(X, y, FLAGS.batch_size)
-
-    return data_iter, vocabulary
-
-
 def train():
+    data_manager = load_boolean_data
+
     # Load the data
-    training_data_iter, vocabulary = load_data(
-        FLAGS.training_data_path, seq_length=FLAGS.seq_length)
-    eval_data_iter, _ = load_data(
-        FLAGS.eval_data_path, vocabulary=vocabulary, seq_length=FLAGS.seq_length, eval_mode=True)
+    training_data_iter, vocabulary = data_manager.load_data(
+        FLAGS.training_data_path, seq_length=FLAGS.seq_length, batch_size=FLAGS.batch_size)
+    eval_data_iter, _ = data_manager.load_data(
+        FLAGS.eval_data_path, vocabulary=vocabulary, seq_length=FLAGS.seq_length, batch_size=FLAGS.batch_size, eval_mode=True)
 
     # Account for the *REDUCE* trigger token.
     vocab_size = len(vocabulary) - 1
@@ -125,7 +68,8 @@ def train():
     logging.info("Building model.")
     vs = util.VariableStore(
         default_initializer=util.UniformInitializer(FLAGS.init_range))
-    logits = build_model(vocab_size, FLAGS.seq_length, X, vs)
+    logits = build_model(
+        vocab_size, FLAGS.seq_length, X, data_manager.NUM_CLASSES, vs)
     xent_cost, acc = build_cost(logits, y)
 
     # Set up L2 regularization.
