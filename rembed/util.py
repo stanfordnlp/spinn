@@ -72,7 +72,9 @@ def tokens_to_ids(vocabulary, dataset):
     """Replace strings in original boolean dataset with token IDs."""
 
     for example in dataset:
-        example["op_sequence"] = [vocabulary[token]
+        example["op_sequence"] = [(vocabulary[token]
+                                   if token in vocabulary
+                                   else vocabulary["*UNK*"])
                                   for token in example["op_sequence"]]
     return dataset
 
@@ -84,7 +86,8 @@ def crop_and_pad(dataset, length):
         padding_amount = length - len(example["op_sequence"])
         if padding_amount < 0:
             print "Cropping len " + str(len(example["op_sequence"]))
-            example["op_sequence"] = example["op_sequence"][-padding_amount:-1]
+            example["op_sequence"] = example[
+                "op_sequence"][-padding_amount:]
         else:
             example["op_sequence"] = [0] * \
                 padding_amount + example["op_sequence"]

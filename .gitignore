@@ -1,5 +1,5 @@
 *.pyc
-*.tsv
+*-data/*
 *~
 .env
 .DS_Store

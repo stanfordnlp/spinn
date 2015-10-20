@@ -21,7 +21,7 @@ from rembed import util
 
 REDUCE_OP = '*MERGE*'
 
-NUM_CLASSES = 2
+NUM_CLASSES = 5
 
 
 def convert_binary_bracketed_data(filename):
@@ -30,14 +30,13 @@ def convert_binary_bracketed_data(filename):
         for line in f:
             example = {}
             line = line.strip()
-            tab_split = line.split('\t')
-            example["label"] = tab_split[0]
-            example["sentence"] = tab_split[1]
+            example["label"] = line[1]
+            example["sentence"] = line
             example["op_sequence"] = []
             for word in example["sentence"].split(' '):
                 if word == ')':
                     example["op_sequence"].append(REDUCE_OP)
-                elif word != '(':
+                elif word[0] != '(':
                     example["op_sequence"].append(word)
             examples.append(example)
     return examples
@@ -51,18 +50,19 @@ def load_data(path, vocabulary=None, seq_length=None, batch_size=32, eval_mode=F
         # TODO(SB): Use a fixed vocab file in case this takes especially long, or we want
         # to include vocab items that don't appear in the training data.
         vocabulary = {REDUCE_OP: -1,
-                      '*PADDING*': 0}
+                      '*PADDING*': 0,
+                      '*UNK*': 1}
         types = set(itertools.chain.from_iterable([example["op_sequence"]
                                                    for example in dataset]))
         types.remove(REDUCE_OP)
-        vocabulary.update({type: i + 1 for i, type in enumerate(types)})
+        vocabulary.update({type: i + 2 for i, type in enumerate(types)})
 
     # Convert token sequences to integer sequences
     dataset = util.tokens_to_ids(vocabulary, dataset)
     dataset = util.crop_and_pad(dataset, seq_length)
     X = np.array([example["op_sequence"] for example in dataset],
                  dtype=np.int32)
-    y = np.array([0 if example["label"] == "F" else 1 for example in dataset],
+    y = np.array([int(example["label"]) for example in dataset],
                  dtype=np.int32)
 
     logging.info("Loaded %i examples to sequences of length %i",
@@ -79,5 +79,5 @@ def load_data(path, vocabulary=None, seq_length=None, batch_size=32, eval_mode=F
 
 if __name__ == "__main__":
     # Demo:
-    examples = import_binary_bracketed_data('bl-data/bl_dev.tsv')
+    examples = import_binary_bracketed_data('sst-data/dev.txt')
     print examples[0]

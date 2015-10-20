@@ -1,6 +1,11 @@
 """From the project root directory (containing data files), this can be run with:
-python rembed/models/boolean.py --training_data_path bl_train.tsv \
-       --eval_data_path bl_dev.tsv
+python rembed/models/classifier.py --training_data_path bl-data/bl_train.tsv \
+       --eval_data_path bl-data/bl_dev.tsv
+
+or 
+
+python rembed/models/classifier.py --data_type sst --l2_lambda 0.0 --embedding_dim 25 --training_data_path sst-data/train.txt \
+       --eval_data_path sst-data/dev.txt
 """
 
 import logging
@@ -12,6 +17,8 @@ import theano
 
 from rembed import util
 from rembed.data.boolean import load_boolean_data
+from rembed.data.sst import load_sst_data
+
 from rembed.stack import HardStack
 
 
@@ -49,7 +56,13 @@ def build_cost(logits, targets):
 
 
 def train():
-    data_manager = load_boolean_data
+    if FLAGS.data_type == "bl":
+        data_manager = load_boolean_data
+    elif FLAGS.data_type == "sst":
+        data_manager = load_sst_data
+    else:
+        print "Bad data type."
+        return
 
     # Load the data
     training_data_iter, vocabulary = data_manager.load_data(
@@ -104,6 +117,9 @@ def train():
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)
+
+    # Data types
+    gflags.DEFINE_string("data_type", "bl", "Values: bl, sst")
 
     # Data settings
     gflags.DEFINE_string("training_data_path", None, "")
