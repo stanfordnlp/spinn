@@ -1,9 +1,10 @@
 """From the project root directory (containing data files), this can be run with:
+
+Boolean logic evaluation:
 python rembed/models/classifier.py --training_data_path bl-data/bl_train.tsv \
        --eval_data_path bl-data/bl_dev.tsv
 
-or 
-
+SST sentiment:
 python rembed/models/classifier.py --data_type sst --l2_lambda 0.0 --embedding_dim 25 --training_data_path sst-data/train.txt \
        --eval_data_path sst-data/dev.txt
 """
@@ -67,8 +68,12 @@ def train():
     # Load the data
     training_data_iter, vocabulary = data_manager.load_data(
         FLAGS.training_data_path, seq_length=FLAGS.seq_length, batch_size=FLAGS.batch_size)
-    eval_data_iter, _ = data_manager.load_data(
-        FLAGS.eval_data_path, vocabulary=vocabulary, seq_length=FLAGS.seq_length, batch_size=FLAGS.batch_size, eval_mode=True)
+
+    eval_sets = []
+    for eval_filename in FLAGS.eval_data_path.split(","):
+        eval_data_iter, _ = data_manager.load_data(
+            eval_filename, vocabulary=vocabulary, seq_length=FLAGS.seq_length, batch_size=FLAGS.batch_size, eval_mode=True)
+        eval_sets.append((eval_filename, eval_data_iter))
 
     # Account for the *REDUCE* trigger token.
     vocab_size = len(vocabulary) - 1
@@ -104,16 +109,17 @@ def train():
         total_cost_value, xent_cost_value, l2_cost_value, acc = update_fn(
             X_batch, y_batch, FLAGS.learning_rate)
         if step % FLAGS.statistics_interval_steps == 0:
-            print "Step: %i\tAcc: %f Cost: %f %f %f" % (step, acc, total_cost_value,
-                                                        xent_cost_value, l2_cost_value)
+            print "Step: %i\tAcc: %f\tCost: %f %f %f" % (step, acc, total_cost_value,
+                                                         xent_cost_value, l2_cost_value)
         if step % FLAGS.eval_interval_steps == 0:
-            # Evaluate
-            acc_accum = 0.0
-            eval_batches = 0.0
-            for (eval_X_batch, eval_y_batch) in eval_data_iter:
-                acc_accum += eval_fn(eval_X_batch, eval_y_batch)
-                eval_batches += 1.0
-            print "Step: %i\tEval acc: %f" % (step, acc_accum / eval_batches)
+            for eval_set in eval_sets:
+                # Evaluate
+                acc_accum = 0.0
+                eval_batches = 0.0
+                for (eval_X_batch, eval_y_batch) in eval_set[1]:
+                    acc_accum += eval_fn(eval_X_batch, eval_y_batch)
+                    eval_batches += 1.0
+                print "Step: %i\tEval acc: %f\t%s" % (step, acc_accum / eval_batches, eval_set[0])
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)
