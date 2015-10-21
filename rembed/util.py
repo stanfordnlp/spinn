@@ -82,6 +82,23 @@ def SGD(cost, params, lr=0.01):
     return new_values
 
 
+def momentum(cost, params, lr=0.01, momentum=0.9):
+    grads = T.grad(cost, params)
+
+    new_values = OrderedDict()
+    for param, grad in zip(params, grads):
+        param_val = param.get_value(borrow=True)
+        # momentum value
+        m = theano.shared(np.zeros(param_val.shape, dtype=param_val.dtype))
+        # compute velocity
+        v = momentum * m - lr * grad
+
+        new_values[m] = v
+        new_values[param] = param + v
+
+    return new_values
+
+
 def tokens_to_ids(vocabulary, dataset):
     """Replace strings in original boolean dataset with token IDs."""
 
