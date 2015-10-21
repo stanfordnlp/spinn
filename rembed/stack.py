@@ -82,7 +82,7 @@ class HardStack(object):
         if self.linear_memory_dim is not None:
             linear_memory = T.zeros((batch_size, self.linear_memory_dim * 2))
         else:
-            linear_memory = None
+            linear_memory = T.zeros((1,))
 
         # TODO
         # Precompute embedding lookups.
@@ -101,7 +101,9 @@ class HardStack(object):
             mask = T.eq(x_t, -1)
 
             # If we are carrying along a linear memory, update that first.
-            if linear_memory is not None:
+            # HACK: If not using linear memory, we allocate a dummy 1-dim
+            # value. So if ndim == 2, we are using linear memory.
+            if linear_memory.ndim == 2:
                 next_linear_memory = util.LSTM(
                     linear_memory, embs_t, self.embedding_dim,
                     self.linear_memory_dim, self._vs, name="linear_memory")

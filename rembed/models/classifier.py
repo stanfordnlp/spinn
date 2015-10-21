@@ -36,7 +36,7 @@ def build_model(vocab_size, seq_length, inputs, num_classes, vs):
     # Build hard stack which scans over input sequence.
     stack = HardStack(
         FLAGS.embedding_dim, vocab_size, seq_length,
-        compose_network, vs, X=inputs, unroll_scan=False)
+        compose_network, vs, X=inputs, unroll_scan=True)
 
     # Extract top element of final stack timestep.
     embeddings = stack.final_stack[:, 0].reshape((-1, FLAGS.embedding_dim))
