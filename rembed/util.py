@@ -59,6 +59,40 @@ def Linear(inp, inp_dim, outp_dim, vs, name="linear", use_bias=True):
     return outp
 
 
+def LSTM(lstm_prev, inp, inp_dim, hidden_dim, vs, name="lstm"):
+    # input -> hidden mapping
+    W = vs.add_param("%s/W" % name, (inp_dim, hidden_dim * 4))
+    # hidden -> hidden mapping
+    U = vs.add_param("%s/U" % name, (hidden_dim, hidden_dim * 4))
+    # gate biases
+    # TODO(jgauthier): support excluding params from regularization
+    b = vs.add_param("%s/b" % name, (hidden_dim * 4,),
+                     initializer=ZeroInitializer())
+
+    def slice_gate(gate_data, i):
+        return gate_data[:, i * hidden_dim:(i + 1) * hidden_dim]
+
+    # Decompose previous LSTM value into hidden and cell value
+    h_prev = lstm_prev[:, :hidden_dim]
+    c_prev = lstm_prev[:, hidden_dim:]
+
+    # Compute and slice gate values
+    gates = T.dot(inp, W) + T.dot(h_prev, U) + b
+    i_gate, f_gate, o_gate, cell_inp = [slice_gate(gates, i) for i in range(4)]
+
+    # Apply nonlinearities
+    i_gate = T.nnet.sigmoid(i_gate)
+    f_gate = T.nnet.sigmoid(f_gate)
+    o_gate = T.nnet.sigmoid(o_gate)
+    cell_inp = T.tanh(cell_inp)
+
+    # Compute new cell and hidden value
+    c_t = f_gate * c_prev + i_gate * cell_inp
+    h_t = o_gate * T.tanh(c_t)
+
+    return T.concatenate([h_t, c_t], axis=1)
+
+
 def MLP(inp, inp_dim, outp_dim, vs, layer=ReLULayer, hidden_dims=None,
         name="mlp"):
     if hidden_dims is None:
