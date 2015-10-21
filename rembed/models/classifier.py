@@ -9,6 +9,7 @@ python rembed/models/classifier.py --data_type sst --l2_lambda 0.0 --embedding_d
        --eval_data_path sst-data/dev.txt
 """
 
+from functools import partial
 import logging
 import sys
 
@@ -27,10 +28,15 @@ FLAGS = gflags.FLAGS
 
 
 def build_model(vocab_size, seq_length, inputs, num_classes, vs):
+    # Prepare MLP which performs stack element composition.
+    compose_network = partial(
+        util.MLP,
+        hidden_dims=[FLAGS.embedding_dim] * (FLAGS.num_composition_layers - 1))
+
     # Build hard stack which scans over input sequence.
     stack = HardStack(
         FLAGS.embedding_dim, vocab_size, seq_length,
-        FLAGS.num_composition_layers, vs, X=inputs, unroll_scan=False)
+        compose_network, vs, X=inputs, unroll_scan=False)
 
     # Extract top element of final stack timestep.
     embeddings = stack.final_stack[:, 0].reshape((-1, FLAGS.embedding_dim))

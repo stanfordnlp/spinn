@@ -59,6 +59,19 @@ def Linear(inp, inp_dim, outp_dim, vs, name="linear", use_bias=True):
     return outp
 
 
+def MLP(inp, inp_dim, outp_dim, vs, layer=ReLULayer, hidden_dims=None,
+        name="mlp"):
+    if hidden_dims is None:
+        hidden_dims = []
+
+    prev_val = inp
+    dims = [inp_dim] + hidden_dims + [outp_dim]
+    for i, (src_dim, tgt_dim) in enumerate(zip(dims, dims[1:])):
+        prev_val = layer(prev_val, src_dim, tgt_dim, vs, use_bias=True,
+                         name="%s/%i" % (name, i))
+    return prev_val
+
+
 def SGD(cost, params, lr=0.01):
     grads = T.grad(cost, params)
 

@@ -10,7 +10,7 @@ from rembed import util
 class HardStack(object):
 
     def __init__(
-        self, embedding_dim, vocab_size, seq_length, num_composition_layers, vs,
+        self, embedding_dim, vocab_size, seq_length, compose_network, vs,
         unroll_scan=True, X=None):
         """Construct a HardStack.
 
@@ -19,8 +19,11 @@ class HardStack(object):
             vocab_size: Number of unique tokens in vocabulary
             seq_length: Maximum sequence length which will be processed by this
               stack
-            num_composition_layers: Number of neural-network layers to use when
-              composing two stack elements
+            compose_network: Blocks-like function which accepts arguments
+              `inp, inp_dim, outp_dim, vs, name` (see e.g. `util.Linear`).
+              Given a Theano batch `inp` of dimension `batch_size * inp_dim`,
+              returns a transformed Theano batch of dimension
+              `batch_size * outp_dim`.
             vs: VariableStore instance for parameter storage
             unroll_scan: If `True`, expand the recurrent scan over the input
               sequence without using `theano.scan`. This makes for faster
@@ -34,8 +37,8 @@ class HardStack(object):
         self.embedding_dim = embedding_dim
         self.vocab_size = vocab_size
         self.seq_length = seq_length
-        self.num_composition_layers = num_composition_layers
 
+        self._compose_network = compose_network
         self._vs = vs
         self.unroll_scan = unroll_scan
 
@@ -74,8 +77,6 @@ class HardStack(object):
         # embedding_lookups = self.embeddings[self.X]
         # print embedding_lookups.ndim
 
-        # TODO support masking
-
         def step(x_t, stack_t, stack_pushed, stack_merged):
             # NB: x_t may contain sentinel -1 values. Luckily -1 is a
             # valid index, and the below lookup doesn't fail. In any
@@ -95,16 +96,12 @@ class HardStack(object):
                 stack_pushed[:, 1:], stack_t[:, :-1])
 
             # Copy 2: Merge.
-            prev_layer = stack_t[:, :2].reshape((-1, self.embedding_dim * 2))
-            prev_dim = self.embedding_dim * 2
-            for layer in range(self.num_composition_layers):
-                prev_layer = util.ReLULayer(prev_layer, prev_dim,
-                                            self.embedding_dim, self._vs,
-                                            name="composition_layer_%i" % layer,
-                                            use_bias=True)
-                prev_dim = self.embedding_dim
+            merge_items = stack_t[:, :2].reshape((-1, self.embedding_dim * 2))
+            merged = self._compose_network(merge_items, self.embedding_dim * 2,
+                                           self.embedding_dim, self._vs,
+                                           name="compose")
 
-            stack_merged = T.set_subtensor(stack_merged[:, 0], prev_layer)
+            stack_merged = T.set_subtensor(stack_merged[:, 0], merged)
             stack_merged = T.set_subtensor(
                 stack_merged[:, 1:-1], stack_t[:, 2:])
 
