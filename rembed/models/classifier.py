@@ -62,7 +62,7 @@ def train():
     elif FLAGS.data_type == "sst":
         data_manager = load_sst_data
     else:
-        print "Bad data type."
+        logging.error("Bad data type.")
         return
 
     # Load the data
@@ -109,8 +109,9 @@ def train():
         total_cost_value, xent_cost_value, l2_cost_value, acc = update_fn(
             X_batch, y_batch, FLAGS.learning_rate)
         if step % FLAGS.statistics_interval_steps == 0:
-            print "Step: %i\tAcc: %f\tCost: %f %f %f" % (step, acc, total_cost_value,
-                                                         xent_cost_value, l2_cost_value)
+            logging.info(
+                "Step: %i\tAcc: %f\tCost: %f %f %f" % (step, acc, total_cost_value,
+                                                       xent_cost_value, l2_cost_value))
         if step % FLAGS.eval_interval_steps == 0:
             for eval_set in eval_sets:
                 # Evaluate
@@ -119,10 +120,12 @@ def train():
                 for (eval_X_batch, eval_y_batch) in eval_set[1]:
                     acc_accum += eval_fn(eval_X_batch, eval_y_batch)
                     eval_batches += 1.0
-                print "Step: %i\tEval acc: %f\t%s" % (step, acc_accum / eval_batches, eval_set[0])
+                logging.info("Step: %i\tEval acc: %f\t%s" %
+                             (step, acc_accum / eval_batches, eval_set[0]))
 
 if __name__ == '__main__':
-    logging.basicConfig(level=logging.DEBUG)
+    # Experiment naming
+    gflags.DEFINE_string("experiment_name", "experiment", "")
 
     # Data types
     gflags.DEFINE_string("data_type", "bl", "Values: bl, sst")
@@ -150,5 +153,12 @@ if __name__ == '__main__':
 
     # Parse command line flags
     FLAGS(sys.argv)
+
+    logging.basicConfig(level=logging.DEBUG,
+                        format='%(asctime)s %(levelname)-8s %(message)s',
+                        datefmt='%m-%d-%y %H:%M',
+                        handlers=[logging.FileHandler(
+                            FLAGS.experiment_name + ".log"),
+                        logging.StreamHandler()])
 
     train()

@@ -1,5 +1,6 @@
 
 from collections import OrderedDict
+import logging
 import random
 
 import numpy as np
@@ -32,7 +33,7 @@ class VariableStore(object):
 
         if name not in self.vars:
             full_name = "%s/%s" % (self.prefix, name)
-            print "Created variable " + full_name
+            logging.debug("Created variable " + full_name)
             self.vars[name] = theano.shared(initializer(shape),
                                             name=full_name)
         return self.vars[name]
@@ -85,7 +86,7 @@ def crop_and_pad(dataset, length):
     for example in dataset:
         padding_amount = length - len(example["op_sequence"])
         if padding_amount < 0:
-            print "Cropping len " + str(len(example["op_sequence"]))
+            logging.debug("Cropping len " + str(len(example["op_sequence"])))
             example["op_sequence"] = example[
                 "op_sequence"][-padding_amount:]
         else:
