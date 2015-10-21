@@ -12,6 +12,25 @@ class HardStack(object):
     def __init__(
         self, embedding_dim, vocab_size, seq_length, num_composition_layers, vs,
         unroll_scan=True, X=None):
+        """Construct a HardStack.
+
+        Args:
+            embedding_dim: Dimensionality of token embeddings and stack values
+            vocab_size: Number of unique tokens in vocabulary
+            seq_length: Maximum sequence length which will be processed by this
+              stack
+            num_composition_layers: Number of neural-network layers to use when
+              composing two stack elements
+            vs: VariableStore instance for parameter storage
+            unroll_scan: If `True`, expand the recurrent scan over the input
+              sequence without using `theano.scan`. This makes for faster
+              compilation, but may preclude nice optimizations. It also will
+              break when `seq_length` is high (~ >80), as it yields an
+              excessively large computation graph.
+            X: Theano batch describing input matrix, or `None` (in which case
+              this instance will make its own batch variable).
+        """
+
         self.embedding_dim = embedding_dim
         self.vocab_size = vocab_size
         self.seq_length = seq_length
