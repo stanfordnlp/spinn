@@ -16,7 +16,7 @@
     \tikzstyle{softmax}=[fill=blue!40,text width=15mm,align=center,text height=2mm]
     \tikzstyle{comp}=[fill=green!40,text width=20mm,align=center,text height=2mm]
     \tikzstyle{result}=[line width=1pt,draw=black,text width=15mm,align=center,text height=2mm]    
-    \tikzstyle{sbox}=[line width=1pt,draw=black,text width=25mm,align=center,text height=10mm]
+    \tikzstyle{sbox}=[line width=1pt,draw=black,text width=25mm,align=center,text height=13.3mm]
     \tikzstyle{bbox}=[line width=1pt,draw=black,text width=25mm,align=center,text height=6.5mm]
     \tikzstyle{focus1}=[fill=yellow!80,opacity=0.5,text width=25mm,align=center,text height=2mm]
     \tikzstyle{focus2}=[fill=yellow!80,opacity=0.5,text width=25mm,align=center,text height=5.5mm]
@@ -31,7 +31,7 @@
     \node[word]  (0s1) at (\ox+0*\dx,\sy-1*\dy) {cat};
     \node[word]  (0s2) at (\ox+0*\dx,\sy+0*\dy) {the};
     \node[word]  (0s3) at (\ox+0*\dx,\sy+1*\dy) {};
-    \node[sbox] (0sb) at  (\ox+0*\dx,\sy+0*\dy) {};
+    \node[sbox] (0sb) at  (\ox+0*\dx,\sy+0.5*\dy) {};
     
     \node[comp] (0c) at  (\ox+0.5*\oxb,\sy-1.5*\dy) {composition};
     
@@ -51,7 +51,7 @@
     \node[word]  (1s1) at (\ox+0*\dx,\sy-1*\dy) {the cat};
     \node[word]  (1s2) at (\ox+0*\dx,\sy+0*\dy) {};
     \node[word]  (1s3) at (\ox+0*\dx,\sy+1*\dy) {};
-    \node[sbox] (1sb) at  (\ox+0*\dx,\sy+0*\dy) {};
+    \node[sbox] (1sb) at  (\ox+0*\dx,\sy+0.5*\dy) {};
     
     \node[comp] (1c) at  (\ox+0.5*\oxb,\sy-1.5*\dy) {composition};
     
@@ -71,7 +71,7 @@
     \node[word]  (2s1) at (\ox+0*\dx,\sy-1*\dy) {sat};
     \node[word]  (2s2) at (\ox+0*\dx,\sy+0*\dy) {the cat};
     \node[word]  (2s3) at (\ox+0*\dx,\sy+1*\dy) {};
-    \node[sbox] (2sb) at  (\ox+0*\dx,\sy+0*\dy) {};
+    \node[sbox] (2sb) at  (\ox+0*\dx,\sy+0.5*\dy) {};
    
     \node[tracker] (2t) at  (\ox+0*\dx,5*\dy) {tracking};
 
@@ -132,7 +132,7 @@
     \tikzstyle{softmax}=[fill=orange!40,text width=33mm,align=center,text height=2mm]
     \tikzstyle{comp}=[fill=green!40,text width=20mm,align=center,text height=2mm]
     \tikzstyle{result}=[line width=1pt,draw=black,text width=15mm,align=center,text height=2mm]    
-    \tikzstyle{sbox}=[line width=1pt,draw=black,text width=33mm,align=center,text height=10mm]
+    \tikzstyle{sbox}=[line width=1pt,draw=black,text width=33mm,align=center,text height=13.3mm]
     \tikzstyle{bbox}=[line width=1pt,draw=black,text width=33mm,align=center,text height=6.5mm]
     \tikzstyle{focus1}=[fill=yellow!80,opacity=0.5,text width=33mm,align=center,text height=2mm]
     \tikzstyle{focus2}=[fill=yellow!80,opacity=0.5,text width=33mm,align=center,text height=5.5mm]
@@ -149,7 +149,7 @@
     \node[word]  (1s1) at (\ox+0*\dx,\sy-1*\dy) {cat};
     \node[word]  (1s2) at (\ox+0*\dx,\sy+0*\dy) {the};
     \node[word]  (1s3) at (\ox+0*\dx,\sy+1*\dy) {};
-    \node[sbox] (1sb) at  (\ox+0*\dx,\sy+0*\dy) {};
+    \node[sbox] (1sb) at  (\ox+0*\dx,\sy+0.5*\dy) {};
     
     \node[result] (1so) at  (\ox+0.5*\dx,4*\dy) {\reduce};
               
@@ -165,7 +165,7 @@
     \node[word]  (2s1) at (\ox+0*\dx,\sy-1*\dy) {the cat};
     \node[word]  (2s2) at (\ox+0*\dx,\sy+0*\dy) {};
     \node[word]  (2s3) at (\ox+0*\dx,\sy+1*\dy) {};
-    \node[sbox] (2sb) at  (\ox+0*\dx,\sy+0*\dy) {};
+    \node[sbox] (2sb) at  (\ox+0*\dx,\sy+0.5*\dy) {};
     
     \node[result] (2so) at  (\ox+0.5*\dx,4*\dy) {\shift};
              
@@ -181,7 +181,7 @@
     \node[word]  (3s1) at (\ox+0*\dx,\sy-1*\dy) {sat};
     \node[word]  (3s2) at (\ox+0*\dx,\sy+0*\dy) {the cat};
     \node[word]  (3s3) at (\ox+0*\dx,\sy+1*\dy) {};
-    \node[sbox] (3sb) at  (\ox+0*\dx,\sy+0*\dy) {};
+    \node[sbox] (3sb) at  (\ox+0*\dx,\sy+0.5*\dy) {};
     
     \node[result] (3so) at  (\ox+0.5*\dx,4*\dy) {\shift};
 
@@ -197,7 +197,7 @@
     \node[word]  (4s1) at (\ox+0*\dx,\sy-1*\dy) {down};
     \node[word]  (4s2) at (\ox+0*\dx,\sy+0*\dy) {sat};
     \node[word]  (4s3) at (\ox+0*\dx,\sy+1*\dy) {the cat};
-    \node[sbox] (4sb) at  (\ox+0*\dx,\sy+0*\dy) {};
+    \node[sbox] (4sb) at  (\ox+0*\dx,\sy+0.5*\dy) {};
     
     \node[result] (4so) at  (\ox+0.5*\dx,4*\dy) {\reduce};
                   
@@ -213,7 +213,7 @@
     \node[word]  (5s1) at (\ox+0*\dx,\sy-1*\dy) {sat down};
     \node[word]  (5s2) at (\ox+0*\dx,\sy+0*\dy) {the cat};
     \node[word]  (5s3) at (\ox+0*\dx,\sy+1*\dy) {};
-    \node[sbox] (5sb) at  (\ox+0*\dx,\sy+0*\dy) {};
+    \node[sbox] (5sb) at  (\ox+0*\dx,\sy+0.5*\dy) {};
     
     \node[result] (5so) at  (\ox+0.5*\dx,4*\dy) {\reduce};
     
@@ -223,7 +223,7 @@
     \node[word]  (6s1) at (\ox+0*\dx,\sy-1*\dy) {(the cat) (sat down)};
     \node[word]  (6s2) at (\ox+0*\dx,\sy+0*\dy) {};
     \node[word]  (6s3) at (\ox+0*\dx,\sy+1*\dy) {};
-    \node[sbox] (6sb) at  (\ox+0*\dx,\sy+0*\dy) {};
+    \node[sbox] (6sb) at  (\ox+0*\dx,\sy+0.5*\dy) {};
 
     \node[softmax] (6sm) at  (\ox+0.5*\dx,2*\dy) {output to semantic task model};
                    

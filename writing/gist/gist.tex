@@ -201,6 +201,10 @@ The composition function in the basic model (green) combines only the top elemen
 
 It would be possible to train any of the parse-supervised models (1--3) to learn explicit part of speech operations, expanding the op set dramatically to something like \{\shift, \reduce-NP, \reduce-S, \reduce-PP, ...\}.
 
+\section{Implementation notes}
+
+The size of the stack should be $N$ for sentences of $N$ words, in case the first reduce merges the final two words. The size of the buffer should be $N - 2$.
+
 \subsubsection*{Acknowledgments}
 
 \bibliographystyle{acl}
