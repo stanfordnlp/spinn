@@ -1,17 +1,19 @@
 """From the project root directory (containing data files), this can be run with:
 
 Boolean logic evaluation:
-python rembed/models/classifier.py --training_data_path bl-data/bl_train.tsv \
+python -m rembed.models.classifier --training_data_path bl-data/bl_train.tsv \
        --eval_data_path bl-data/bl_dev.tsv
 
 SST sentiment:
-python rembed/models/classifier.py --data_type sst --l2_lambda 0.0 --embedding_dim 25 --training_data_path sst-data/train.txt \
+python -m rembed.models.classifier --data_type sst --l2_lambda 0.0 --embedding_dim 25 --training_data_path sst-data/train.txt \
        --eval_data_path sst-data/dev.txt
 """
 
 from functools import partial
 import logging
 import sys
+
+print sys.path
 
 import gflags
 from theano import tensor as T
