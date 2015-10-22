@@ -165,6 +165,107 @@ class HardStack(object):
             self.final_linear = None
 
 
+class Model1(object):
+
+    """Model 1 stack implementation.
+
+    Model 1 scans a sequence using a hard stack. It predicts stack operations
+    using an MLP, and receives supervision on these predictions from some
+    external parser which acts as the "ground truth" parser.
+    """
+
+    def __init__(self, embedding_dim, vocab_size, seq_length, compose_network,
+                 vs, predict_network=None, X=None, transitions=None):
+        self.embedding_dim = embedding_dim
+        self.vocab_size = vocab_size
+        self.seq_length = seq_length
+
+        self._compose_network = compose_network
+        self._predict_network = predict_network
+
+        self._vs = vs
+
+        self.X = X
+        self.transitions = transitions
+
+        self._make_params()
+        self._make_inputs()
+        self._make_scan()
+
+        self.scan_fn = theano.function([self.X], self.final_stack)
+
+    def _make_params(self):
+        # Per-token embeddings.
+        self.embeddings = self._vs.add_param(
+            "embeddings", (self.vocab_size, self.embedding_dim))
+
+    def _make_inputs(self):
+        self.X = self.X or T.matrix("X")
+        self.transitions = self.transitions or T.matrix("transitions")
+
+    def _make_scan(self):
+        """Build the sequential composition / scan graph."""
+
+        batch_size, max_stack_size = self.X.shape
+
+        # Stack batch is a 3D tensor.
+        stack_shape = (batch_size, max_stack_size, self.embedding_dim)
+        stack_init = T.zeros(stack_shape)
+
+        # Allocate two helper stack copies (passed as non_seqs into scan).
+        stack_pushed = T.zeros(stack_shape)
+        stack_merged = T.zeros(stack_shape)
+
+        # Allocate a "buffer" stack and maintain a cursor in this buffer.
+        # TODO(jgauthier): Verify shape.
+        buffer = self.embeddings[self.X]
+        assert buffer.ndim == 3
+        buffer_cur_init = T.zeros((batch_size,))
+
+        def step(x_t, stack_t, buffer_cur_t, stack_pushed, stack_merged,
+                 buffer):
+            embs_t = self.embeddings[x_t]
+
+            # Extract top buffer values.
+            buffer_top_t = buffer[T.arange(batch_size), buffer_cur_t]
+
+            # Predict stack actions.
+            predict_inp = T.concatenate(
+                [x_t, stack_t[:, 0], buffer_top_t], axis=1)
+            actions_t = self._predict_network(
+                predict_inp, self.embedding_dim * 3, 2, self._vs,
+                name="predict_actions")
+
+            # Use predicted actions to build a mask.
+            mask = actions_t.argmax(axis=1)
+            assert mask.ndim == 1
+
+            # Now update the stack: first precompute merge results.
+            merge_items = stack_t[:, :2].reshape((-1, self.embedding_dim * 2))
+            merge_value = self._compose_network(
+                merge_items, self.embedding_dim * 2, self.embedding_dim,
+                self._vs, name="compose")
+
+            # Compute new stack value.
+            stack_next = update_hard_stack(
+                stack_t, stack_pushed, stack_merged, embs_t, merge_value, mask)
+
+            # Move buffer cursor as necessary. Since mask == 1 when merge, we
+            # should increment each buffer cursor by 1 - mask
+            buffer_cur_next = buffer_cur_t + (1 - mask)
+
+            return stack_next, buffer_cur_next
+
+        # Dimshuffle inputs to seq_len * batch_size for scanning
+        X = self.X.dimshuffle(1, 0)
+
+        scan_ret = theano.scan(
+            step, X, non_sequences=[stack_pushed, stack_merged, buffer],
+            outputs_info=[stack_init, buffer_cur_init])[0]
+
+        self.final_stack = scan_ret[0][-1]
+
+
 if __name__ == '__main__':
     embedding_dim = 10
     vocab_size = 5
