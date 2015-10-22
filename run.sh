@@ -18,4 +18,4 @@ echo Flags: $REMBED_FLAGS
 # Log what we're running and where.
 echo `hostname` - $PBS_JOBID - $REMBED_FLAGS >> ~/rembed_machine_assignments.txt
 
-python rembed/models/classifier.py $REMBED_FLAGS
+python -m rembed.models.classifier $REMBED_FLAGS
