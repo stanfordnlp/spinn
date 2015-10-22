@@ -1,0 +1,209 @@
+\documentclass[11pt,letterpaper]{article}
+\usepackage{acl2015}
+\usepackage{times}
+\usepackage{latexsym}
+% \setlength\titlebox{5cm}    % Expanding the titlebox
+
+%%% Custom additions %%%
+\usepackage{url}
+\usepackage[leqno, fleqn]{amsmath}
+\usepackage{amssymb}
+\usepackage{qtree}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{colortbl}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{color}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usepackage{ifthen}
+\usepackage{framed}
+
+\newcount\colveccount
+\newcommand*\colvec[1]{
+        \global\colveccount#1
+        \begin{bmatrix}
+        \colvecnext
+}
+\def\colvecnext#1{
+        #1
+        \global\advance\colveccount-1
+        \ifnum\colveccount>0
+                \\
+                \expandafter\colvecnext
+        \else
+                \end{bmatrix}
+        \fi
+}
+
+\newcommand{\nateq}{\equiv}
+\newcommand{\natind}{\mathbin{\#}}
+\newcommand{\natneg}{\mathbin{^{\wedge}}}
+\newcommand{\natfor}{\sqsubset}
+\newcommand{\natrev}{\sqsupset}
+\newcommand{\natalt}{\mathbin{|}}
+\newcommand{\natcov}{\mathbin{\smallsmile}}
+
+\newcommand{\plneg}{\mathop{\textit{not}}}
+\newcommand{\pland}{\mathbin{\textit{and}}}
+\newcommand{\plor}{\mathbin{\textit{or}}}
+
+\newcommand{\shift}{\textsc{shift}}
+\newcommand{\reduce}{\textsc{reduce}}
+
+% Strikeout
+\newlength{\howlong}\newcommand{\strikeout}[1]{\settowidth{\howlong}{#1}#1\unitlength0.5ex%
+\begin{picture}(0,0)\put(0,1){\line(-1,0){\howlong\divide\unitlength}}\end{picture}}
+
+\newcommand{\True}{\texttt{T}}
+\newcommand{\False}{\texttt{F}}
+\usepackage{stmaryrd}
+\newcommand{\sem}[1]{\ensuremath{\llbracket#1\rrbracket}}
+
+\newcommand{\mynote}[1]{{\color{blue}#1}}
+\newcommand{\tbchecked}[1]{{\color{red}#1}}
+
+\usepackage{gb4e}
+\noautomath
+ 
+\def\ii#1{\textit{#1}}
+\newcommand{\word}[1]{\emph{#1}}
+\newcommand{\fulllabel}[2]{\b{#1}\newline\textsc{#2}}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%% Code to simulate natbib's citealt, which prints citations with
+%%%%% no parentheses:
+
+\makeatletter
+\def\citealt{\def\citename##1{{\frenchspacing##1} }\@internalcitec}
+\def\@citexc[#1]#2{\if@filesw\immediate\write\@auxout{\string\citation{#2}}\fi
+  \def\@citea{}\@citealt{\@for\@citeb:=#2\do
+    {\@citea\def\@citea{;\penalty\@m\ }\@ifundefined
+       {b@\@citeb}{{\bf ?}\@warning
+       {Citation `\@citeb' on page \thepage \space undefined}}%
+{\csname b@\@citeb\endcsname}}}{#1}}
+\def\@internalcitec{\@ifnextchar [{\@tempswatrue\@citexc}{\@tempswafalse\@citexc[]}}
+\def\@citealt#1#2{{#1\if@tempswa, #2\fi}}
+\makeatother
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+%%% %%%
+
+\title{NSHRDLU?}
+
+\author{
+Samuel R.\ Bowman$^{\ast\dag}$ \\
+\texttt{sbowman@stanford.edu} \\
+\And
+Jon Gauthier$^{\dag\ddag}$ \\
+\texttt{angeli@stanford.edu} \\
+\AND
+Christopher Potts$^{\ast}$\\
+\texttt{cgpotts@stanford.edu}
+\And
+Christopher D.\ Manning$^{\ast\dag\S}$\\
+\texttt{manning@stanford.edu}\\
+\AND\\[-3ex]
+{$^{\ast}$Stanford Linguistics\quad
+$^{\dag}$Stanford NLP Group}\\
+{$^{\ddag}$Stanford Symbolic Systems\quad
+$^{\S}$Stanford Computer Science}
+}
+
+\date{}
+
+\makeatletter
+\newcommand{\@BIBLABEL}{\@emptybiblabel}
+\newcommand{\@emptybiblabel}[1]{}
+\definecolor{black}{rgb}{0,0,0}
+\makeatother
+\usepackage[breaklinks, colorlinks, linkcolor=black, urlcolor=black, citecolor=black]{hyperref}
+
+\def\t#1{#1}
+\def\b#1{\t{\textbf{#1}}}
+\def\colspaceS{2.25mm}
+\def\colspaceM{4.0mm}
+\def\colspaceL{4.25mm}
+
+\newcommand\todo[1]{\textcolor{blue}{\textbf{TODO:} #1}}
+
+\begin{document}
+\maketitle
+
+This project aims to build neural network models that can jointly learn to parse sentences and to use those parses to guide semantic composition.
+
+Table~\ref{models-table} shows the sequence of model designs that we plan to build. 
+
+
+\begin{table*}[t]
+  \centering\small
+  \begin{tabular}{ccccc} 
+    \toprule
+    Name & Stack Representation & Input Representation & Ops Classifier & Op Predictions Used in Training \\ 
+    \midrule
+Model 0 & Discrete & Op. sequence & N & -- \\
+Model 1 & Discrete & \bf Discrete Buffer & \bf Y: Directly supervised & \bf N \\
+Model 2 & Discrete & Discrete Buffer & Y: Directly supervised & \bf Y \\
+Model 3 & \bf Soft & \bf Soft Buffer & Y: Directly supervised & Y \\
+Model 4 & Soft & Soft Buffer & \bf Y: Indirectly supervised & Y \\
+    \bottomrule
+  \end{tabular}
+  \protect\caption{\protect\label{models-table}Model variants, ordered by increasing reliance on learning. Bolding indicates the differences between each model and its parent model.} 
+\end{table*}
+
+\section{Models}
+
+\subsection{Model 0}
+
+Model 0 in its simplest form computes the same function as a plain TreeRNN, but uses a stack and a recurrent input reader instead of a tree as its graph structure. \todo{Model 0 figure.} We expect it to be substantially faster than conventional TreeRNN implementations, since it readily supports batched matrix--vector multiplications, allowing it to fast CPU libraries and to function well on GPUs.
+
+\subsection{Model 1}
+
+\input{model1_fig.tex}
+
+Model 1 adapts Model 0 to use a stack and a buffer, making it more closely resemble a shift--reduce parser, and laying the groundwork for a model which can parse novel sentences at test time. The structre of the model is shown in Figure~\ref{m1-views}.
+
+The model runs for a fixed number of transition steps: $2N - 3$. In its starting configuration, it contains a stack that is prepopulated with the first two words of the sentence (since \shift \shift is the only legal operation sequence for the first two timesteps of a true shift-reduce parser), as well as a buffer (a queue) prepopulated with all of the remaining words in the sentence. Both the stack and buffer represent words using their embeddings. 
+
+At each timestep at test time, the model combines views of the stack and buffer (the top element of the buffer and the top two elements of the stack, highlighted in yellow) as the input to a tracking LSTM (red). This LSTM's output is fed into a sigmoid operation classifier (blue) which chooses between the \shift and \reduce operations. If \shift is chosen, one word embedding is popped from the buffer and pushed onto the stack. If \reduce is chosen, the buffer is left as is, and the top two elements of the stack are popped and composed using a learned composition function (green), with the result placed back on top of the stack.
+
+\paragraph{Supervision} The model is trained using two objective functions simultaneously. The semantic objective function is computed by feeding the value from the top of the stack at the final timestep---the full sentence encoding---into a downstream neural network model for some semantic task, like a sentiment classifier or an entailment classifier. The gradients from that classifier propagate to every part of the model except the operation classifier (blue). The syntactic objective function takes the form of direct supervision on the operation classifier (blue) which encourages that classifier to produce the same sequence of operations that an existing parser would produce for that sentence. The gradients from the syntactic objective function propagate to every part of the model but the downstream semantic model.
+
+At training time, following the strategy used in LSTM text decoders, the decisions made by the operation classifier (blue) is discarded, and the model instead uses the correct operation as specified in the (already parsed) training corpus. At test time, this signal is not available, and the model uses its own predicted operations.
+
+\subsection{Model 2}
+
+Model 2 makes a small change to Model 1 that is likely to substantially change the dymanics of learning: It uses the operation sequence predicted by the operation classifier (blue) at training time as well as at test time. It may be possible to accelerate Model 2 training by initializing it with parameters learned by Model 1.
+
+\subsection{Model 3}
+
+Model 3 modifies Model 2 by introducing the soft stack/soft queue from \cite{grefenstette2015learning} in place of the hard, conventional stack and buffer. The soft stack makes it possible to for the model to predict smooth distributions over operations of the form (0.93 \shift, 0.07 \reduce), instead of making hard decisions. These soft decisions allow for gradient information to flow from the stack and the buffer back into the operation classifier (blue). This is crucial to our ultimate goal, as it makes it possible for semantic considerations to influence the model's parsing decisions.
+
+\subsection{Model 4}
+
+Model 4 modifies Model 3 by removing the direct supervision signal from the operation classifier (blue), instead forcing the operation classifier to learn solely from the gradient provided by the downstream supervision task. It may be possible to accelerate or otherwise improve Model 4 training by initializing it with parameters learned by Model 3.
+
+\section{Other possible model features}
+
+\subsection{Encoding the contents of the stack and buffer}
+
+The tracking LSTM (red) needs access to the top of the buffer and the top two elements of the stack in order to make even minimally informed decisions about whether to shift or reduce. It could benefit further from additional information about broader sentential context. This can be provided by running new LSTMs along the elements of each of the stack and the buffer (following \citealt{dyer-EtAl:2015:ACL-IJCNLP}) and feeding the result into the tracking LSTM.
+
+\subsection{Contextually-informed composition}
+
+The composition function in the basic model (green) combines only the top elements of the stack, without using any further information. It may be possible to encourage the composition function to learn to do some amount of context-sensitive interpretation/disambiguation by adding a connection from the tracking LSTM (red) directly into the composition function.
+
+\subsection{Constituent labels}
+
+It would be possible to train any of the parse-supervised models (1--3) to learn explicit part of speech operations, expanding the op set dramatically to something like \{\shift, \reduce-NP, \reduce-S, \reduce-PP, ...\}.
+
+\subsubsection*{Acknowledgments}
+
+\bibliographystyle{acl}
+\bibliography{MLSemantics} 
+
+\end{document}

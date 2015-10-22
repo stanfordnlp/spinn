@@ -1,0 +1,21 @@
+\begin{thebibliography}{}
+
+\bibitem[\protect\citename{Dyer \bgroup et al.\egroup
+  }2015]{dyer-EtAl:2015:ACL-IJCNLP}
+Chris Dyer, Miguel Ballesteros, Wang Ling, Austin Matthews, and Noah~A. Smith.
+\newblock 2015.
+\newblock Transition-based dependency parsing with stack long short-term
+  memory.
+\newblock In {\em Proceedings of the 53rd Annual Meeting of the Association for
+  Computational Linguistics and the 7th International Joint Conference on
+  Natural Language Processing (Volume 1: Long Papers)}, pages 334--343,
+  Beijing, China, July. Association for Computational Linguistics.
+
+\bibitem[\protect\citename{Grefenstette \bgroup et al.\egroup
+  }2015]{grefenstette2015learning}
+Edward Grefenstette, Karl~Moritz Hermann, Mustafa Suleyman, and Phil Blunsom.
+\newblock 2015.
+\newblock Learning to transduce with unbounded memory.
+\newblock {\em arXiv preprint arXiv:1506.02516}.
+
+\end{thebibliography}
