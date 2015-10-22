@@ -7,6 +7,42 @@ from theano import tensor as T
 from rembed import util
 
 
+def update_hard_stack(stack_t, stack_pushed, stack_merged, push_value,
+                      merge_value, mask):
+    """Compute the new value of the given hard stack.
+
+    This performs stack pushes and pops in parallel, and somewhat wastefully.
+    It accepts a precomputed merge result (in `merge_value`) and a precomputed
+    push value `push_value` for all examples, and switches between the two
+    outcomes based on the per-example value of `mask`.
+
+    Args:
+        stack_t: Current stack value
+        stack_pushed: Helper stack structure, of same size as `stack_t`
+        stack_merged: Helper stack structure, of same size as `stack_t`
+        push_value: Batch of values to be pushed
+        merge_value: Batch of merge results
+        mask: Batch of booleans: 1 if merge, 0 if push
+    """
+
+    # Build two copies of the stack batch: one where every stack has received
+    # a push op, and one where every stack has received a merge op.
+    #
+    # Copy 1: Push.
+    stack_pushed = T.set_subtensor(stack_pushed[:, 0], push_value)
+    stack_pushed = T.set_subtensor(stack_pushed[:, 1:], stack_t[:, :-1])
+
+    # Copy 2: Merge.
+    stack_merged = T.set_subtensor(stack_merged[:, 0], merge_value)
+    stack_merged = T.set_subtensor(stack_merged[:, 1:-1], stack_t[:, 2:])
+
+    # Make sure mask broadcasts over all dimensions after the first.
+    mask = mask.dimshuffle(0, "x", "x")
+    stack_next = mask * stack_merged + (1 - mask) * stack_pushed
+
+    return stack_next
+
+
 class HardStack(object):
 
     def __init__(
@@ -102,31 +138,15 @@ class HardStack(object):
                 linear_memory = (mask_mem * linear_memory
                                  + (1 - mask_mem) * next_linear_memory)
 
-            # Build two copies of the stack batch: one where every stack
-            # has received a push op, and one where every stack has
-            # received a merge op.
-            #
-            # TODO is set_subtensor slow?
-            #
-            # Copy 1: Push.
-            stack_pushed = T.set_subtensor(stack_pushed[:, 0], embs_t)
-            stack_pushed = T.set_subtensor(
-                stack_pushed[:, 1:], stack_t[:, :-1])
-
-            # Copy 2: Merge.
+            # Precompute all merge values.
             merge_items = stack_t[:, :2].reshape((-1, self.embedding_dim * 2))
-            merged = self._compose_network(merge_items, self.embedding_dim * 2,
-                                           self.embedding_dim, self._vs,
-                                           name="compose")
+            merge_value = self._compose_network(
+                merge_items, self.embedding_dim * 2, self.embedding_dim,
+                self._vs, name="compose")
 
-            stack_merged = T.set_subtensor(stack_merged[:, 0], merged)
-            stack_merged = T.set_subtensor(
-                stack_merged[:, 1:-1], stack_t[:, 2:])
-
-            # Use special input flag -1 to switch between two stacks.
-            mask_stack = mask.dimshuffle(0, "x", "x")
-            stack_next = (mask_stack * stack_merged
-                          + (1 - mask_stack) * stack_pushed)
+            # Update helper stack values.
+            stack_next = update_hard_stack(
+                stack_t, stack_pushed, stack_merged, embs_t, merge_value, mask)
 
             return stack_next, linear_memory
 
