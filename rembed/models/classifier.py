@@ -72,6 +72,8 @@ def train():
         logging.error("Bad data type.")
         return
 
+    logging.info("Flag values: " + str(FLAGS.FlagValuesDict()))
+
     # Load the data
     training_data_iter, vocabulary = data_manager.load_data(
         FLAGS.training_data_path, seq_length=FLAGS.seq_length, batch_size=FLAGS.batch_size)
@@ -132,22 +134,22 @@ def train():
                              (step, acc_accum / eval_batches, eval_set[0]))
 
 if __name__ == '__main__':
-    # Experiment naming
+    # Experiment naming.
     gflags.DEFINE_string("experiment_name", "experiment", "")
 
-    # Data types
+    # Data types.
     gflags.DEFINE_string("data_type", "bl", "Values: bl, sst")
 
-    # Data settings
+    # Data settings.
     gflags.DEFINE_string("training_data_path", None, "")
     gflags.DEFINE_string("eval_data_path", None, "")
     gflags.DEFINE_integer("seq_length", 29, "")
 
-    # Model architecture settings
+    # Model architecture settings.
     gflags.DEFINE_integer("embedding_dim", 5, "")
     gflags.DEFINE_integer("num_composition_layers", 1, "")
 
-    # Optimization settings
+    # Optimization settings.
     gflags.DEFINE_integer("training_steps", 50000, "")
     gflags.DEFINE_integer("batch_size", 32, "")
     gflags.DEFINE_float("learning_rate", 0.01, "")
@@ -156,18 +158,26 @@ if __name__ == '__main__':
     gflags.DEFINE_float("l2_lambda", 1e-6, "")
     gflags.DEFINE_float("init_range", 0.1, "")
 
-    # Display settings
+    # Display settings.
     gflags.DEFINE_integer("statistics_interval_steps", 50, "")
     gflags.DEFINE_integer("eval_interval_steps", 50, "")
 
-    # Parse command line flags
+    # Parse command line flags.
     FLAGS(sys.argv)
 
-    logging.basicConfig(level=logging.DEBUG,
-                        format='%(asctime)s %(levelname)-8s %(message)s',
-                        datefmt='%m-%d-%y %H:%M',
-                        handlers=[logging.FileHandler(
-                            FLAGS.experiment_name + ".log"),
-                        logging.StreamHandler()])
+    # Set up logging.
+    logFormatter = logging.Formatter(
+        "%(asctime)s [%(levelname)-5.5s]  %(message)s")
+    rootLogger = logging.getLogger()
+    rootLogger.setLevel(logging.DEBUG)
 
+    fileHandler = logging.FileHandler(FLAGS.experiment_name + ".log")
+    fileHandler.setFormatter(logFormatter)
+    rootLogger.addHandler(fileHandler)
+
+    consoleHandler = logging.StreamHandler()
+    consoleHandler.setFormatter(logFormatter)
+    rootLogger.addHandler(consoleHandler)
+
+    # Run.
     train()

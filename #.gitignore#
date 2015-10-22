@@ -1,9 +1,0 @@
-*.pyc
-*-data/*
-*~
-.env
-.DS_Store
-*.log
-*.out
-*.aux
-*.synctex.gz
