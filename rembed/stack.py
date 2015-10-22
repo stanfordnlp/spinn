@@ -11,7 +11,7 @@ class HardStack(object):
 
     def __init__(
         self, embedding_dim, vocab_size, seq_length, compose_network, vs,
-        linear_memory_dim=None, unroll_scan=True, X=None):
+        linear_memory_dim=None, X=None):
         """Construct a HardStack.
 
         Args:
@@ -30,11 +30,6 @@ class HardStack(object):
               opposed to the main stack-based memory). When linear memory
               is active, this instance will have a batch `final_memory`
               of dimension `batch_size * linear_memory_dim`.
-            unroll_scan: If `True`, expand the recurrent scan over the input
-              sequence without using `theano.scan`. This makes for faster
-              compilation, but may preclude nice optimizations. It also will
-              break when `seq_length` is high (~ >80), as it yields an
-              excessively large computation graph.
             X: Theano batch describing input matrix, or `None` (in which case
               this instance will make its own batch variable).
         """
@@ -46,7 +41,6 @@ class HardStack(object):
 
         self._compose_network = compose_network
         self._vs = vs
-        self.unroll_scan = unroll_scan
 
         self.X = X
 
@@ -143,15 +137,9 @@ class HardStack(object):
         # Dimshuffle inputs to seq_len * batch_size for scanning
         X = self.X.dimshuffle(1, 0)
 
-        if self.unroll_scan:
-            scan_ret = util.unroll_scan(
-                step, X, non_sequences=[stack_pushed, stack_merged],
-                outputs_info=[stack_init, linear_memory],
-                n_steps=self.seq_length)[0]
-        else:
-            scan_ret = theano.scan(
-                step, X, non_sequences=[stack_pushed, stack_merged],
-                outputs_info=[stack_init, linear_memory])[0]
+        scan_ret = theano.scan(
+            step, X, non_sequences=[stack_pushed, stack_merged],
+            outputs_info=[stack_init, linear_memory_init])[0]
 
         if linear_memory is not None:
             self.final_stack = scan_ret[0][-1]
