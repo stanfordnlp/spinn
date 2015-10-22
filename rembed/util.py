@@ -125,10 +125,10 @@ def momentum(cost, params, lr=0.01, momentum=0.9):
         # momentum value
         m = theano.shared(np.zeros(param_val.shape, dtype=param_val.dtype))
         # compute velocity
-        v = momentum * m - lr * grad
+        v = momentum * m + lr * grad
 
         new_values[m] = v
-        new_values[param] = param + v
+        new_values[param] = param - v
 
     return new_values
 

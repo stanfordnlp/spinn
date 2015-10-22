@@ -110,7 +110,8 @@ class HardStack(object):
 
         # Allocate linear memory.
         use_linear_memory = self.linear_memory_dim is not None
-        linear_memory_init = T.zeros((batch_size, (self.linear_memory_dim or 0) * 2))
+        linear_memory_init = T.zeros(
+            (batch_size, (self.linear_memory_dim or 0) * 2))
 
         # TODO
         # Precompute embedding lookups.

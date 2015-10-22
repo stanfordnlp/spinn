@@ -13,8 +13,6 @@ from functools import partial
 import logging
 import sys
 
-print sys.path
-
 import gflags
 from theano import tensor as T
 import theano
