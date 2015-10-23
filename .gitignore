@@ -3,6 +3,8 @@
 *~
 .env
 .DS_Store
+*.bbl
+*.blg
 *.log
 *.out
 *.aux

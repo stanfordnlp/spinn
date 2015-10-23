@@ -93,7 +93,7 @@
 
 %%% %%%
 
-\title{NSHRDLU?}
+\title{NSHRDLU:\thanks{Name is provisional, and stolen from Geoff Hinton.}\\Work in progress on the joint learning of parsing and semantic encoding}
 
 \author{
 Samuel R.\ Bowman$^{\ast\dag}$ \\
@@ -102,11 +102,11 @@ Samuel R.\ Bowman$^{\ast\dag}$ \\
 Jon Gauthier$^{\dag\ddag}$ \\
 \texttt{angeli@stanford.edu} \\
 \AND
-Christopher Potts$^{\ast}$\\
-\texttt{cgpotts@stanford.edu}
-\And
 Christopher D.\ Manning$^{\ast\dag\S}$\\
 \texttt{manning@stanford.edu}\\
+\And
+Christopher Potts$^{\ast}$\\
+\texttt{cgpotts@stanford.edu}
 \AND\\[-3ex]
 {$^{\ast}$Stanford Linguistics\quad
 $^{\dag}$Stanford NLP Group}\\
@@ -134,10 +134,21 @@ $^{\S}$Stanford Computer Science}
 \begin{document}
 \maketitle
 
-This project aims to build neural network models that can jointly learn to parse sentences and to use those parses to guide semantic composition.
+\section{Introduction}
 
-Table~\ref{models-table} shows the sequence of model designs that we plan to build. 
+This project aims to use ideas from greedy transition-based parsing to build neural network models that can jointly learn to parse sentences and to use those parses to guide semantic composition.
 
+Table~\ref{models-table} shows the sequence of model designs that we plan to build, and Figure~\ref{m1-views} depicts some representative models.
+
+We see three reasons to pursue this approach:
+\begin{itemize}
+\item Simply adapting a greedy transition-based approach to sentence encoding makes it possible to exploit semantic compositionality in the same manner as in a TreeRNN, but using a static graph structure that can take advantage of existing neural network libraries like Theano for both automatic differentiation and for highly optimized matrix computations on both CPUs and GPUs. Model 0 pursues this property directly, and all subsequent models share it.
+\item When a parsing system and an interpretation system are trained jointly and forced to share representations, it is likely that the performance of both models will benefit: the semantic composition function will have better access to syntactic type information that could provide additional evidence on the functional behavior of rare words, and the syntactic parser will have access to information about the semantic interpretability of constituents, making semantically-conditioned parsing decisions like PP attachment easier to learn. Models 1--3 have this property.
+\item When a system that uses constituent structure information as a latent variable is initialized from scratch and trained solely to perform some semantic task, it will likely learn some coherent syntax for the genre of language on which it is trained. If this syntax is reasonably stable across similar training sets and across random initializations of training, it can reasonably be said to be latent in the text itself, offering a new kind of evidence about natural language syntax. Model 4 aims to collect this kind of evidence.
+
+\end{itemize}
+
+All five models function as sentence encoding models: their inputs are sentences (input as sequences of words, with the help of a learned embedding matrix), and their outputs are single sentence encoding vectors which can be used as the inputs to downstream models for tasks like sentiment analysis, translation, or inference. Provided that these downstream models are differentiable---as is the case for neural network models and simpler regression models---their gradient signals can be used to train the sentence encoding models.
 
 \begin{table*}[t]
   \centering\small
@@ -159,17 +170,19 @@ Model 4 & Soft & Soft Buffer & \bf Y: Indirectly supervised & Y \\
 
 \subsection{Model 0}
 
-Model 0 in its simplest form computes the same function as a plain TreeRNN, but uses a stack and a recurrent input reader instead of a tree as its graph structure. \todo{Model 0 figure.} We expect it to be substantially faster than conventional TreeRNN implementations, since it readily supports batched matrix--vector multiplications, allowing it to fast CPU libraries and to function well on GPUs.
+Model 0, depicted in Figure~\ref{fig:model:0}, is the simplest instantiation of our design, using only a conventional stack and a learned composition function to incrementally build a sentence representation over a series of timesteps. For a sentence of $N$ words its input is a sequence of $2N-3$ inputs. These inputs can take two types. At some timesteps, the input will be a word embedding vector. This triggers the \shift~operation, in which the vector is pushed onto the top of a stack. At other timesteps, the input will be the special \reduce~token, which triggers the reduction operation. In that operation, the top two word vectors are popped from the stack, fed into a learned composition function that maps them to a single vector (in the simplest case, this is a single neural network layer), and then pushed back onto the stack.
+
+If we add no additional features, this model computes the same function as a plain TreeRNN. However, we expect it to be substantially faster than conventional TreeRNN implementations. Unlike a TreeRNN, the Model 0 computaiton graph is essentially static across examples, so examples of varying structures and lengths can be batched together and run on the same graph in a single step. This simply requires ensuring that the graph is run for enough timesteps to finish all of the sentences. This involves some wasted computation, since the composition function will be run $2N-3$ times (with the output of composition at non-\reduce~steps discarded), rather than $N-1$ times in a TreeRNN. However, this loss can be dramatically offset by the gains of batching, which stem from the ability to exploit highly optimized CPU and GPU libraries for batched matrix mulitiplication.
 
 \subsection{Model 1}
 
 \input{model1_fig.tex}
 
-Model 1 adapts Model 0 to use a stack and a buffer, making it more closely resemble a shift--reduce parser, and laying the groundwork for a model which can parse novel sentences at test time. The structre of the model is shown in Figure~\ref{m1-views}.
+Model 1, depicted in Figures~\ref{fig:model:1d} and \ref{fig:model:1b}, adapts Model 0 to use a stack and a buffer, making it more closely resemble a shift--reduce parser, and laying the groundwork for a model which can parse novel sentences at test time.
 
-The model runs for a fixed number of transition steps: $2N - 3$. In its starting configuration, it contains a stack that is prepopulated with the first two words of the sentence (since \shift \shift is the only legal operation sequence for the first two timesteps of a true shift-reduce parser), as well as a buffer (a queue) prepopulated with all of the remaining words in the sentence. Both the stack and buffer represent words using their embeddings. 
+The model runs for a fixed number of transition steps: $2N - 3$. In its starting configuration, it contains a stack that is prepopulated with the first two words of the sentence (since \shift~\shift~is the only legal operation sequence for the first two timesteps of a true shift-reduce parser), as well as a buffer (a queue) prepopulated with all of the remaining words in the sentence. Both the stack and buffer represent words using their embeddings. 
 
-At each timestep at test time, the model combines views of the stack and buffer (the top element of the buffer and the top two elements of the stack, highlighted in yellow) as the input to a tracking LSTM (red). This LSTM's output is fed into a sigmoid operation classifier (blue) which chooses between the \shift and \reduce operations. If \shift is chosen, one word embedding is popped from the buffer and pushed onto the stack. If \reduce is chosen, the buffer is left as is, and the top two elements of the stack are popped and composed using a learned composition function (green), with the result placed back on top of the stack.
+At each timestep at test time, the model combines views of the stack and buffer (the top element of the buffer and the top two elements of the stack, highlighted in yellow) as the input to a tracking LSTM (red). This LSTM's output is fed into a sigmoid operation classifier (blue) which chooses between the \shift~and \reduce~operations. If \shift~is chosen, one word embedding is popped from the buffer and pushed onto the stack. If \reduce~is chosen, the buffer is left as is, and the top two elements of the stack are popped and composed using a learned composition function (green), with the result placed back on top of the stack.
 
 \paragraph{Supervision} The model is trained using two objective functions simultaneously. The semantic objective function is computed by feeding the value from the top of the stack at the final timestep---the full sentence encoding---into a downstream neural network model for some semantic task, like a sentiment classifier or an entailment classifier. The gradients from that classifier propagate to every part of the model except the operation classifier (blue). The syntactic objective function takes the form of direct supervision on the operation classifier (blue) which encourages that classifier to produce the same sequence of operations that an existing parser would produce for that sentence. The gradients from the syntactic objective function propagate to every part of the model but the downstream semantic model.
 
@@ -178,6 +191,8 @@ At training time, following the strategy used in LSTM text decoders, the decisio
 \subsection{Model 2}
 
 Model 2 makes a small change to Model 1 that is likely to substantially change the dymanics of learning: It uses the operation sequence predicted by the operation classifier (blue) at training time as well as at test time. It may be possible to accelerate Model 2 training by initializing it with parameters learned by Model 1.
+
+For discussion of related issues in sequence-to-sequence models, see \citealt{bengio2015scheduled}.
 
 \subsection{Model 3}
 
@@ -191,11 +206,13 @@ Model 4 modifies Model 3 by removing the direct supervision signal from the oper
 
 \subsection{Encoding the contents of the stack and buffer}
 
-The tracking LSTM (red) needs access to the top of the buffer and the top two elements of the stack in order to make even minimally informed decisions about whether to shift or reduce. It could benefit further from additional information about broader sentential context. This can be provided by running new LSTMs along the elements of each of the stack and the buffer (following \citealt{dyer-EtAl:2015:ACL-IJCNLP}) and feeding the result into the tracking LSTM.
+The tracking LSTM (red) needs access to the top of the buffer and the top two elements of the stack in order to m ake even minimally informed decisions about whether to shift or reduce. It could benefit further from additional information about broader sentential context. This can be provided by running new LSTMs along the elements of each of the stack and the buffer (following \citealt{dyer-EtAl:2015:ACL-IJCNLP}) and feeding the result into the tracking LSTM.
 
 \subsection{Contextually-informed composition}
 
 The composition function in the basic model (green) combines only the top elements of the stack, without using any further information. It may be possible to encourage the composition function to learn to do some amount of context-sensitive interpretation/disambiguation by adding a connection from the tracking LSTM (red) directly into the composition function.
+
+For model zero, no tracking LSTM is needed for the ordinary operation of the model, but it would be possible to add one for this purpose, taking as inputs the top two values of the stack at each time point and emitting as output a context vector that can be used to condition the composition function.
 
 \subsection{Constituent labels}
 
@@ -204,6 +221,52 @@ It would be possible to train any of the parse-supervised models (1--3) to learn
 \section{Implementation notes}
 
 The size of the stack should be $N$ for sentences of $N$ words, in case the first reduce merges the final two words. The size of the buffer should be $N - 2$.
+
+\subsection{Data preparation}
+
+For Models 0--3, all training data must be parsed in advance into an unlabeled binary constituency tree. In addition, Model 0 requires that  parses be available at test time as well. For both SST and SNLI we use the parses included with the corpus distributions whenever parses are needed. 
+
+For model 0, training data can be prepared by linearizing the provided parse, then deleting left brackets and replacing right brackets with \reduce~instructions. That is demonstrated here with the example sentence \ii{the cat sat down}:
+
+\begin{quote}\small
+( ( the cat ) ( sat down ) )$\Rightarrow$\\
+the cat \reduce~sat down \reduce~\reduce
+\end{quote}
+
+The input for models 1--4 is simply the word sequence from the parse, with the first two words moved into the stack. The syntactic supervision labels for models 1--3 are simply a binarized version of the Model 0 inputs, with the first two tokens (which are necessarily \shift~\shift) omitted: 
+
+\begin{quote}\small
+( ( the cat ) ( sat down ) )$\Rightarrow$ \\
+stack: $\langle$the, cat$\rangle$\\
+buffer: $\langle$sat, down$\rangle$\\
+ops: \reduce~\shift~\shift~\reduce~\reduce
+\end{quote}
+
+\section{Experiments}
+
+\subsection{Step time}
+
+Comparing model step time to the plain RNN of \citealt{li2015tree}. We use the small \citealt{pang2004sentimental} sentiment corpus that they use, and train with identical hyperparameters: ...
+
+Evaluation metrics: Time per minibatch on a jag machine, with and without GPU access.
+
+\subsection{Sentiment}
+
+Learning to jointly parse and to predict logical relations between sentences over SST  
+\cite{socher2013recursive}.
+
+Evaluation metrics: accuracy, F1 (for all models but 0).
+
+
+\subsection{Natural language inference}
+
+Learning to jointly parse and to predict logical relations between sentences over SNLI  \cite{snli:emnlp2015}.
+
+Evaluation metrics: accuracy, F1 (for all models but 0).
+
+\section{Discussion}
+
+\subsection{Inferred Model 4 parses?}
 
 \subsubsection*{Acknowledgments}
 

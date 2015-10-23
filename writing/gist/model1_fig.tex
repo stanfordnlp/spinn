@@ -11,6 +11,90 @@
     \def\by{1*\dy}
     \def\ox{0*\oxb}
 
+    \tikzstyle{label}=[text width=35mm,align=center,text height=2mm]    
+    \tikzstyle{word}=[text width=35mm,align=center,text height=2mm]    
+    \tikzstyle{comp}=[fill=green!40,text width=20mm,align=center,text height=2mm]
+    \tikzstyle{input}=[line width=1pt,text width=20mm,align=center,text height=2mm]    
+    \tikzstyle{sbox}=[line width=1pt,draw=black,text width=25mm,align=center,text height=13.3mm]
+    \tikzstyle{bbox}=[line width=1pt,draw=black,text width=25mm,align=center,text height=6.5mm]
+    \tikzstyle{focus1}=[fill=yellow!80,opacity=0.5,text width=25mm,align=center,text height=2mm]
+    \tikzstyle{focus2}=[fill=yellow!80,opacity=0.5,text width=25mm,align=center,text height=5.5mm]
+    
+    \node[label]  (sl) at (\ox-0.35*\oxb+0*\dx,\sy+0.5*\dy) {stack};
+    
+    \node[label]  (1l) at (\ox+0*\dx,\sy+3*\dy) {$t=0$};
+    
+    \node[focus2] (0sb) at  (\ox+0*\dx,\sy-0.5*\dy) {};
+    \node[word]  (0s1) at (\ox+0*\dx,\sy-1*\dy) {cat};
+    \node[word]  (0s2) at (\ox+0*\dx,\sy+0*\dy) {the};
+    \node[word]  (0s3) at (\ox+0*\dx,\sy+1*\dy) {};
+    \node[sbox] (0sb) at  (\ox+0*\dx,\sy+0.5*\dy) {};
+    
+    \node[comp] (0c) at  (\ox+0.5*\oxb,\sy-1.5*\dy) {composition};
+    
+    \node[input] (0so) at  (\ox+0.75*\oxb,9*\dy) {\reduce};
+    
+    \def\ox{1*\oxb}
+    
+    \node[label]  (1l) at (\ox+0*\dx,\sy+3*\dy) {$t=1$};
+    
+    \node[focus2] (1sb) at  (\ox+0*\dx,\sy-0.5*\dy) {};
+    \node[word]  (1s1) at (\ox+0*\dx,\sy-1*\dy) {the cat};
+    \node[word]  (1s2) at (\ox+0*\dx,\sy+0*\dy) {};
+    \node[word]  (1s3) at (\ox+0*\dx,\sy+1*\dy) {};
+    \node[sbox] (1sb) at  (\ox+0*\dx,\sy+0.5*\dy) {};
+    
+    \node[comp] (1c) at  (\ox+0.5*\oxb,\sy-1.5*\dy) {composition};
+    
+    \node[input] (1so) at  (\ox+0.75*\oxb,9*\dy) {\shift:~sat};
+     
+    \def\ox{2*\oxb}
+
+    \node[label]  (1l) at (\ox+0*\dx,\sy+3*\dy) {$t=2$};
+
+    \node[focus2] (2sb) at  (\ox+0*\dx,\sy-0.5*\dy) {};
+    \node[word]  (2s1) at (\ox+0*\dx,\sy-1*\dy) {sat};
+    \node[word]  (2s2) at (\ox+0*\dx,\sy+0*\dy) {the cat};
+    \node[word]  (2s3) at (\ox+0*\dx,\sy+1*\dy) {};
+    \node[sbox] (2sb) at  (\ox+0*\dx,\sy+0.5*\dy) {};
+  
+   
+    \pgfsetarrowsend{latex}
+    \tikzstyle{fwd} = [draw=black, line width=1pt]
+    \tikzstyle{gated} = [draw=black!50, line width=0.8pt]
+
+    \draw [fwd] (0sb) -- (0c);
+    
+    \draw [fwd] (0sb) -- (1sb);
+    \draw [fwd] (0so) -- (1sb);
+    \draw [fwd] (0c) -- (1sb);
+
+    \draw [fwd] (1sb) -- (1c);
+    
+    \draw [fwd] (1sb) -- (2sb);
+    \draw [fwd] (1so) -- (2sb);
+    \draw [gated] (1c) -- (2sb);
+
+
+
+
+  \end{tikzpicture}}
+  
+ \caption{\label{fig:model:0}The Model 0 network unrolled for two transitions on the input \word{the cat sat down}. The operations at the bottom of the figure`  are given as inputs to the models, as is the start state of the stack at $t=0$.}
+  
+\end{subfigure}\\\\\\
+\begin{subfigure}[t]{\textwidth}
+\centering
+\scalebox{0.6}{
+ \begin{tikzpicture}
+    \def\dx{21pt}
+    \def\dy{11pt}
+    \def\sy{13*\dy}
+    \def\oxb{8*\dx}
+    \def\by{1*\dy}
+    \def\ox{0*\oxb}
+
+    \tikzstyle{label}=[text width=35mm,align=center,text height=2mm]    
     \tikzstyle{word}=[text width=35mm,align=center,text height=2mm]    
     \tikzstyle{tracker}=[fill=red!40,text width=15mm,align=center,text height=2mm]
     \tikzstyle{softmax}=[fill=blue!40,text width=15mm,align=center,text height=2mm]
@@ -21,11 +105,17 @@
     \tikzstyle{focus1}=[fill=yellow!80,opacity=0.5,text width=25mm,align=center,text height=2mm]
     \tikzstyle{focus2}=[fill=yellow!80,opacity=0.5,text width=25mm,align=center,text height=5.5mm]
 
+    \node[label]  (sl) at (\ox-0.35*\oxb+0*\dx,\by+0.5*\dy) {buffer};
+
+    \node[label]  (1l) at (\ox+0*\dx,\sy+3*\dy) {$t=0$};
+
     \node[focus1] (0bb) at  (\ox+0*\dx,2*\dy) {};
     \node[word]  (0b3) at (\ox+0*\dx,\by-1*\dy) {};
     \node[word]  (0b2) at (\ox+0*\dx,\by+0*\dy) {down};
     \node[word]  (0b1) at (\ox+0*\dx,\by+1*\dy) {sat};
     \node[bbox] (0bb) at  (\ox+0*\dx,\by+0.5*\dy) {};
+    
+    \node[label]  (sl) at (\ox-0.35*\oxb+0*\dx,\sy+0.5*\dy) {stack};
     
     \node[focus2] (0sb) at  (\ox+0*\dx,\sy-0.5*\dy) {};
     \node[word]  (0s1) at (\ox+0*\dx,\sy-1*\dy) {cat};
@@ -40,6 +130,8 @@
     \node[result] (0so) at  (\ox+3*\dx,9*\dy) {\reduce};
     
     \def\ox{1*\oxb}
+
+    \node[label]  (1l) at (\ox+0*\dx,\sy+3*\dy) {$t=1$};
 
     \node[focus1] (1bb) at  (\ox+0*\dx,2*\dy) {};
     \node[word]  (1b3) at (\ox+0*\dx,\by-1*\dy) {};
@@ -61,6 +153,8 @@
      
     \def\ox{2*\oxb}
 
+    \node[label]  (1l) at (\ox+0*\dx,\sy+3*\dy) {$t=2$};
+
     \node[focus1] (2bb) at  (\ox+0*\dx,2*\dy) {};
     \node[word]  (2b3) at (\ox+0*\dx,\by-1*\dy) {};
     \node[word]  (2b2) at (\ox+0*\dx,\by+0*\dy) {};
@@ -78,6 +172,7 @@
     
     \pgfsetarrowsend{latex}
     \tikzstyle{fwd} = [draw=black, line width=1pt]
+    \tikzstyle{gated} = [draw=black!50, line width=0.8pt]
 
     \draw [fwd] (0sb) -- (0t);
     \draw [fwd] (0bb) -- (0t);
@@ -90,7 +185,7 @@
     \draw [fwd] (0bb) -- (1bb);
     \draw [fwd] (0so) -- (1sb);
     \draw [fwd] (0so) -- (1bb);
-    \draw [fwd] (0bb) to[out=20,in=-110] (1sb);
+    \draw [gated] (0bb) to[out=20,in=-110] (1sb);
     \draw [fwd] (0c) -- (1sb);
 
     \draw [fwd] (1sb) -- (1t);
@@ -105,7 +200,7 @@
     \draw [fwd] (1so) -- (2sb);
     \draw [fwd] (1so) -- (2bb);
     \draw [fwd] (1bb) to[out=20,in=-110] (2sb);
-    \draw [fwd] (1c) -- (2sb);
+    \draw [gated] (1c) -- (2sb);
 
     \draw [fwd] (2sb) -- (2t);
     \draw [fwd] (2bb) -- (2t);
@@ -113,7 +208,7 @@
 
   \end{tikzpicture}}
   
- \caption{The Model 1/2 network unrolled for two transitions on the input \word{the cat sat down}.}\label{fig:model:top}
+ \caption{The Model 1/2 network unrolled for two transitions on the input \word{the cat sat down}. The start state of the stack and buffer at the initial step $t=0$ are the sole inputs to the model.}\label{fig:model:1d}
   
 \end{subfigure}\\\\\\
 \begin{subfigure}[t]{\textwidth}
@@ -127,9 +222,10 @@
     \def\by{1*\dy}
     \def\ox{0*\oxb}
 
+    \tikzstyle{label}=[text width=35mm,align=center,text height=2mm]    
     \tikzstyle{word}=[text width=35mm,align=center,text height=2mm]    
     \tikzstyle{tracker}=[fill=red!40,text width=15mm,align=center,text height=2mm]
-    \tikzstyle{softmax}=[fill=orange!40,text width=33mm,align=center,text height=2mm]
+    \tikzstyle{softmax}=[text width=40mm,align=center,text height=2mm]
     \tikzstyle{comp}=[fill=green!40,text width=20mm,align=center,text height=2mm]
     \tikzstyle{result}=[line width=1pt,draw=black,text width=15mm,align=center,text height=2mm]    
     \tikzstyle{sbox}=[line width=1pt,draw=black,text width=33mm,align=center,text height=13.3mm]
@@ -139,11 +235,17 @@
 
     \def\ox{0*\oxb}
     
+    \node[label]  (1l) at (\ox+0*\dx,\sy+3*\dy) {$t=0$};
+    
+    \node[label]  (sl) at (\ox-0.65*\oxb+0*\dx,\by+0.5*\dy) {buffer};
+    
     \node[focus1] (1bb) at  (\ox+0*\dx,2*\dy) {};
     \node[word]  (1b3) at (\ox+0*\dx,\by-1*\dy) {};
     \node[word]  (1b2) at (\ox+0*\dx,\by+0*\dy) {down};
     \node[word]  (1b1) at (\ox+0*\dx,\by+1*\dy) {sat};
     \node[bbox] (1bb) at  (\ox+0*\dx,\by+0.5*\dy) {};
+    
+    \node[label]  (sl) at (\ox-0.65*\oxb+0*\dx,\sy+0.5*\dy) {stack};
     
     \node[focus2] (1sb) at  (\ox+0*\dx,\sy-0.5*\dy) {};
     \node[word]  (1s1) at (\ox+0*\dx,\sy-1*\dy) {cat};
@@ -154,6 +256,8 @@
     \node[result] (1so) at  (\ox+0.5*\dx,4*\dy) {\reduce};
               
     \def\ox{1*\oxb}
+   
+    \node[label]  (1l) at (\ox+0*\dx,\sy+3*\dy) {$t=1$};
     
     \node[focus1] (2bb) at  (\ox+0*\dx,2*\dy) {};
     \node[word]  (2b3) at (\ox+0*\dx,\by-1*\dy) {};
@@ -171,6 +275,8 @@
              
     \def\ox{2*\oxb}
     
+    \node[label]  (1l) at (\ox+0*\dx,\sy+3*\dy) {$t=2$};
+    
     \node[focus1] (3bb) at  (\ox+0*\dx,2*\dy) {};
     \node[word]  (3b3) at (\ox+0*\dx,\by-1*\dy) {};
     \node[word]  (3b2) at (\ox+0*\dx,\by+0*\dy) {};
@@ -187,6 +293,8 @@
 
     \def\ox{3*\oxb}
     
+    \node[label]  (1l) at (\ox+0*\dx,\sy+3*\dy) {$t=3$};
+        
     \node[focus1] (4bb) at  (\ox+0*\dx,2*\dy) {};
     \node[word]  (4b3) at (\ox+0*\dx,\by-1*\dy) {};
     \node[word]  (4b2) at (\ox+0*\dx,\by+0*\dy) {};
@@ -202,6 +310,8 @@
     \node[result] (4so) at  (\ox+0.5*\dx,4*\dy) {\reduce};
                   
     \def\ox{4*\oxb}
+    
+    \node[label]  (1l) at (\ox+0*\dx,\sy+3*\dy) {$t=4$};
     
     \node[focus1] (5bb) at  (\ox+0*\dx,2*\dy) {};
     \node[word]  (5b3) at (\ox+0*\dx,\by-1*\dy) {};
@@ -219,13 +329,15 @@
     
     \def\ox{5*\oxb}
 
+    \node[label]  (1l) at (\ox+0*\dx,\sy+3*\dy) {$t=5$};
+
     \node[focus2] (6sb) at  (\ox+0*\dx,\sy-0.5*\dy) {};
     \node[word]  (6s1) at (\ox+0*\dx,\sy-1*\dy) {(the cat) (sat down)};
     \node[word]  (6s2) at (\ox+0*\dx,\sy+0*\dy) {};
     \node[word]  (6s3) at (\ox+0*\dx,\sy+1*\dy) {};
     \node[sbox] (6sb) at  (\ox+0*\dx,\sy+0.5*\dy) {};
 
-    \node[softmax] (6sm) at  (\ox+0.5*\dx,2*\dy) {output to semantic task model};
+    \node[softmax] (6sm) at  (\ox+0.5*\dx,2*\dy) {output to model for semantic task};
                    
     \pgfsetarrowsend{latex}
     \tikzstyle{fwd} = [draw=black, line width=1pt]
@@ -276,7 +388,7 @@
 
   \end{tikzpicture}}
   
- \caption{The fully unrolled Model 1/2 network for \word{the cat sat down} with some layers omitted for clarity.}\label{fig:model:top}  
+ \caption{The fully unrolled Model 1/2 network for \word{the cat sat down} with some layers omitted for clarity.}\label{fig:model:1b}  
 \end{subfigure}
-\caption{\label{m1-views}Two views of Models 1 and 2 (which use equivalent model graphs). In both views, the lower boxes represent the input buffer, and the upper boxes represent the stack. Yellow highlighting indicates which portions of these data structures are visible to the tracking LSTM and to the composition function.}
+\caption{\label{m1-views}Two views of Models 1 and 2 (which use equivalent model graphs). In both views, the lower boxes represent the input buffer, and the upper boxes represent the stack. Yellow highlighting indicates which portions of these data structures are visible to the tracking LSTM and to the composition function. Thin gray arrows indicate connections which are blocked by a gating function, and so contribute no information.}
 \end{figure*}
