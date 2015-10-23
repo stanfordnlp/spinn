@@ -4,6 +4,9 @@ import copy
 import random
 import numpy as np
 
+LIN = "LIN"
+EXP = "EXP"
+
 # Instructions: Configure the variables in this block, then run
 # the following on a machine with qsub access:
 # python make_sweep.py > my_sweep.sh
