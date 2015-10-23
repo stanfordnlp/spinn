@@ -17,6 +17,6 @@ echo Lauching from working directory: $PBS_O_WORKDIR
 echo Flags: $REMBED_FLAGS
 
 # Log what we're running and where.
-echo `hostname` - $PBS_JOBID - $REMBED_FLAGS >> ~/rembed_machine_assignments.txt
+echo `hostname` - $PBS_JOBID - $REMBED_FLAGS - at `git log --pretty=format:'%h' -n 1` >> ~/rembed_machine_assignments.txt
 
 python -m rembed.models.classifier $REMBED_FLAGS
