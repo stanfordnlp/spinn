@@ -172,7 +172,7 @@ Model 4 & Soft & Soft Buffer & \bf Y: Indirectly supervised & Y \\
 
 Model 0, depicted in Figure~\ref{fig:model:0}, is the simplest instantiation of our design, using only a conventional stack and a learned composition function to incrementally build a sentence representation over a series of timesteps. For a sentence of $N$ words its input is a sequence of $2N-3$ inputs. These inputs can take two types. At some timesteps, the input will be a word embedding vector. This triggers the \shift~operation, in which the vector is pushed onto the top of a stack. At other timesteps, the input will be the special \reduce~token, which triggers the reduction operation. In that operation, the top two word vectors are popped from the stack, fed into a learned composition function that maps them to a single vector (in the simplest case, this is a single neural network layer), and then pushed back onto the stack.
 
-If we add no additional features, this model computes the same function as a plain TreeRNN. However, we expect it to be substantially faster than conventional TreeRNN implementations. Unlike a TreeRNN, the Model 0 computaiton graph is essentially static across examples, so examples of varying structures and lengths can be batched together and run on the same graph in a single step. This simply requires ensuring that the graph is run for enough timesteps to finish all of the sentences. This involves some wasted computation, since the composition function will be run $2N-3$ times (with the output of composition at non-\reduce~steps discarded), rather than $N-1$ times in a TreeRNN. However, this loss can be dramatically offset by the gains of batching, which stem from the ability to exploit highly optimized CPU and GPU libraries for batched matrix mulitiplication.
+If we add no additional features, this model computes the same function as a plain TreeRNN. However, we expect it to be substantially faster than conventional TreeRNN implementations. Unlike a TreeRNN, the Model 0 computation graph is essentially static across examples, so examples of varying structures and lengths can be batched together and run on the same graph in a single step. This simply requires ensuring that the graph is run for enough timesteps to finish all of the sentences. This involves some wasted computation, since the composition function will be run $2N-3$ times (with the output of composition at non-\reduce~steps discarded), rather than $N-1$ times in a TreeRNN. However, this loss can be dramatically offset by the gains of batching, which stem from the ability to exploit highly optimized CPU and GPU libraries for batched matrix multiiplication.
 
 \subsection{Model 1}
 
@@ -190,33 +190,37 @@ At training time, following the strategy used in LSTM text decoders, the decisio
 
 \subsection{Model 2}
 
-Model 2 makes a small change to Model 1 that is likely to substantially change the dymanics of learning: It uses the operation sequence predicted by the operation classifier (blue) at training time as well as at test time. It may be possible to accelerate Model 2 training by initializing it with parameters learned by Model 1.
+Model 2 makes a small change to Model 1 that is likely to substantially change the dynamics of learning: It uses the operation sequence predicted by the operation classifier (blue) at training time as well as at test time. It may be possible to accelerate Model 2 training by initializing it with parameters learned by Model 1.
 
-For discussion of related issues in sequence-to-sequence models, see \citealt{bengio2015scheduled}.
+By exposing Model 2 to the results of its own decisions during training, we encourage it to become more robust to its own prediction errors. \citealt{bengio2015scheduled} applied a similar strategy\footnote{The authors experiment with several strategies which interpolate between oracle-driven training and oracle-free training (Models 1 and 2 in our presentation, respectively). It may be useful to adopt a similar interpolating approach.} to an image captioning model. They suggest that the resulting model can avoid propagating prediction errors through long sequences due to this training regime.
 
 \subsection{Model 3}
 
 Model 3 modifies Model 2 by introducing the soft stack/soft queue from \cite{grefenstette2015learning} in place of the hard, conventional stack and buffer. The soft stack makes it possible to for the model to predict smooth distributions over operations of the form (0.93 \shift, 0.07 \reduce), instead of making hard decisions. These soft decisions allow for gradient information to flow from the stack and the buffer back into the operation classifier (blue). This is crucial to our ultimate goal, as it makes it possible for semantic considerations to influence the model's parsing decisions.
 
+Model 3 still receives a direct supervision signal from some existing parser. In order to train the soft stack, we must represent the hard supervision signal from the parser by a soft prediction which matches the soft stack operation output. The supervision signal simply assigns 100\% weight to the ground-truth operation.
+
 \subsection{Model 4}
 
 Model 4 modifies Model 3 by removing the direct supervision signal from the operation classifier (blue), instead forcing the operation classifier to learn solely from the gradient provided by the downstream supervision task. It may be possible to accelerate or otherwise improve Model 4 training by initializing it with parameters learned by Model 3.
+
+By removing an external parser signal, we allow Model 4 to fully exploit the soft stack representation. It is free to predict soft parse operations in the case of ambiguous parses. This distinguishes it from Model 3, which is encouraged to replicate the 100\%-certain ground truth parse predictions provided by the external parser.
 
 \section{Other possible model features}
 
 \subsection{Encoding the contents of the stack and buffer}
 
-The tracking LSTM (red) needs access to the top of the buffer and the top two elements of the stack in order to m ake even minimally informed decisions about whether to shift or reduce. It could benefit further from additional information about broader sentential context. This can be provided by running new LSTMs along the elements of each of the stack and the buffer (following \citealt{dyer-EtAl:2015:ACL-IJCNLP}) and feeding the result into the tracking LSTM.
+The tracking LSTM (red) needs access to the top of the buffer and the top two elements of the stack in order to make even minimally informed decisions about whether to shift or reduce. It could benefit further from additional information about broader sentential context. This can be provided by running new LSTMs along the elements of each of the stack and the buffer (following \citealt{dyer-EtAl:2015:ACL-IJCNLP}) and feeding the result into the tracking LSTM.
 
 \subsection{Contextually-informed composition}
 
 The composition function in the basic model (green) combines only the top elements of the stack, without using any further information. It may be possible to encourage the composition function to learn to do some amount of context-sensitive interpretation/disambiguation by adding a connection from the tracking LSTM (red) directly into the composition function.
 
-For model zero, no tracking LSTM is needed for the ordinary operation of the model, but it would be possible to add one for this purpose, taking as inputs the top two values of the stack at each time point and emitting as output a context vector that can be used to condition the composition function.
+For Model 0, no tracking LSTM is needed for the ordinary operation of the model, but it would be possible to add one for this purpose, taking as inputs the top two values of the stack at each time point and emitting as output a context vector that can be used to condition the composition function.
 
-\subsection{Constituent labels}
+\subsection{Typed \reduce~operations}
 
-It would be possible to train any of the parse-supervised models (1--3) to learn explicit part of speech operations, expanding the op set dramatically to something like \{\shift, \reduce-NP, \reduce-S, \reduce-PP, ...\}.
+Shift-reduce parsers for natural language typically operate with a restricted set of typed \reduce~operations (also known as ``arc'' operations). These operations specify the precise relation between the elements being merged. It would be possible to train any of the parse-supervised models (1--3) to learn such typed arc operations, expanding the op set dramatically to something like \{\shift, \reduce-NP, \reduce-S, \reduce-PP, ...\} (in the case of constituency parse supervision). The model can then learn a distinct composition function depending on the relation of the two elements being merged.
 
 \section{Implementation notes}
 
