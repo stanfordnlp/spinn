@@ -14,6 +14,7 @@
     \tikzstyle{label}=[text width=35mm,align=center,text height=2mm]    
     \tikzstyle{word}=[text width=35mm,align=center,text height=2mm]    
     \tikzstyle{comp}=[fill=green!40,text width=20mm,align=center,text height=2mm]
+    \tikzstyle{compoff}=[fill=green!10!black!10,text width=20mm,align=center,text height=2mm]
     \tikzstyle{input}=[line width=1pt,text width=20mm,align=center,text height=2mm]    
     \tikzstyle{sbox}=[line width=1pt,draw=black,text width=25mm,align=center,text height=13.3mm]
     \tikzstyle{bbox}=[line width=1pt,draw=black,text width=25mm,align=center,text height=6.5mm]
@@ -44,7 +45,7 @@
     \node[word]  (1s3) at (\ox+0*\dx,\sy+1*\dy) {};
     \node[sbox] (1sb) at  (\ox+0*\dx,\sy+0.5*\dy) {};
     
-    \node[comp] (1c) at  (\ox+0.5*\oxb,\sy-1.5*\dy) {composition};
+    \node[compoff] (1c) at  (\ox+0.5*\oxb,\sy-1.5*\dy) {composition};
     
     \node[input] (1so) at  (\ox+0.75*\oxb,9*\dy) {\shift:~sat};
      
@@ -99,6 +100,7 @@
     \tikzstyle{tracker}=[fill=red!40,text width=15mm,align=center,text height=2mm]
     \tikzstyle{softmax}=[fill=blue!40,text width=15mm,align=center,text height=2mm]
     \tikzstyle{comp}=[fill=green!40,text width=20mm,align=center,text height=2mm]
+    \tikzstyle{compoff}=[fill=green!10!black!10,text width=20mm,align=center,text height=2mm]
     \tikzstyle{result}=[line width=1pt,draw=black,text width=15mm,align=center,text height=2mm]    
     \tikzstyle{sbox}=[line width=1pt,draw=black,text width=25mm,align=center,text height=13.3mm]
     \tikzstyle{bbox}=[line width=1pt,draw=black,text width=25mm,align=center,text height=6.5mm]
@@ -145,7 +147,7 @@
     \node[word]  (1s3) at (\ox+0*\dx,\sy+1*\dy) {};
     \node[sbox] (1sb) at  (\ox+0*\dx,\sy+0.5*\dy) {};
     
-    \node[comp] (1c) at  (\ox+0.5*\oxb,\sy-1.5*\dy) {composition};
+    \node[compoff] (1c) at  (\ox+0.5*\oxb,\sy-1.5*\dy) {composition};
     
     \node[tracker] (1t) at  (\ox+0*\dx,5*\dy) {tracking};
     \node[softmax] (1sm) at  (\ox+3*\dx,7*\dy) {$\sigma$};
