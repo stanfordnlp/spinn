@@ -106,8 +106,9 @@ def train():
     # Set up L2 regularization.
     # TODO(SB): Don't naively L2ify the embedding matrix. It'll break on NL.
     l2_cost = 0.0
-    for value in vs.vars.values():
-        l2_cost += FLAGS.l2_lambda * T.sum(T.sqr(value))
+    for var in vs.vars:
+        if "embedding" not in var:
+            l2_cost += FLAGS.l2_lambda * T.sum(T.sqr(vs.vars[var]))
     total_cost = xent_cost + l2_cost
 
     # Set up optimization.
