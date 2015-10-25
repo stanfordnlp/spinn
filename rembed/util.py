@@ -1,6 +1,4 @@
-
 from collections import OrderedDict
-import logging
 import random
 
 import numpy as np
@@ -22,10 +20,11 @@ def ZeroInitializer():
 
 class VariableStore(object):
 
-    def __init__(self, prefix="vs", default_initializer=UniformInitializer(0.1)):
+    def __init__(self, prefix="vs", default_initializer=UniformInitializer(0.1), logger=None):
         self.prefix = prefix
         self.default_initializer = default_initializer
         self.vars = {}
+        self.logger = logger
 
     def add_param(self, name, shape, initializer=None):
         if not initializer:
@@ -33,7 +32,9 @@ class VariableStore(object):
 
         if name not in self.vars:
             full_name = "%s/%s" % (self.prefix, name)
-            logging.debug("Created variable " + full_name)
+            if self.logger:
+                self.logger.Log(
+                    "Created variable " + full_name, level=self.logger.DEBUG)
             self.vars[name] = theano.shared(initializer(shape),
                                             name=full_name)
         return self.vars[name]
@@ -144,13 +145,15 @@ def tokens_to_ids(vocabulary, dataset):
     return dataset
 
 
-def crop_and_pad(dataset, length):
+def crop_and_pad(dataset, length, logger=None):
     # NOTE: This can probably be done faster in NumPy if it winds up making a
     # difference.
     for example in dataset:
         padding_amount = length - len(example["op_sequence"])
         if padding_amount < 0:
-            logging.debug("Cropping len " + str(len(example["op_sequence"])))
+            if logger:
+                logger.Log("Cropping len " + str(
+                    len(example["op_sequence"])), level=logger.DEBUG)
             example["op_sequence"] = example[
                 "op_sequence"][-padding_amount:]
         else:

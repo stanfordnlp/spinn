@@ -13,7 +13,6 @@
 #      by raw word tokens to be shifted, and reductions are marked by a special REDUCE_OP
 #      token.
 import itertools
-import logging
 import numpy as np
 
 from rembed import util
@@ -42,7 +41,7 @@ def convert_binary_bracketed_data(filename):
     return examples
 
 
-def load_data(path, vocabulary=None, seq_length=None, batch_size=32, eval_mode=False):
+def load_data(path, vocabulary=None, seq_length=None, batch_size=32, eval_mode=False, logger=None):
     dataset = convert_binary_bracketed_data(path)
 
     if not vocabulary:
@@ -59,14 +58,15 @@ def load_data(path, vocabulary=None, seq_length=None, batch_size=32, eval_mode=F
 
     # Convert token sequences to integer sequences
     dataset = util.tokens_to_ids(vocabulary, dataset)
-    dataset = util.crop_and_pad(dataset, seq_length)
+    dataset = util.crop_and_pad(dataset, seq_length, logger=logger)
     X = np.array([example["op_sequence"] for example in dataset],
                  dtype=np.int32)
     y = np.array([int(example["label"]) for example in dataset],
                  dtype=np.int32)
 
-    logging.info("Loaded %i examples to sequences of length %i",
-                 len(dataset), seq_length)
+    if logger:
+        logger.Log("Loaded %i examples to sequences of length %i" %
+                   (len(dataset), seq_length))
 
     # Build batched data iterator.
     if eval_mode:

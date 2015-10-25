@@ -10,13 +10,14 @@ python -m rembed.models.classifier --data_type sst --l2_lambda 0.0 --embedding_d
 """
 
 from functools import partial
-import logging
+import pprint
 import sys
 
 import gflags
 from theano import tensor as T
 import theano
 
+from rembed import afs_safe_logger
 from rembed import util
 from rembed.data.boolean import load_boolean_data
 from rembed.data.sst import load_sst_data
@@ -64,6 +65,8 @@ def build_cost(logits, targets):
 
 
 def train():
+    logger = afs_safe_logger.Logger(FLAGS.experiment_name + ".log")
+
     if FLAGS.data_type == "bl":
         data_manager = load_boolean_data
     elif FLAGS.data_type == "sst":
@@ -72,11 +75,12 @@ def train():
         logging.error("Bad data type.")
         return
 
-    logging.info("Flag values: " + str(FLAGS.FlagValuesDict()))
+    pp = pprint.PrettyPrinter(indent=4)
+    logger.Log("Flag values:\n" + pp.pformat(FLAGS.FlagValuesDict()))
 
     # Load the data
     training_data_iter, vocabulary = data_manager.load_data(
-        FLAGS.training_data_path, seq_length=FLAGS.seq_length, batch_size=FLAGS.batch_size)
+        FLAGS.training_data_path, seq_length=FLAGS.seq_length, batch_size=FLAGS.batch_size, logger=logger)
 
     eval_sets = []
     for eval_filename in FLAGS.eval_data_path.split(","):
@@ -92,9 +96,9 @@ def train():
     y = T.ivector("y")
     lr = T.scalar("lr")
 
-    logging.info("Building model.")
+    logger.Log("Building model.")
     vs = util.VariableStore(
-        default_initializer=util.UniformInitializer(FLAGS.init_range))
+        default_initializer=util.UniformInitializer(FLAGS.init_range), logger=logger)
     logits = build_model(
         vocab_size, FLAGS.seq_length, X, data_manager.NUM_CLASSES, vs)
     xent_cost, acc = build_cost(logits, y)
@@ -119,7 +123,7 @@ def train():
         total_cost_value, xent_cost_value, l2_cost_value, acc = update_fn(
             X_batch, y_batch, FLAGS.learning_rate)
         if step % FLAGS.statistics_interval_steps == 0:
-            logging.info(
+            logger.Log(
                 "Step: %i\tAcc: %f\tCost: %f %f %f" % (step, acc, total_cost_value,
                                                        xent_cost_value, l2_cost_value))
         if step % FLAGS.eval_interval_steps == 0:
@@ -130,8 +134,8 @@ def train():
                 for (eval_X_batch, eval_y_batch) in eval_set[1]:
                     acc_accum += eval_fn(eval_X_batch, eval_y_batch)
                     eval_batches += 1.0
-                logging.info("Step: %i\tEval acc: %f\t%s" %
-                             (step, acc_accum / eval_batches, eval_set[0]))
+                logger.Log("Step: %i\tEval acc: %f\t%s" %
+                          (step, acc_accum / eval_batches, eval_set[0]))
 
 if __name__ == '__main__':
     # Experiment naming.
@@ -164,20 +168,6 @@ if __name__ == '__main__':
 
     # Parse command line flags.
     FLAGS(sys.argv)
-
-    # Set up logging.
-    logFormatter = logging.Formatter(
-        "%(asctime)s [%(levelname)-5.5s]  %(message)s")
-    rootLogger = logging.getLogger()
-    rootLogger.setLevel(logging.DEBUG)
-
-    fileHandler = logging.FileHandler(FLAGS.experiment_name + ".log")
-    fileHandler.setFormatter(logFormatter)
-    rootLogger.addHandler(fileHandler)
-
-    consoleHandler = logging.StreamHandler()
-    consoleHandler.setFormatter(logFormatter)
-    rootLogger.addHandler(consoleHandler)
 
     # Run.
     train()
