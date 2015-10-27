@@ -47,11 +47,8 @@ def convert_binary_bracketed_data(filename):
 def separate_op_sequence(op_sequence, reduce_id=1):
     tokens, transitions = [], []
     for op in op_sequence:
-        if op == ")":
-            transitions.append(1)
-        else:
-            tokens.append(op)
-            transitions.append(0)
+        tokens.append(op)
+        transitions.append(1 if op == ")" else 0)
 
     return tokens, transitions
 
