@@ -32,7 +32,7 @@ SWEEP_PARAMETERS = {
 # Non-tunable flags that must be passed in.
 FIXED_PARAMETERS = {
     "data_type":     "sst",
-    "training_data_path":    "sst-data/train.txt",
+    "training_data_path":    "sst-data/train_expanded.txt",
     "eval_data_path":    "sst-data/dev.txt"
 }
 
