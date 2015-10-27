@@ -182,7 +182,7 @@ class Model1(object):
         self.seq_length = seq_length
 
         self._compose_network = compose_network
-        self._predict_network = predict_network
+        self._predict_network = predict_network or util.Linear
 
         self._vs = vs
 
@@ -218,10 +218,8 @@ class Model1(object):
         stack_merged = T.zeros(stack_shape)
 
         # Allocate a "buffer" stack and maintain a cursor in this buffer.
-        # TODO(jgauthier): Verify shape.
-        buffer = self.embeddings[self.X]
-        assert buffer.ndim == 3
-        buffer_cur_init = T.zeros((batch_size,))
+        buffer = self.embeddings[self.X] # batch_size * seq_length * emb_dim
+        buffer_cur_init = T.zeros((batch_size,), dtype="int")
 
         def step(x_t, stack_t, buffer_cur_t, stack_pushed, stack_merged,
                  buffer):
@@ -232,7 +230,7 @@ class Model1(object):
 
             # Predict stack actions.
             predict_inp = T.concatenate(
-                [x_t, stack_t[:, 0], buffer_top_t], axis=1)
+                [embs_t, stack_t[:, 0], buffer_top_t], axis=1)
             actions_t = self._predict_network(
                 predict_inp, self.embedding_dim * 3, 2, self._vs,
                 name="predict_actions")
@@ -255,16 +253,17 @@ class Model1(object):
             # should increment each buffer cursor by 1 - mask
             buffer_cur_next = buffer_cur_t + (1 - mask)
 
-            return stack_next, buffer_cur_next
+            return stack_next, actions_t, buffer_cur_next
 
         # Dimshuffle inputs to seq_len * batch_size for scanning
         X = self.X.dimshuffle(1, 0)
 
         scan_ret = theano.scan(
             step, X, non_sequences=[stack_pushed, stack_merged, buffer],
-            outputs_info=[stack_init, buffer_cur_init])[0]
+            outputs_info=[stack_init, None, buffer_cur_init])[0]
 
         self.final_stack = scan_ret[0][-1]
+        self.actions = scan_ret[1].dimshuffle(1, 0, 2)
 
 
 if __name__ == '__main__':
