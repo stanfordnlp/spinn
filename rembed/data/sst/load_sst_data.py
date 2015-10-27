@@ -29,6 +29,8 @@ def convert_binary_bracketed_data(filename):
         for line in f:
             example = {}
             line = line.strip()
+            if len(line) == 0:
+                continue
             example["label"] = line[1]
             example["sentence"] = line
             example["op_sequence"] = []

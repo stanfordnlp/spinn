@@ -5,7 +5,7 @@ python -m rembed.models.classifier --training_data_path bl-data/bl_train.tsv \
        --eval_data_path bl-data/bl_dev.tsv
 
 SST sentiment:
-python -m rembed.models.classifier --data_type sst --l2_lambda 0.0 --embedding_dim 25 --training_data_path sst-data/train.txt \
+python -m rembed.models.classifier --data_type sst --embedding_dim 25 --training_data_path sst-data/train.txt \
        --eval_data_path sst-data/dev.txt
 """
 
@@ -160,7 +160,7 @@ if __name__ == '__main__':
     gflags.DEFINE_float("learning_rate", 0.01, "")
     gflags.DEFINE_float("momentum", 0.9, "")
     gflags.DEFINE_float("clipping_max_norm", 1.0, "")
-    gflags.DEFINE_float("l2_lambda", 1e-6, "")
+    gflags.DEFINE_float("l2_lambda", 1e-5, "")
     gflags.DEFINE_float("init_range", 0.1, "")
 
     # Display settings.

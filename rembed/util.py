@@ -40,7 +40,7 @@ class VariableStore(object):
         return self.vars[name]
 
 
-def ReLULayer(inp, inp_dim, outp_dim, vs, name="tanh_layer", use_bias=True):
+def ReLULayer(inp, inp_dim, outp_dim, vs, name="relu_layer", use_bias=True):
     pre_nl = Linear(inp, inp_dim, outp_dim, vs, name, use_bias)
     # ReLU isn't present in this version of Theano.
     outp = T.maximum(pre_nl, 0)
@@ -48,7 +48,7 @@ def ReLULayer(inp, inp_dim, outp_dim, vs, name="tanh_layer", use_bias=True):
     return outp
 
 
-def Linear(inp, inp_dim, outp_dim, vs, name="linear", use_bias=True):
+def Linear(inp, inp_dim, outp_dim, vs, name="linear_layer", use_bias=True):
     W = vs.add_param("%s_W" % name, (inp_dim, outp_dim))
     outp = inp.dot(W)
 
@@ -126,12 +126,27 @@ def momentum(cost, params, lr=0.01, momentum=0.9):
         # momentum value
         m = theano.shared(np.zeros(param_val.shape, dtype=param_val.dtype))
         # compute velocity
-        v = momentum * m + lr * grad
+        v = lr * grad + momentum * m
 
         new_values[m] = v
         new_values[param] = param - v
 
     return new_values
+
+
+def RMSprop(cost, params, lr=0.001, rho=0.9, epsilon=1e-6):
+    # From:
+    # https://github.com/Newmu/Theano-Tutorials/blob/master/4_modern_net.py
+    grads = T.grad(cost=cost, wrt=params)
+    updates = []
+    for p, g in zip(params, grads):
+        acc = theano.shared(p.get_value() * 0.)
+        acc_new = rho * acc + (1 - rho) * g ** 2
+        gradient_scaling = T.sqrt(acc_new + epsilon)
+        g = g / gradient_scaling
+        updates.append((acc, acc_new))
+        updates.append((p, p - lr * g))
+    return updates
 
 
 def tokens_to_ids(vocabulary, dataset):
@@ -173,6 +188,7 @@ def MakeTrainingIterator(X, y, batch_size):
         while True:
             start += batch_size
             if start > len(X):
+                print "Epoch."
                 # Start another epoch
                 start = 0
                 random.shuffle(order)
