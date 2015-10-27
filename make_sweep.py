@@ -22,9 +22,9 @@ queue = "nlp"
 SWEEP_PARAMETERS = {
     "seq_length":    (LIN, 25, 100),
     "embedding_dim":    (EXP, 10, 200),
-    "learning_rate":    (EXP, 0.001, 0.1),
+    "learning_rate":    (EXP, 0.004, 0.1),
     "momentum":     (LIN, 0., 0.999),
-    "clipping_max_norm":    (LIN, 0.5, 10.0),
+    "clipping_max_norm":    (LIN, 0.5, 50.0),
     "l2_lambda":    (EXP, 1e-7, 1e-3),
     "init_range":    (EXP, 0.01, 0.2)
 }
