@@ -177,37 +177,39 @@ def crop_and_pad(dataset, length, logger=None):
     return dataset
 
 
-def MakeTrainingIterator(X, y, batch_size):
+def MakeTrainingIterator(sources, batch_size):
     # Make an iterator that exposes a dataset as random minibatches.
 
     def data_iter():
+        dataset_size = len(sources[0])
         start = -1 * batch_size
-        order = range(len(X))
+        order = range(dataset_size)
         random.shuffle(order)
 
         while True:
             start += batch_size
-            if start > len(X):
+            if start > dataset_size:
                 print "Epoch."
                 # Start another epoch
                 start = 0
                 random.shuffle(order)
             batch_indices = order[start:start + batch_size]
-            yield X[batch_indices], y[batch_indices]
+            yield tuple(source[batch_indices] for source in sources)
     return data_iter()
 
 
-def MakeEvalIterator(X, y, batch_size):
+def MakeEvalIterator(sources, batch_size):
     # Make a list of minibatches from a dataset to use as an iterator.
     # TODO(SB): Handle the last few examples in the eval set if they don't
     # form a batch.
 
+    dataset_size = len(sources[0])
     data_iter = []
     start = -batch_size
     while True:
         start += batch_size
-        if start > len(X):
+        if start > dataset_size:
             break
-        data_iter.append((X[start:start + batch_size],
-                          y[start:start + batch_size]))
+        data_iter.append(tuple(source[start:start + batch_size]
+                               for source in sources))
     return data_iter

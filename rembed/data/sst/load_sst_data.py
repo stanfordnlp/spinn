@@ -72,9 +72,9 @@ def load_data(path, vocabulary=None, seq_length=None, batch_size=32, eval_mode=F
 
     # Build batched data iterator.
     if eval_mode:
-        data_iter = util.MakeEvalIterator(X, y, batch_size)
+        data_iter = util.MakeEvalIterator((X, y), batch_size)
     else:
-        data_iter = util.MakeTrainingIterator(X, y, batch_size)
+        data_iter = util.MakeTrainingIterator((X, y), batch_size)
 
     return data_iter, vocabulary
 
