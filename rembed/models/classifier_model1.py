@@ -99,17 +99,14 @@ def train():
 
     # Load the data
     training_data_iter, vocabulary = data_manager.load_data(
-        FLAGS.training_data_path, seq_length=FLAGS.seq_length, batch_size=FLAGS.batch_size, separate_transitions=True, logger=logger)
+        FLAGS.training_data_path, seq_length=FLAGS.seq_length, batch_size=FLAGS.batch_size, logger=logger)
 
     eval_sets = []
     for eval_filename in FLAGS.eval_data_path.split(","):
         eval_data_iter, _ = data_manager.load_data(
             eval_filename, vocabulary=vocabulary, seq_length=FLAGS.seq_length, batch_size=FLAGS.batch_size,
-            separate_transitions=True, eval_mode=True)
+            eval_mode=True)
         eval_sets.append((eval_filename, eval_data_iter))
-
-    # Account for the *REDUCE* trigger token.
-    vocab_size = len(vocabulary) - 1
 
     # Set up the placeholders.
     X = T.imatrix("X")
@@ -121,7 +118,7 @@ def train():
     vs = util.VariableStore(
         default_initializer=util.UniformInitializer(FLAGS.init_range), logger=logger)
     actions, logits = build_model(
-        vocab_size, FLAGS.seq_length, X, transitions, data_manager.NUM_CLASSES, vs,
+        len(vocabulary), FLAGS.seq_length, X, transitions, data_manager.NUM_CLASSES, vs,
         use_predictions=FLAGS.use_predictions)
     xent_cost, acc = build_cost(logits, y)
     action_cost = build_action_cost(actions, transitions)
@@ -141,15 +138,15 @@ def train():
     new_values = util.momentum(total_cost, vs.vars.values(), lr,
                                FLAGS.momentum)
     update_fn = theano.function(
-        [X, y, transitions, lr],
+        [X, transitions, y, lr],
         [total_cost, xent_cost, action_cost, l2_cost, acc],
         updates=new_values)
     eval_fn = theano.function([X, transitions, y], acc)
 
     # Main training loop.
     for step in range(FLAGS.training_steps):
-        X_batch, y_batch, transition_batch = training_data_iter.next()
-        ret = update_fn(X_batch, y_batch, transition_batch,
+        X_batch, transition_batch, y_batch = training_data_iter.next()
+        ret = update_fn(X_batch, transition_batch, y_batch,
             FLAGS.learning_rate)
         total_cost_val, xent_cost_val, action_cost_val, l2_cost_val, acc = ret
 
@@ -163,7 +160,7 @@ def train():
                 # Evaluate
                 acc_accum = 0.0
                 eval_batches = 0.0
-                for (eval_X_batch, eval_y_batch, eval_transitions_batch) in eval_set[1]:
+                for (eval_X_batch, eval_transitions_batch, eval_y_batch) in eval_set[1]:
                     acc_accum += eval_fn(eval_X_batch, eval_transitions_batch,
                                          eval_y_batch)
                     eval_batches += 1.0
