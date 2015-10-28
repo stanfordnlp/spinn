@@ -154,8 +154,6 @@ def tokens_to_ids(vocabulary, dataset):
 
     unk_id = vocabulary["*UNK*"]
     for example in dataset:
-        example["op_sequence"] = [vocabulary.get(token, unk_id)
-                                  for token in example["op_sequence"]]
         example["tokens"] = [vocabulary.get(token, unk_id)
                              for token in example["tokens"]]
     return dataset
@@ -180,7 +178,7 @@ def crop_and_pad(dataset, length, logger=None):
     # NOTE: This can probably be done faster in NumPy if it winds up making a
     # difference.
     for example in dataset:
-        for key in ["op_sequence", "tokens", "transitions"]:
+        for key in ["tokens", "transitions"]:
             crop_and_pad_example(example, length, key=key, logger=logger)
 
     return dataset

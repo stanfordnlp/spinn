@@ -47,7 +47,7 @@ class HardStack(object):
 
     def __init__(
         self, embedding_dim, vocab_size, seq_length, compose_network, vs,
-        linear_memory_dim=None, X=None):
+        linear_memory_dim=None, X=None, transitions=None):
         """Construct a HardStack.
 
         Args:
@@ -68,6 +68,8 @@ class HardStack(object):
               of dimension `batch_size * linear_memory_dim`.
             X: Theano batch describing input matrix, or `None` (in which case
               this instance will make its own batch variable).
+            transitions: Theano batch describing transition matrix, or `None`
+              (in which case this instance will make its own batch variable).
         """
 
         self.embedding_dim = embedding_dim
@@ -79,12 +81,14 @@ class HardStack(object):
         self._vs = vs
 
         self.X = X
+        self.transitions = transitions
 
         self._make_params()
         self._make_inputs()
         self._make_scan()
 
-        self.scan_fn = theano.function([self.X], self.final_stack)
+        self.scan_fn = theano.function([self.X, self.transitions],
+                                       self.final_stack)
 
     def _make_params(self):
         # Per-token embeddings
@@ -92,7 +96,8 @@ class HardStack(object):
             "embeddings", (self.vocab_size, self.embedding_dim))
 
     def _make_inputs(self):
-        self.X = self.X or T.matrix("X")
+        self.X = self.X or T.imatrix("X")
+        self.transitions = self.transitions or T.imatrix("transitions")
 
     def _make_scan(self):
         """Build the sequential composition / scan graph."""
@@ -118,16 +123,15 @@ class HardStack(object):
         # embedding_lookups = self.embeddings[self.X]
         # print embedding_lookups.ndim
 
-        def step(x_t, stack_t, linear_memory, stack_pushed, stack_merged):
+        def step(x_t, transitions_t, stack_t, linear_memory, stack_pushed,
+                 stack_merged):
             # NB: x_t may contain sentinel -1 values. Luckily -1 is a
             # valid index, and the below lookup doesn't fail. In any
             # case, where x_t we won't use the resultant embedding
             # anyway!
             embs_t = self.embeddings[x_t]
 
-            # Mask to select examples which have a "merge" op at this
-            # timestep
-            mask = T.eq(x_t, -1)
+            mask = transitions_t
 
             # If we are carrying along a linear memory, update that first.
             if use_linear_memory:
@@ -153,9 +157,11 @@ class HardStack(object):
 
         # Dimshuffle inputs to seq_len * batch_size for scanning
         X = self.X.dimshuffle(1, 0)
+        transitions = self.transitions.dimshuffle(1, 0)
 
         scan_ret = theano.scan(
-            step, X, non_sequences=[stack_pushed, stack_merged],
+            step, [X, transitions],
+            non_sequences=[stack_pushed, stack_merged],
             outputs_info=[stack_init, linear_memory_init])[0]
 
         if use_linear_memory:
@@ -204,8 +210,8 @@ class Model1(object):
             "embeddings", (self.vocab_size, self.embedding_dim))
 
     def _make_inputs(self):
-        self.X = self.X or T.matrix("X")
-        self.transitions = self.transitions or T.matrix("transitions")
+        self.X = self.X or T.imatrix("X")
+        self.transitions = self.transitions or T.imatrix("transitions")
 
     def _make_scan(self):
         """Build the sequential composition / scan graph."""

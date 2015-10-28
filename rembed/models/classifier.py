@@ -28,7 +28,7 @@ from rembed.stack import HardStack
 FLAGS = gflags.FLAGS
 
 
-def build_model(vocab_size, seq_length, inputs, num_classes, vs):
+def build_model(vocab_size, seq_length, tokens, transitions, num_classes, vs):
     # Prepare MLP which performs stack element composition.
     compose_network = partial(
         util.MLP,
@@ -37,7 +37,7 @@ def build_model(vocab_size, seq_length, inputs, num_classes, vs):
     # Build hard stack which scans over input sequence.
     stack = HardStack(
         FLAGS.embedding_dim, vocab_size, seq_length,
-        compose_network, vs, X=inputs)
+        compose_network, vs, X=tokens, transitions=transitions)
 
     # Extract top element of final stack timestep.
     embeddings = stack.final_stack[:, 0].reshape((-1, FLAGS.embedding_dim))
@@ -88,11 +88,9 @@ def train():
             eval_filename, vocabulary=vocabulary, seq_length=FLAGS.seq_length, batch_size=FLAGS.batch_size, eval_mode=True)
         eval_sets.append((eval_filename, eval_data_iter))
 
-    # Account for the *REDUCE* trigger token.
-    vocab_size = len(vocabulary) - 1
-
     # Set up the placeholders.
     X = T.imatrix("X")
+    transitions = T.imatrix("X")
     y = T.ivector("y")
     lr = T.scalar("lr")
 
@@ -100,7 +98,7 @@ def train():
     vs = util.VariableStore(
         default_initializer=util.UniformInitializer(FLAGS.init_range), logger=logger)
     logits = build_model(
-        vocab_size, FLAGS.seq_length, X, data_manager.NUM_CLASSES, vs)
+        len(vocabulary), FLAGS.seq_length, X, transitions, data_manager.NUM_CLASSES, vs)
     xent_cost, acc = build_cost(logits, y)
 
     # Set up L2 regularization.
@@ -115,25 +113,29 @@ def train():
     new_values = util.momentum(total_cost, vs.vars.values(), lr,
                                FLAGS.momentum)
     update_fn = theano.function(
-        [X, y, lr], [total_cost, xent_cost, l2_cost, acc], updates=new_values)
-    eval_fn = theano.function([X, y], acc)
+        [X, transitions, y, lr], [total_cost, xent_cost, l2_cost, acc],
+        updates=new_values)
+    eval_fn = theano.function([X, transitions, y], acc)
 
     # Main training loop.
     for step in range(FLAGS.training_steps):
-        X_batch, y_batch = training_data_iter.next()
+        X_batch, transitions_batch, y_batch = training_data_iter.next()
         total_cost_value, xent_cost_value, l2_cost_value, acc = update_fn(
-            X_batch, y_batch, FLAGS.learning_rate)
+            X_batch, transitions_batch, y_batch, FLAGS.learning_rate)
+
         if step % FLAGS.statistics_interval_steps == 0:
             logger.Log(
                 "Step: %i\tAcc: %f\tCost: %f %f %f" % (step, acc, total_cost_value,
                                                        xent_cost_value, l2_cost_value))
+
         if step % FLAGS.eval_interval_steps == 0:
             for eval_set in eval_sets:
                 # Evaluate
                 acc_accum = 0.0
                 eval_batches = 0.0
-                for (eval_X_batch, eval_y_batch) in eval_set[1]:
-                    acc_accum += eval_fn(eval_X_batch, eval_y_batch)
+                for (eval_X_batch, eval_transitions_batch, eval_y_batch) in eval_set[1]:
+                    acc_accum += eval_fn(eval_X_batch, eval_transitions_batch,
+                                         eval_y_batch)
                     eval_batches += 1.0
                 logger.Log("Step: %i\tEval acc: %f\t%s" %
                           (step, acc_accum / eval_batches, eval_set[0]))
