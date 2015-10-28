@@ -177,6 +177,11 @@ def crop_and_pad_example(example, length, key="op_sequence", logger=None):
 def crop_and_pad(dataset, length, logger=None):
     # NOTE: This can probably be done faster in NumPy if it winds up making a
     # difference.
+    #
+    # TODO(jgauthier): The specified length should apply to "transitions." For
+    # datasets which are not `boolean` (i.e., where there is not a token for
+    # each merge operation), we need to calculate the proper truncated length
+    # of tokens -- it is not the same as the length of transitions.
     for example in dataset:
         for key in ["tokens", "transitions"]:
             crop_and_pad_example(example, length, key=key, logger=logger)
