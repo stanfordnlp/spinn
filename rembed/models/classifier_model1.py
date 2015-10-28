@@ -28,7 +28,8 @@ from rembed.stack import HardStack, Model1
 FLAGS = gflags.FLAGS
 
 
-def build_model(vocab_size, seq_length, inputs, num_classes, vs):
+def build_model(vocab_size, seq_length, inputs, transitions, num_classes, vs,
+                use_predictions=False):
     # Prepare MLP which performs stack element composition.
     compose_network = partial(
         util.MLP,
@@ -36,7 +37,8 @@ def build_model(vocab_size, seq_length, inputs, num_classes, vs):
 
     # Build hard stack which scans over input sequence.
     stack = Model1(FLAGS.embedding_dim, vocab_size, seq_length,
-        compose_network, vs, X=inputs)
+        compose_network, vs, predict_network=util.Linear,
+        use_predictions=use_predictions, X=inputs, transitions=transitions)
 
     # Extract top element of final stack timestep.
     embeddings = stack.final_stack[:, 0].reshape((-1, FLAGS.embedding_dim))
@@ -45,7 +47,7 @@ def build_model(vocab_size, seq_length, inputs, num_classes, vs):
     logits = util.Linear(
         embeddings, FLAGS.embedding_dim, num_classes, vs, use_bias=True)
 
-    return stack.actions, logits
+    return stack.transitions_pred, logits
 
 
 def build_cost(logits, targets):
@@ -102,7 +104,8 @@ def train():
     eval_sets = []
     for eval_filename in FLAGS.eval_data_path.split(","):
         eval_data_iter, _ = data_manager.load_data(
-            eval_filename, vocabulary=vocabulary, seq_length=FLAGS.seq_length, batch_size=FLAGS.batch_size, eval_mode=True)
+            eval_filename, vocabulary=vocabulary, seq_length=FLAGS.seq_length, batch_size=FLAGS.batch_size,
+            separate_transitions=True, eval_mode=True)
         eval_sets.append((eval_filename, eval_data_iter))
 
     # Account for the *REDUCE* trigger token.
@@ -118,7 +121,8 @@ def train():
     vs = util.VariableStore(
         default_initializer=util.UniformInitializer(FLAGS.init_range), logger=logger)
     actions, logits = build_model(
-        vocab_size, FLAGS.seq_length, X, data_manager.NUM_CLASSES, vs)
+        vocab_size, FLAGS.seq_length, X, transitions, data_manager.NUM_CLASSES, vs,
+        use_predictions=FLAGS.use_predictions)
     xent_cost, acc = build_cost(logits, y)
     action_cost = build_action_cost(actions, transitions)
 
@@ -128,7 +132,10 @@ def train():
     for var in vs.vars:
         if "embedding" not in var:
             l2_cost += FLAGS.l2_lambda * T.sum(T.sqr(vs.vars[var]))
-    total_cost = xent_cost + action_cost + l2_cost
+
+    total_cost = xent_cost + l2_cost
+    if FLAGS.use_predictions:
+        total_cost += action_cost
 
     # Set up optimization.
     new_values = util.momentum(total_cost, vs.vars.values(), lr,
@@ -137,7 +144,7 @@ def train():
         [X, y, transitions, lr],
         [total_cost, xent_cost, action_cost, l2_cost, acc],
         updates=new_values)
-    eval_fn = theano.function([X, y], acc)
+    eval_fn = theano.function([X, transitions, y], acc)
 
     # Main training loop.
     for step in range(FLAGS.training_steps):
@@ -156,8 +163,9 @@ def train():
                 # Evaluate
                 acc_accum = 0.0
                 eval_batches = 0.0
-                for (eval_X_batch, eval_y_batch) in eval_set[1]:
-                    acc_accum += eval_fn(eval_X_batch, eval_y_batch)
+                for (eval_X_batch, eval_y_batch, eval_transitions_batch) in eval_set[1]:
+                    acc_accum += eval_fn(eval_X_batch, eval_transitions_batch,
+                                         eval_y_batch)
                     eval_batches += 1.0
                 logger.Log("Step: %i\tEval acc: %f\t%s" %
                           (step, acc_accum / eval_batches, eval_set[0]))
@@ -177,6 +185,9 @@ if __name__ == '__main__':
     # Model architecture settings.
     gflags.DEFINE_integer("embedding_dim", 5, "")
     gflags.DEFINE_integer("num_composition_layers", 1, "")
+    gflags.DEFINE_bool("use_predictions", False,
+                       "Use the model's predicted stack operations (rather "
+                       "than ground-truth) to manipulate the stack")
 
     # Optimization settings.
     gflags.DEFINE_integer("training_steps", 50000, "")

@@ -176,13 +176,15 @@ class Model1(object):
     """
 
     def __init__(self, embedding_dim, vocab_size, seq_length, compose_network,
-                 vs, predict_network=None, X=None, transitions=None):
+                 vs, predict_network=None, use_predictions=False, X=None,
+                 transitions=None):
         self.embedding_dim = embedding_dim
         self.vocab_size = vocab_size
         self.seq_length = seq_length
 
         self._compose_network = compose_network
         self._predict_network = predict_network or util.Linear
+        self.use_predictions = use_predictions
 
         self._vs = vs
 
@@ -193,7 +195,8 @@ class Model1(object):
         self._make_inputs()
         self._make_scan()
 
-        self.scan_fn = theano.function([self.X], self.final_stack)
+        self.scan_fn = theano.function([self.X, self.transitions],
+                                       self.final_stack)
 
     def _make_params(self):
         # Per-token embeddings.
@@ -221,23 +224,28 @@ class Model1(object):
         buffer = self.embeddings[self.X] # batch_size * seq_length * emb_dim
         buffer_cur_init = T.zeros((batch_size,), dtype="int")
 
-        def step(x_t, stack_t, buffer_cur_t, stack_pushed, stack_merged,
-                 buffer):
+        def step(x_t, transitions_t, stack_t, buffer_cur_t, stack_pushed,
+                 stack_merged, buffer):
             embs_t = self.embeddings[x_t]
 
             # Extract top buffer values.
             buffer_top_t = buffer[T.arange(batch_size), buffer_cur_t]
 
-            # Predict stack actions.
-            predict_inp = T.concatenate(
-                [embs_t, stack_t[:, 0], buffer_top_t], axis=1)
-            actions_t = self._predict_network(
-                predict_inp, self.embedding_dim * 3, 2, self._vs,
-                name="predict_actions")
+            if self._predict_network is not None:
+                # We are predicting our own stack operations.
+                predict_inp = T.concatenate(
+                    [embs_t, stack_t[:, 0], buffer_top_t], axis=1)
+                actions_t = self._predict_network(
+                    predict_inp, self.embedding_dim * 3, 2, self._vs,
+                    name="predict_actions")
 
-            # Use predicted actions to build a mask.
-            mask = actions_t.argmax(axis=1)
-            assert mask.ndim == 1
+            if self.use_predictions:
+                # Use predicted actions to build a mask.
+                mask = actions_t.argmax(axis=1)
+            else:
+                # Use transitions provided from external parser.
+                mask = transitions_t
+                mask = theano.printing.Print("mask")(mask)
 
             # Now update the stack: first precompute merge results.
             merge_items = stack_t[:, :2].reshape((-1, self.embedding_dim * 2))
@@ -253,17 +261,31 @@ class Model1(object):
             # should increment each buffer cursor by 1 - mask
             buffer_cur_next = buffer_cur_t + (1 - mask)
 
-            return stack_next, actions_t, buffer_cur_next
+            if self._predict_network is not None:
+                return stack_next, actions_t, buffer_cur_next
+            else:
+                return stack_next, buffer_cur_next
 
         # Dimshuffle inputs to seq_len * batch_size for scanning
         X = self.X.dimshuffle(1, 0)
+        transitions = self.transitions.dimshuffle(1, 0)
+
+        # If we have a prediction network, we need an extra outputs_info
+        # element (the `None`) to carry along prediction values
+        if self._predict_network is not None:
+            outputs_info = [stack_init, None, buffer_cur_init]
+        else:
+            outputs_info = [stack_init, buffer_cur_init]
 
         scan_ret = theano.scan(
-            step, X, non_sequences=[stack_pushed, stack_merged, buffer],
-            outputs_info=[stack_init, None, buffer_cur_init])[0]
+            step, [X, transitions],
+            non_sequences=[stack_pushed, stack_merged, buffer],
+            outputs_info=outputs_info)[0]
 
         self.final_stack = scan_ret[0][-1]
-        self.actions = scan_ret[1].dimshuffle(1, 0, 2)
+
+        if self._predict_network is not None:
+            self.transitions_pred = scan_ret[1].dimshuffle(1, 0, 2)
 
 
 if __name__ == '__main__':
