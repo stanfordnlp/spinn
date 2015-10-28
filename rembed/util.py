@@ -152,28 +152,37 @@ def RMSprop(cost, params, lr=0.001, rho=0.9, epsilon=1e-6):
 def tokens_to_ids(vocabulary, dataset):
     """Replace strings in original boolean dataset with token IDs."""
 
+    unk_id = vocabulary["*UNK*"]
     for example in dataset:
-        example["op_sequence"] = [(vocabulary[token]
-                                   if token in vocabulary
-                                   else vocabulary["*UNK*"])
+        example["op_sequence"] = [vocabulary.get(token, unk_id)
                                   for token in example["op_sequence"]]
+        example["tokens"] = [vocabulary.get(token, unk_id)
+                             for token in example["tokens"]]
     return dataset
+
+
+def crop_and_pad_example(example, length, key="op_sequence", logger=None):
+    padding_amount = length - len(example[key])
+    if padding_amount < 0:
+        if logger:
+            logger.Log("Cropping len " + str(
+                len(example[key])), level=logger.DEBUG)
+        example[key] = example[
+            key][-padding_amount:]
+    else:
+        example[key] = [0] * \
+            padding_amount + example[key]
+
+    return example
 
 
 def crop_and_pad(dataset, length, logger=None):
     # NOTE: This can probably be done faster in NumPy if it winds up making a
     # difference.
     for example in dataset:
-        padding_amount = length - len(example["op_sequence"])
-        if padding_amount < 0:
-            if logger:
-                logger.Log("Cropping len " + str(
-                    len(example["op_sequence"])), level=logger.DEBUG)
-            example["op_sequence"] = example[
-                "op_sequence"][-padding_amount:]
-        else:
-            example["op_sequence"] = [0] * \
-                padding_amount + example["op_sequence"]
+        for key in ["op_sequence", "tokens", "transitions"]:
+            crop_and_pad_example(example, length, key=key, logger=logger)
+
     return dataset
 
 

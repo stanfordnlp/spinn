@@ -245,7 +245,6 @@ class Model1(object):
             else:
                 # Use transitions provided from external parser.
                 mask = transitions_t
-                mask = theano.printing.Print("mask")(mask)
 
             # Now update the stack: first precompute merge results.
             merge_items = stack_t[:, :2].reshape((-1, self.embedding_dim * 2))

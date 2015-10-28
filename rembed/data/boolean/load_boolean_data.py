@@ -20,6 +20,7 @@ from rembed import util
 
 REDUCE_OP = '*MERGE*'
 PADDING_TOKEN = "*PADDING*"
+UNK_TOKEN = "*UNK*"
 
 NUM_CLASSES = 2
 
@@ -35,22 +36,21 @@ def convert_binary_bracketed_data(filename):
             example["sentence"] = tab_split[1]
             example["op_sequence"] = []
 
+            example["tokens"] = []
+            example["transitions"] = []
+
             for word in example["sentence"].split(' '):
                 if word == ')':
                     example["op_sequence"].append(REDUCE_OP)
                 elif word != '(':
                     example["op_sequence"].append(word)
+
+                if word != "(":
+                    example["tokens"].append(word)
+                    example["transitions"].append(1 if word == ")" else 0)
+
             examples.append(example)
     return examples
-
-
-def separate_op_sequence(op_sequence, reduce_id=1):
-    tokens, transitions = [], []
-    for op in op_sequence:
-        tokens.append(op)
-        transitions.append(1 if op == ")" else 0)
-
-    return tokens, transitions
 
 
 def load_data(path, vocabulary=None, seq_length=None, batch_size=32,
@@ -62,23 +62,18 @@ def load_data(path, vocabulary=None, seq_length=None, batch_size=32,
         # TODO(SB): Use a fixed vocab file in case this takes especially long, or we want
         # to include vocab items that don't appear in the training data.
         vocabulary = {REDUCE_OP: -1,
-                      PADDING_TOKEN: 0}
+                      PADDING_TOKEN: 0,
+                      UNK_TOKEN: 1}
         types = set(itertools.chain.from_iterable([example["op_sequence"]
                                                    for example in dataset]))
         types.remove(REDUCE_OP)
-        vocabulary.update({type: i + 1 for i, type in enumerate(types)})
+        vocabulary.update({type: i + 2 for i, type in enumerate(types)})
 
     # Convert token sequences to integer sequences
     dataset = util.tokens_to_ids(vocabulary, dataset)
     dataset = util.crop_and_pad(dataset, seq_length, logger=logger)
 
     if separate_transitions:
-        # Separate op-sequence into tokens and transitions, post-hoc.
-        for example in dataset:
-            tokens, transitions = separate_op_sequence(example["op_sequence"])
-            example["tokens"], example["transitions"] = tokens, transitions
-            del example["op_sequence"]
-
         X = np.array([example["tokens"] for example in dataset],
                      dtype=np.int32)
         transitions = np.array([example["transitions"] for example in dataset],
