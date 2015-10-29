@@ -25,7 +25,7 @@ SWEEP_PARAMETERS = {
     "learning_rate":      (EXP, 0.001, 0.04),
     "momentum":    		  (LIN, 0., 0.999),
     "clipping_max_norm":  (EXP, 0.5, 50.0),
-    "l2_lambda":   		  (EXP, 1e-7, 1e-3),
+    "l2_lambda":   		  (EXP, 1e-7, 1e-4),
     "init_range":         (EXP, 0.01, 0.2),
     "num_composition_layers": (LIN, 1, 3)
 }

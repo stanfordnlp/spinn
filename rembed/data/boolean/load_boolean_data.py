@@ -5,13 +5,6 @@
 #
 # Example:
 # sentence_label	( ( word word ) ( ( word word ) word ) )
-#
-# The loaded data is a dictionary with fields:
-#   sentence: The raw input following the tab, i.e., the parse.
-#   label: The raw label string.
-#   op_sequence: An operation sequence for the shift reduce parser. Shifts are represented
-#      by raw word tokens to be shifted, and reductions are marked by a special REDUCE_OP
-#      token.
 import itertools
 import numpy as np
 
@@ -34,8 +27,6 @@ def convert_binary_bracketed_data(filename):
             tab_split = line.split('\t')
             example["label"] = tab_split[0]
             example["sentence"] = tab_split[1]
-            example["op_sequence"] = []
-
             example["tokens"] = []
             example["transitions"] = []
 
@@ -45,6 +36,7 @@ def convert_binary_bracketed_data(filename):
                     example["transitions"].append(1 if word == ")" else 0)
 
             examples.append(example)
+            print example
     return examples
 
 
