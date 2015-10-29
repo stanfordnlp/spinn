@@ -18,15 +18,15 @@ DEV_PORTION = 0.01
 
 def get_value_for_tree(tree):
     if isinstance(tree, tuple):
-        if tree[0] == 'not':
-            child = get_value_for_tree(tree[1])
+        if tree[1] == 'not':
+            child = get_value_for_tree(tree[0])
             return not child
         else:
             left = get_value_for_tree(tree[0])
-            right = get_value_for_tree(tree[2])
-            if tree[1] == "and":
+            right = get_value_for_tree(tree[1])
+            if tree[2] == "and":
                 return left and right
-            elif tree[1] == "or":
+            elif tree[2] == "or":
                 return left or right
             else:
                 print 'syntax error', tree
@@ -37,10 +37,10 @@ def get_value_for_tree(tree):
 def expand(statements):
     result = copy.copy(statements)
     for statement in statements:
-        result.append(('not', statement))
+        result.append((statement, 'not'))
         for inner_statement in statements:
-            result.append((statement, 'and', inner_statement))
-            result.append((statement, 'or', inner_statement))
+            result.append((statement, inner_statement, 'and'))
+            result.append((statement, inner_statement, 'or'))
     return result
 
 
@@ -96,21 +96,21 @@ if __name__ == "__main__":
     outputs = uniq(outputs)
     random.shuffle(outputs)
 
-    filename = 'bl_train.tsv'
+    filename = 'pbl_train.tsv'
     f = open(filename, 'w')
     for i in range(int(TRAIN_PORTION * len(outputs))):
         output = outputs[i]
         f.write(output + "\n")
     f.close()
 
-    filename = 'bl_dev.tsv'
+    filename = 'pbl_dev.tsv'
     f = open(filename, 'w')
     for i in range(int(TRAIN_PORTION * len(outputs)), int((TRAIN_PORTION + DEV_PORTION) * len(outputs))):
         output = outputs[i]
         f.write(output + "\n")
     f.close()
 
-    filename = 'bl_test.tsv'
+    filename = 'pbl_test.tsv'
     f = open(filename, 'w')
     for i in range(int((TRAIN_PORTION + DEV_PORTION) * len(outputs)), len(outputs)):
         output = outputs[i]
