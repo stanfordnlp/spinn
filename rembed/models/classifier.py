@@ -110,8 +110,7 @@ def train():
     total_cost = xent_cost + l2_cost
 
     # Set up optimization.
-    new_values = util.momentum(total_cost, vs.vars.values(), lr,
-                               FLAGS.momentum)
+    new_values = util.RMSprop(total_cost, vs.vars.values(), lr)
     update_fn = theano.function(
         [X, transitions, y, lr], [total_cost, xent_cost, l2_cost, acc],
         updates=new_values)
@@ -159,7 +158,7 @@ if __name__ == '__main__':
     # Optimization settings.
     gflags.DEFINE_integer("training_steps", 100000, "")
     gflags.DEFINE_integer("batch_size", 32, "")
-    gflags.DEFINE_float("learning_rate", 0.01, "")
+    gflags.DEFINE_float("learning_rate", 0.001, "")
     gflags.DEFINE_float("momentum", 0.9, "")
     gflags.DEFINE_float("clipping_max_norm", 1.0, "")
     gflags.DEFINE_float("l2_lambda", 1e-5, "")

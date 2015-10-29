@@ -36,7 +36,6 @@ def convert_binary_bracketed_data(filename):
                     example["transitions"].append(1 if word == ")" else 0)
 
             examples.append(example)
-            print example
     return examples
 
 
