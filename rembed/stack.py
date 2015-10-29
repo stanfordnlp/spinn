@@ -45,10 +45,24 @@ def update_hard_stack(stack_t, stack_pushed, stack_merged, push_value,
 
 class HardStack(object):
 
-    def __init__(
-        self, embedding_dim, vocab_size, seq_length, compose_network, vs,
-        linear_memory_dim=None, X=None, transitions=None):
-        """Construct a HardStack.
+    """
+    Model 0/1/2 hard stack implementation.
+
+    This model scans a sequence using a hard stack. It optionally predicts
+    stack operations using an MLP, and can receive supervision on these
+    predictions from some external parser which acts as the "ground truth"
+    parser.
+
+    Model 0: predict_network=None, use_predictions=False
+    Model 1: predict_network=something, use_predictions=False
+    Model 2: predict_network=something, use_predictions=True
+    """
+
+    def __init__(self, embedding_dim, vocab_size, seq_length, compose_network,
+                 vs, predict_network=None, use_predictions=False, X=None,
+                 transitions=None):
+        """
+        Construct a HardStack.
 
         Args:
             embedding_dim: Dimensionality of token embeddings and stack values
@@ -61,11 +75,11 @@ class HardStack(object):
               returns a transformed Theano batch of dimension
               `batch_size * outp_dim`.
             vs: VariableStore instance for parameter storage
-            linear_memory_dim: Integer or `None`. If not `None`, maintain an
-              LSTM memory while scanning input sequences (a "linear" memory as
-              opposed to the main stack-based memory). When linear memory
-              is active, this instance will have a batch `final_memory`
-              of dimension `batch_size * linear_memory_dim`.
+            predict_network: Blocks-like function which maps values
+              `3 * embedding_dim` to `action_dim`
+            use_predictions: If `True`, use the predictions from the model
+              (rather than the ground-truth `transitions`) to perform stack
+              operations
             X: Theano batch describing input matrix, or `None` (in which case
               this instance will make its own batch variable).
             transitions: Theano batch describing transition matrix, or `None`
@@ -73,123 +87,11 @@ class HardStack(object):
         """
 
         self.embedding_dim = embedding_dim
-        self.linear_memory_dim = linear_memory_dim
         self.vocab_size = vocab_size
         self.seq_length = seq_length
 
         self._compose_network = compose_network
-        self._vs = vs
-
-        self.X = X
-        self.transitions = transitions
-
-        self._make_params()
-        self._make_inputs()
-        self._make_scan()
-
-        self.scan_fn = theano.function([self.X, self.transitions],
-                                       self.final_stack)
-
-    def _make_params(self):
-        # Per-token embeddings
-        self.embeddings = self._vs.add_param(
-            "embeddings", (self.vocab_size, self.embedding_dim))
-
-    def _make_inputs(self):
-        self.X = self.X or T.imatrix("X")
-        self.transitions = self.transitions or T.imatrix("transitions")
-
-    def _make_scan(self):
-        """Build the sequential composition / scan graph."""
-
-        batch_size = self.X.shape[0]
-        max_stack_size = self.X.shape[1]
-
-        # Stack batch is a 3D tensor.
-        stack_shape = (batch_size, max_stack_size, self.embedding_dim)
-        stack_init = T.zeros(stack_shape)
-
-        # Allocate two helper stack copies (passed as non_seqs into scan.)
-        stack_pushed = T.zeros(stack_shape)
-        stack_merged = T.zeros(stack_shape)
-
-        # Allocate linear memory.
-        use_linear_memory = self.linear_memory_dim is not None
-        linear_memory_init = T.zeros(
-            (batch_size, (self.linear_memory_dim or 0) * 2))
-
-        # TODO
-        # Precompute embedding lookups.
-        # embedding_lookups = self.embeddings[self.X]
-        # print embedding_lookups.ndim
-
-        def step(x_t, transitions_t, stack_t, linear_memory, stack_pushed,
-                 stack_merged):
-            # NB: x_t may contain sentinel -1 values. Luckily -1 is a
-            # valid index, and the below lookup doesn't fail. In any
-            # case, where x_t we won't use the resultant embedding
-            # anyway!
-            embs_t = self.embeddings[x_t]
-
-            mask = transitions_t
-
-            # If we are carrying along a linear memory, update that first.
-            if use_linear_memory:
-                next_linear_memory = util.LSTM(
-                    linear_memory, embs_t, self.embedding_dim,
-                    self.linear_memory_dim, self._vs, name="linear_memory")
-                # Only update memories for examples which are not merging
-                mask_mem = mask.dimshuffle(0, "x")
-                linear_memory = (mask_mem * linear_memory
-                                 + (1 - mask_mem) * next_linear_memory)
-
-            # Precompute all merge values.
-            merge_items = stack_t[:, :2].reshape((-1, self.embedding_dim * 2))
-            merge_value = self._compose_network(
-                merge_items, self.embedding_dim * 2, self.embedding_dim,
-                self._vs, name="compose")
-
-            # Update helper stack values.
-            stack_next = update_hard_stack(
-                stack_t, stack_pushed, stack_merged, embs_t, merge_value, mask)
-
-            return stack_next, linear_memory
-
-        # Dimshuffle inputs to seq_len * batch_size for scanning
-        X = self.X.dimshuffle(1, 0)
-        transitions = self.transitions.dimshuffle(1, 0)
-
-        scan_ret = theano.scan(
-            step, [X, transitions],
-            non_sequences=[stack_pushed, stack_merged],
-            outputs_info=[stack_init, linear_memory_init])[0]
-
-        if use_linear_memory:
-            self.final_stack = scan_ret[0][-1]
-            self.final_linear = scan_ret[1][-1][:, :self.linear_memory_dim]
-        else:
-            self.final_stack = scan_ret[0][-1]
-            self.final_linear = None
-
-
-class Model1(object):
-
-    """Model 1 stack implementation.
-
-    Model 1 scans a sequence using a hard stack. It predicts stack operations
-    using an MLP, and receives supervision on these predictions from some
-    external parser which acts as the "ground truth" parser.
-    """
-
-    def __init__(self, embedding_dim, vocab_size, seq_length, compose_network,
-                 vs, predict_network=None, use_predictions=False, X=None,
-                 transitions=None):
-        self.embedding_dim = embedding_dim
-        self.vocab_size = vocab_size
-        self.seq_length = seq_length
-
-        self._compose_network = compose_network
-        self._predict_network = predict_network or util.Linear
+        self._predict_network = predict_network
         self.use_predictions = use_predictions
 
         self._vs = vs
@@ -229,6 +131,9 @@ class Model1(object):
         # Allocate a "buffer" stack and maintain a cursor in this buffer.
         buffer = self.embeddings[self.X] # batch_size * seq_length * emb_dim
         buffer_cur_init = T.zeros((batch_size,), dtype="int")
+
+        # TODO(jgauthier): Implement linear memory (was in previous HardStack;
+        # dropped it during a refactor)
 
         def step(x_t, transitions_t, stack_t, buffer_cur_t, stack_pushed,
                  stack_merged, buffer):
@@ -289,15 +194,30 @@ class Model1(object):
 
         self.final_stack = scan_ret[0][-1]
 
+        self.transitions_pred = None
         if self._predict_network is not None:
             self.transitions_pred = scan_ret[1].dimshuffle(1, 0, 2)
 
 
-if __name__ == '__main__':
-    embedding_dim = 10
-    vocab_size = 5
-    seq_length = 5
+class Model0(HardStack):
 
-    X = T.imatrix("X")
-    stack = HardStack(embedding_dim, vocab_size, seq_length,
-                      util.VariableStore(), X=X)
+    def __init__(self, *args, **kwargs):
+        kwargs["predict_network"] = None
+        kwargs["use_predictions"] = False
+        super(Model0, self).__init__(*args, **kwargs)
+
+
+class Model1(HardStack):
+
+    def __init__(self, *args, **kwargs):
+        kwargs["predict_network"] = kwargs.get("predict_network", util.Linear)
+        kwargs["use_predictions"] = False
+        super(Model1, self).__init__(*args, **kwargs)
+
+
+class Model2(HardStack):
+
+    def __init__(self, *args, **kwargs):
+        kwargs["predict_network"] = kwargs.get("predict_network", util.Linear)
+        kwargs["use_predictions"] = True
+        super(Model2, self).__init__(*args, **kwargs)

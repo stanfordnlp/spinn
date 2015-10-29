@@ -32,7 +32,8 @@ def convert_binary_bracketed_data(filename):
 
             for word in example["sentence"].split(' '):
                 if word != "(":
-                    example["tokens"].append(word)
+                    if word != ")":
+                        example["tokens"].append(word)
                     example["transitions"].append(1 if word == ")" else 0)
 
             examples.append(example)
