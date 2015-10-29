@@ -29,10 +29,9 @@ FLAGS = gflags.FLAGS
 
 
 def build_model(vocab_size, seq_length, tokens, transitions, num_classes, vs):
-    # Prepare MLP which performs stack element composition.
-    compose_network = partial(
-        util.MLP,
-        hidden_dims=[FLAGS.embedding_dim] * (FLAGS.num_composition_layers - 1))
+    # Prepare layer which performs stack element composition.
+    compose_network = partial(util.ReLULayer,
+                              initializer=util.DoubleIdentityInitializer(FLAGS.init_range))
 
     # Build hard stack which scans over input sequence.
     stack = HardStack(
@@ -153,7 +152,7 @@ if __name__ == '__main__':
 
     # Model architecture settings.
     gflags.DEFINE_integer("embedding_dim", 5, "")
-    gflags.DEFINE_integer("num_composition_layers", 1, "")
+    # gflags.DEFINE_integer("num_composition_layers", 1, "")
 
     # Optimization settings.
     gflags.DEFINE_integer("training_steps", 100000, "")
@@ -162,7 +161,7 @@ if __name__ == '__main__':
     gflags.DEFINE_float("momentum", 0.9, "")
     gflags.DEFINE_float("clipping_max_norm", 1.0, "")
     gflags.DEFINE_float("l2_lambda", 1e-5, "")
-    gflags.DEFINE_float("init_range", 0.1, "")
+    gflags.DEFINE_float("init_range", 0.01, "")
 
     # Display settings.
     gflags.DEFINE_integer("statistics_interval_steps", 50, "")

@@ -18,6 +18,15 @@ def ZeroInitializer():
     return lambda shape: np.zeros(shape)
 
 
+def DoubleIdentityInitializer(range):
+    def init(shape):
+        half_d = shape[0] / 2
+        double_identity = np.concatenate((
+            np.identity(half_d), np.identity(half_d)))
+        return double_identity + UniformInitializer(range)(shape)
+    return init
+
+
 class VariableStore(object):
 
     def __init__(self, prefix="vs", default_initializer=UniformInitializer(0.1), logger=None):
@@ -40,16 +49,17 @@ class VariableStore(object):
         return self.vars[name]
 
 
-def ReLULayer(inp, inp_dim, outp_dim, vs, name="relu_layer", use_bias=True):
-    pre_nl = Linear(inp, inp_dim, outp_dim, vs, name, use_bias)
+def ReLULayer(inp, inp_dim, outp_dim, vs, name="relu_layer", use_bias=True, initializer=None):
+    pre_nl = Linear(inp, inp_dim, outp_dim, vs, name, use_bias, initializer)
     # ReLU isn't present in this version of Theano.
     outp = T.maximum(pre_nl, 0)
 
     return outp
 
 
-def Linear(inp, inp_dim, outp_dim, vs, name="linear_layer", use_bias=True):
-    W = vs.add_param("%s_W" % name, (inp_dim, outp_dim))
+def Linear(inp, inp_dim, outp_dim, vs, name="linear_layer", use_bias=True, initializer=None):
+    W = vs.add_param("%s_W" %
+                     name, (inp_dim, outp_dim), initializer=initializer)
     outp = inp.dot(W)
 
     if use_bias:
