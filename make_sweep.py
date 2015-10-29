@@ -23,7 +23,6 @@ SWEEP_PARAMETERS = {
     "seq_length":    	  (LIN, 160, 160),
     "embedding_dim":  	  (EXP, 10, 100),
     "learning_rate":      (EXP, 0.0001, 0.001),
-    "momentum":    		  (LIN, 0., 0.999),
     "clipping_max_norm":  (EXP, 0.5, 50.0),
     "l2_lambda":   		  (EXP, 1e-7, 1e-4),
     "init_range":         (EXP, 0.001, 0.2)
