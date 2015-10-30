@@ -169,7 +169,7 @@ def tokens_to_ids(vocabulary, dataset):
     return dataset
 
 
-def crop_and_pad_example(example, length, key="op_sequence", logger=None):
+def crop_and_pad_example(example, length, key="tokens", logger=None):
     padding_amount = length - len(example[key])
     if padding_amount < 0:
         if logger:
