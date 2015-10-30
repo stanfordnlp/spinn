@@ -135,10 +135,8 @@ class HardStack(object):
         # TODO(jgauthier): Implement linear memory (was in previous HardStack;
         # dropped it during a refactor)
 
-        def step(x_t, transitions_t, stack_t, buffer_cur_t, stack_pushed,
+        def step(transitions_t, stack_t, buffer_cur_t, stack_pushed,
                  stack_merged, buffer):
-            embs_t = self.embeddings[x_t]
-
             # Extract top buffer values.
             buffer_top_t = buffer[T.arange(batch_size), buffer_cur_t]
 
@@ -165,7 +163,8 @@ class HardStack(object):
 
             # Compute new stack value.
             stack_next = update_hard_stack(
-                stack_t, stack_pushed, stack_merged, embs_t, merge_value, mask)
+                stack_t, stack_pushed, stack_merged, buffer_top_t,
+                merge_value, mask)
 
             # Move buffer cursor as necessary. Since mask == 1 when merge, we
             # should increment each buffer cursor by 1 - mask
@@ -177,7 +176,6 @@ class HardStack(object):
                 return stack_next, buffer_cur_next
 
         # Dimshuffle inputs to seq_len * batch_size for scanning
-        X = self.X.dimshuffle(1, 0)
         transitions = self.transitions.dimshuffle(1, 0)
 
         # If we have a prediction network, we need an extra outputs_info
@@ -188,7 +186,7 @@ class HardStack(object):
             outputs_info = [stack_init, buffer_cur_init]
 
         scan_ret = theano.scan(
-            step, [X, transitions],
+            step, transitions,
             non_sequences=[stack_pushed, stack_merged, buffer],
             outputs_info=outputs_info)[0]
 
