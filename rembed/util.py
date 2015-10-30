@@ -178,8 +178,7 @@ def crop_and_pad_example(example, length, key="tokens", logger=None):
         example[key] = example[
             key][-padding_amount:]
     else:
-        example[key] = [0] * \
-            padding_amount + example[key]
+        example[key] = example[key] + ([0] * padding_amount)
 
     return example
 
