@@ -129,7 +129,7 @@ class HardStack(object):
         stack_merged = T.zeros(stack_shape)
 
         # Allocate a "buffer" stack and maintain a cursor in this buffer.
-        buffer = self.embeddings[self.X]  # batch_size * seq_length * emb_dim
+        buffer_t = self.embeddings[self.X]  # batch_size * seq_length * emb_dim
         buffer_cur_init = T.zeros((batch_size,), dtype="int")
 
         # TODO(jgauthier): Implement linear memory (was in previous HardStack;
@@ -138,7 +138,7 @@ class HardStack(object):
         def step(transitions_t, stack_t, buffer_cur_t, stack_pushed,
                  stack_merged, buffer):
             # Extract top buffer values.
-            buffer_top_t = buffer[T.arange(batch_size), buffer_cur_t]
+            buffer_top_t = buffer_t[T.arange(batch_size), buffer_cur_t]
 
             if self._predict_network is not None:
                 # We are predicting our own stack operations.
@@ -187,7 +187,7 @@ class HardStack(object):
 
         scan_ret = theano.scan(
             step, transitions,
-            non_sequences=[stack_pushed, stack_merged, buffer],
+            non_sequences=[stack_pushed, stack_merged, buffer_t],
             outputs_info=outputs_info)[0]
 
         self.final_stack = scan_ret[0][-1]

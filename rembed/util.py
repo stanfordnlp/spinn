@@ -169,16 +169,23 @@ def tokens_to_ids(vocabulary, dataset):
     return dataset
 
 
-def crop_and_pad_example(example, length, key="tokens", logger=None):
+def crop_and_pad_example(example, length, key="tokens", logger=None, pad_left=True):
     padding_amount = length - len(example[key])
     if padding_amount < 0:
         if logger:
             logger.Log("Cropping len " + str(
-                len(example[key])), level=logger.DEBUG)
-        example[key] = example[
-            key][-padding_amount:]
+                len(example[key])), level=logger.INFO)
+        if pad_left:
+            example[key] = example[
+                key][-padding_amount:]
+        else:
+            example[key] = example[
+                key][0:length]
     else:
-        example[key] = example[key] + ([0] * padding_amount)
+        if pad_left:
+            example[key] = ([0] * padding_amount) + example[key]
+        else:
+            example[key] = example[key] + ([0] * padding_amount)
 
     return example
 
@@ -192,9 +199,13 @@ def crop_and_pad(dataset, length, logger=None):
     # each merge operation), we need to calculate the proper truncated length
     # of tokens -- it is not the same as the length of transitions.
     for example in dataset:
-        for key in ["tokens", "transitions"]:
-            crop_and_pad_example(example, length, key=key, logger=logger)
-
+        print example
+        crop_and_pad_example(
+            example, length, key="tokens", logger=logger, pad_left=False)
+        crop_and_pad_example(
+            example, length, key="transitions", logger=logger, pad_left=False)
+        print "C:"
+        print example
     return dataset
 
 

@@ -52,7 +52,9 @@ def build_hard_stack(cls, vocab_size, seq_length, tokens, transitions,
         compose_network, vs, X=tokens, transitions=transitions)
 
     # Extract top element of final stack timestep.
-    embeddings = stack.final_stack[:, 0].reshape((-1, FLAGS.embedding_dim))
+    final_stack = stack.final_stack
+    stack_top = final_stack[:, 0]
+    embeddings = stack_top.reshape((-1, FLAGS.embedding_dim))
 
     # Feed forward through a single output layer
     logits = util.Linear(
@@ -154,10 +156,12 @@ def train():
         if "embedding" not in var:
             l2_cost += FLAGS.l2_lambda * T.sum(T.sqr(vs.vars[var]))
 
-    action_cost = T.constant(0.0)
     if actions is not None:
         # Compute cross-entropy cost on action predictions.
         action_cost, action_acc = build_action_cost(actions, transitions)
+    else:
+        action_cost = T.constant(0.0)
+        action_acc = T.constant(0.0)
 
     # TODO(jongauthier): Add hyperparameter for trading off action cost vs xent
     # cost
