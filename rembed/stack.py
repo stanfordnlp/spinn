@@ -129,7 +129,7 @@ class HardStack(object):
         stack_merged = T.zeros(stack_shape)
 
         # Allocate a "buffer" stack and maintain a cursor in this buffer.
-        buffer = self.embeddings[self.X] # batch_size * seq_length * emb_dim
+        buffer = self.embeddings[self.X]  # batch_size * seq_length * emb_dim
         buffer_cur_init = T.zeros((batch_size,), dtype="int")
 
         # TODO(jgauthier): Implement linear memory (was in previous HardStack;
@@ -143,7 +143,7 @@ class HardStack(object):
             if self._predict_network is not None:
                 # We are predicting our own stack operations.
                 predict_inp = T.concatenate(
-                    [embs_t, stack_t[:, 0], buffer_top_t], axis=1)
+                    [stack_t[:, 0], stack_t[:, 1], buffer_top_t], axis=1)
                 actions_t = self._predict_network(
                     predict_inp, self.embedding_dim * 3, 2, self._vs,
                     name="predict_actions")
