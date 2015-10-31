@@ -169,43 +169,31 @@ def tokens_to_ids(vocabulary, dataset):
     return dataset
 
 
-def crop_and_pad_example(example, length, key="tokens", logger=None, pad_left=True):
-    padding_amount = length - len(example[key])
-    if padding_amount < 0:
+def crop_and_pad_example(example, left_padding, target_length, key, logger=None):
+    if left_padding < 0:
         if logger:
             logger.Log("Cropping len " + str(
                 len(example[key])), level=logger.INFO)
-        if pad_left:
-            example[key] = example[
-                key][-padding_amount:]
-        else:
-            example[key] = example[
-                key][0:length]
-    else:
-        if pad_left:
-            example[key] = ([0] * padding_amount) + example[key]
-        else:
-            example[key] = example[key] + ([0] * padding_amount)
-
-    return example
+        # Crop, then pad normally.
+        example[key] = example[key][-left_padding:]
+        left_padding = 0
+    right_padding = target_length - (left_padding + len(example[key]))
+    example[key] = ([0] * left_padding) + \
+        example[key] + ([0] * right_padding)
 
 
 def crop_and_pad(dataset, length, logger=None):
     # NOTE: This can probably be done faster in NumPy if it winds up making a
     # difference.
-    #
-    # TODO(jgauthier): The specified length should apply to "transitions." For
-    # datasets which are not `boolean` (i.e., where there is not a token for
-    # each merge operation), we need to calculate the proper truncated length
-    # of tokens -- it is not the same as the length of transitions.
+    # Always make sure that the transitions are aligned at the left edge, so
+    # the final stack top is the root of the tree. If cropping is used, it should
+    # just introduce empty nodes into the tree.
     for example in dataset:
-        print example
+        left_padding = length - len(example["transitions"])
         crop_and_pad_example(
-            example, length, key="tokens", logger=logger, pad_left=False)
+            example, left_padding, length, "transitions", logger=logger)
         crop_and_pad_example(
-            example, length, key="transitions", logger=logger, pad_left=False)
-        print "C:"
-        print example
+            example, left_padding, length, "tokens", logger=logger)
     return dataset
 
 
