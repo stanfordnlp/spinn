@@ -217,10 +217,8 @@ if __name__ == '__main__':
     gflags.DEFINE_integer("seq_length", 29, "")
 
     # Model architecture settings.
-    # TODO(JG): What is the significance of leaving in both HardStack and the
-    # models identifiers? Should HardStack just trigger Model0?
     gflags.DEFINE_enum("model_type", "Model0",
-                       ["HardStack", "Model0", "Model1", "Model2"],
+                       ["Model0", "Model1", "Model2"],
                        "")
     gflags.DEFINE_integer("embedding_dim", 5, "")
     # gflags.DEFINE_integer("num_composition_layers", 1, "")
