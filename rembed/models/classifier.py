@@ -1,8 +1,8 @@
 """From the project root directory (containing data files), this can be run with:
 
 Boolean logic evaluation:
-python -m rembed.models.classifier --training_data_path bl-data/bl_train.tsv \
-       --eval_data_path bl-data/bl_dev.tsv
+python -m rembed.models.classifier --training_data_path bl-data/pbl_train.tsv \
+       --eval_data_path bl-data/pbl_dev.tsv
 
 SST sentiment:
 python -m rembed.models.classifier --data_type sst --embedding_dim 25 --training_data_path sst-data/train.txt \
@@ -133,8 +133,9 @@ def train():
     vs = util.VariableStore(
         default_initializer=util.UniformInitializer(FLAGS.init_range), logger=logger)
     model_cls = getattr(rembed.stack, FLAGS.model_type)
-    actions, logits = build_hard_stack(model_cls, len(vocabulary), FLAGS.seq_length,
-                                       X, transitions, data_manager.NUM_CLASSES, vs)
+    actions, logits = build_hard_stack(
+        model_cls, len(vocabulary), FLAGS.seq_length,
+        X, transitions, data_manager.NUM_CLASSES, vs)
 
     xent_cost, acc = build_cost(logits, y)
 
