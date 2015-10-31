@@ -201,6 +201,8 @@ if __name__ == '__main__':
     gflags.DEFINE_integer("seq_length", 29, "")
 
     # Model architecture settings.
+    # TODO(JG): What is the significance of leaving in both HardStack and the
+    # models identifiers? Should HardStack just trigger Model0?
     gflags.DEFINE_enum("model_type", "HardStack",
                        ["HardStack", "Model0", "Model1", "Model2"],
                        "")
