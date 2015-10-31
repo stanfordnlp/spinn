@@ -79,24 +79,32 @@ def build_cost(logits, targets):
     return cost, acc
 
 
-def build_action_cost(actions, targets):
+def build_action_cost(logits, targets):
     """
     Build a parse action prediction cost function.
     """
 
     # swap seq_length dimension to front so that we can scan per timestep
-    actions = T.swapaxes(actions, 0, 1)
+    logits = T.swapaxes(logits, 0, 1)
     targets = targets.T
 
-    def cost_t(pred, tgt):
+    def cost_t(logits, tgt):
         # TODO(jongauthier): Taper down xent cost as we proceed through
         # sequence?
-        pred = T.nnet.softmax(pred)
-        return T.nnet.categorical_crossentropy(pred, tgt)
-    cost = theano.scan(cost_t, [actions, targets])[0]
+        predicted_dist = T.nnet.softmax(logits)
+        cost = T.nnet.categorical_crossentropy(predicted_dist, tgt)
+
+        pred = T.argmax(logits, axis=1)
+        error = T.neq(pred, tgt)
+        return cost, error
+
+    results, _ = theano.scan(cost_t, [logits, targets])
+    costs, errors = results
 
     # Take mean over both example- and timestep-dimensions
-    return cost.mean()
+    cost = T.mean(costs)
+    acc = 1 - T.mean(errors)
+    return cost, acc
 
 
 def train():
@@ -149,7 +157,7 @@ def train():
     action_cost = T.constant(0.0)
     if actions is not None:
         # Compute cross-entropy cost on action predictions.
-        action_cost = build_action_cost(actions, transitions)
+        action_cost, action_acc = build_action_cost(actions, transitions)
 
     # TODO(jongauthier): Add hyperparameter for trading off action cost vs xent
     # cost
@@ -159,34 +167,38 @@ def train():
     new_values = util.RMSprop(total_cost, vs.vars.values(), lr)
     update_fn = theano.function(
         [X, transitions, y, lr],
-        [total_cost, xent_cost, action_cost, l2_cost, acc],
+        [total_cost, xent_cost, action_cost, action_acc, l2_cost, acc],
         updates=new_values)
-    eval_fn = theano.function([X, transitions, y], acc)
+    eval_fn = theano.function([X, transitions, y], [acc, action_acc])
 
     # Main training loop.
     for step in range(FLAGS.training_steps):
         X_batch, transitions_batch, y_batch = training_data_iter.next()
         ret = update_fn(X_batch, transitions_batch, y_batch,
                         FLAGS.learning_rate)
-        total_cost_val, xent_cost_val, action_cost_val, l2_cost_val, acc = ret
+        total_cost_val, xent_cost_val, action_cost_val, action_acc_val, l2_cost_val, acc_val = ret
 
         if step % FLAGS.statistics_interval_steps == 0:
             logger.Log(
-                "Step: %i\tAcc: %f\tCost: %5f %5f %5f %5f"
-                % (step, acc, total_cost_val, xent_cost_val, action_cost_val,
+                "Step: %i\tAcc: %f\t%f\tCost: %5f %5f %5f %5f"
+                % (step, acc_val, action_acc_val, total_cost_val, xent_cost_val, action_cost_val,
                    l2_cost_val))
 
         if step % FLAGS.eval_interval_steps == 0:
             for eval_set in eval_sets:
                 # Evaluate
                 acc_accum = 0.0
+                action_acc_accum = 0.0
                 eval_batches = 0.0
                 for (eval_X_batch, eval_transitions_batch, eval_y_batch) in eval_set[1]:
-                    acc_accum += eval_fn(eval_X_batch, eval_transitions_batch,
-                                         eval_y_batch)
+                    acc_value, action_acc_value = eval_fn(
+                        eval_X_batch, eval_transitions_batch,
+                        eval_y_batch)
+                    acc_accum += acc_value
+                    action_acc_accum += action_acc_value
                     eval_batches += 1.0
-                logger.Log("Step: %i\tEval acc: %f\t%s" %
-                          (step, acc_accum / eval_batches, eval_set[0]))
+                logger.Log("Step: %i\tEval acc: %f\t %f\t%s" %
+                          (step, acc_accum / eval_batches, action_acc_accum / eval_batches, eval_set[0]))
 
 if __name__ == '__main__':
     # Experiment naming.
