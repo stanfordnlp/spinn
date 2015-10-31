@@ -36,7 +36,6 @@ def convert_binary_bracketed_data(filename):
                 if word[0] != "(":
                     example["tokens"].append(word)
                     example["transitions"].append(1 if word == ")" else 0)
-            print example
             examples.append(example)
     return examples
 
@@ -63,7 +62,6 @@ def load_data(path, vocabulary=None, seq_length=None, batch_size=32, eval_mode=F
                            dtype=np.int32)
     y = np.array([int(example["label"]) for example in dataset],
                  dtype=np.int32)
-    print y
 
     if logger:
         logger.Log("Loaded %i examples to sequences of length %i" %
