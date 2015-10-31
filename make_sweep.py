@@ -22,8 +22,8 @@ queue = "nlp"
 SWEEP_PARAMETERS = {
     "seq_length":    	  (LIN, 160, 160),
     "embedding_dim":  	  (EXP, 10, 100),
-    "learning_rate":      (EXP, 0.0001, 0.001),
-    "clipping_max_norm":  (EXP, 0.5, 50.0),
+    "learning_rate":      (EXP, 0.0001, 0.01),
+    "clipping_max_norm":  (EXP, 0.1, 50.0),
     "l2_lambda":   		  (EXP, 1e-7, 1e-4),
     "init_range":         (EXP, 0.001, 0.2)
 }
@@ -31,9 +31,10 @@ SWEEP_PARAMETERS = {
 # Non-tunable flags that must be passed in.
 FIXED_PARAMETERS = {
     "data_type":     "sst",
+    "model_type":     "Model0,
     "training_data_path":    "sst-data/train_expanded.txt",
     "eval_data_path":    "sst-data/dev.txt",
-    "seq_length":	"160"
+    "seq_length":	"100"
 }
 
 # - #

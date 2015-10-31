@@ -171,10 +171,9 @@ def tokens_to_ids(vocabulary, dataset):
 
 def crop_and_pad_example(example, left_padding, target_length, key, logger=None):
     if left_padding < 0:
-        if logger:
-            logger.Log("Cropping len " + str(
-                len(example[key])), level=logger.INFO)
         # Crop, then pad normally.
+        # TODO: Track how many sentences are cropped, but don't log a message
+        # for every single one.
         example[key] = example[key][-left_padding:]
         left_padding = 0
     right_padding = target_length - (left_padding + len(example[key]))
