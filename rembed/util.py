@@ -170,6 +170,13 @@ def tokens_to_ids(vocabulary, dataset):
 
 
 def crop_and_pad_example(example, left_padding, target_length, key, logger=None):
+    """
+    Crop a sequence value of the given dict `example` to a specified length.
+
+    Crops off left end of sequence if `left_padding` < 0. Otherwise, pads with
+    `left_padding` and then adds right padding as necessary to reach
+    `target_length`.
+    """
     if left_padding < 0:
         # Crop, then pad normally.
         # TODO: Track how many sentences are cropped, but don't log a message
