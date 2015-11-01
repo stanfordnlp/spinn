@@ -31,7 +31,8 @@ class HardStackTestCase(unittest.TestCase):
             X=X, transitions=transitions)
 
         # Swap in our own dummy embeddings and weights.
-        embeddings = np.arange(vocab_size).reshape((vocab_size, 1)).repeat(embedding_dim, axis=1)
+        embeddings = np.arange(vocab_size).reshape(
+            (vocab_size, 1)).repeat(embedding_dim, axis=1)
         self.stack.embeddings.set_value(embeddings)
 
     def test_basic_ff(self):
@@ -87,9 +88,9 @@ class HardStackTestCase(unittest.TestCase):
         transitions = np.array([example["transitions"] for example in dataset],
                                dtype=np.int32)
 
-        expected = np.array([[[5, 5, 5],
-                              [4, 4, 4],
-                              [3, 3, 3],
+        expected = np.array([[[8, 8, 8],
+                              [0, 0, 0],
+                              [0, 0, 0],
                               [0, 0, 0],
                               [0, 0, 0]],
                              [[7, 7, 7],
@@ -97,11 +98,11 @@ class HardStackTestCase(unittest.TestCase):
                               [0, 0, 0],
                               [0, 0, 0],
                               [0, 0, 0]],
-                             [[5, 5, 5],
-                              [3, 3, 3],
-                              [2, 2, 2],
-                              [1, 1, 1],
-                              [6, 6, 6]]])
+                             [[0, 0, 0],
+                              [0, 0, 0],
+                              [0, 0, 0],
+                              [0, 0, 0],
+                              [0, 0, 0]]])
 
         ret = self.stack.scan_fn(X, transitions)
         np.testing.assert_almost_equal(ret, expected)
