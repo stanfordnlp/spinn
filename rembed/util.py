@@ -169,21 +169,19 @@ def tokens_to_ids(vocabulary, dataset):
     return dataset
 
 
-def crop_and_pad_example(example, padding, key, pad_right=False, logger=None):
+def crop_and_pad_example(example, left_padding, target_length, key, logger=None):
     """
     Crop/pad a sequence value of the given dict `example`.
     """
-    if padding < 0:
-        # Crop at right edge.
+    if left_padding < 0:
+        # Crop, then pad normally.
         # TODO: Track how many sentences are cropped, but don't log a message
         # for every single one.
-        example[key] = example[key][:padding]
-    elif padding > 0:
-        if not pad_right:
-            # Pad at left edge.
-            example[key] = ([0] * padding) + example[key]
-        else:
-            example[key] = example[key] + ([0] * padding)
+        example[key] = example[key][-left_padding:]
+        left_padding = 0
+    right_padding = target_length - (left_padding + len(example[key]))
+    example[key] = ([0] * left_padding) + \
+        example[key] + ([0] * right_padding)
 
 
 def crop_and_pad(dataset, length, logger=None):
@@ -193,23 +191,15 @@ def crop_and_pad(dataset, length, logger=None):
     # the final stack top is the root of the tree. If cropping is used, it should
     # just introduce empty nodes into the tree.
     for example in dataset:
-        transition_padding = length - len(example["transitions"])
+        transitions_left_padding = length - len(example["transitions"])
+        shifts_before_crop_and_pad = example["transitions"].count(0)
         crop_and_pad_example(
-            example, transition_padding, "transitions", logger=logger)
-
-        # NB: num_pushes is always <= len(tokens) by shift-reduce definition.
-        # So this next call can *only* crop
-        num_pushes = example["transitions"].count(0)
-        token_padding = num_pushes - len(example["tokens"])
+            example, transitions_left_padding, length, "transitions", logger=logger)
+        shifts_after_crop_and_pad = example["transitions"].count(0)
+        tokens_left_padding = shifts_after_crop_and_pad - \
+            shifts_before_crop_and_pad
         crop_and_pad_example(
-            example, token_padding, "tokens", logger=logger)
-
-        # Make sure all token seqs have the same size -- pad at right. These
-        # padding elements will never exit the buffer
-        crop_and_pad_example(
-            example, length - len(example["tokens"]), pad_right=True,
-            key="tokens")
-
+            example, tokens_left_padding, length, "tokens", logger=logger)
     return dataset
 
 
