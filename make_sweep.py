@@ -19,7 +19,7 @@ FIXED_PARAMETERS = {
     "data_type":     "sst",
     "model_type":     "Model0",
     "training_data_path":    "sst-data/train_expanded.txt",
-    "eval_data_path":    "sst-data/dev.txt",
+    "eval_data_path":    "sst-data/dev.txt,sst-data/train_sample.txt",
     "seq_length":	"100",
     "eval_seq_length":	"150",
     "clipping_max_norm":  "5.0",
