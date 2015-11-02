@@ -130,7 +130,7 @@ def train():
     eval_sets = []
     for eval_filename in FLAGS.eval_data_path.split(","):
         eval_data_iter, _ = data_manager.load_data(
-            eval_filename, vocabulary=vocabulary, seq_length=FLAGS.seq_length, batch_size=FLAGS.batch_size, eval_mode=True)
+            eval_filename, vocabulary=vocabulary, seq_length=FLAGS.eval_seq_length, batch_size=FLAGS.batch_size, eval_mode=True)
         eval_sets.append((eval_filename, eval_data_iter))
 
     # Set up the placeholders.
@@ -222,7 +222,8 @@ if __name__ == '__main__':
     # Data settings.
     gflags.DEFINE_string("training_data_path", None, "")
     gflags.DEFINE_string("eval_data_path", None, "")
-    gflags.DEFINE_integer("seq_length", 29, "")
+    gflags.DEFINE_integer("seq_length", 25, "")
+    gflags.DEFINE_integer("eval_seq_length", 29, "")
 
     # Model architecture settings.
     gflags.DEFINE_enum("model_type", "Model0",

@@ -21,7 +21,8 @@ FIXED_PARAMETERS = {
     "training_data_path":    "sst-data/train_expanded.txt",
     "eval_data_path":    "sst-data/dev.txt",
     "seq_length":	"100",
-    "clipping_max_norm":  5.0,
+    "eval_seq_length":	"150",
+    "clipping_max_norm":  "5.0",
 }
 
 # Tunable parameters.
