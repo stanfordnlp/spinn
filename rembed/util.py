@@ -180,7 +180,6 @@ def trim_dataset(dataset, seq_length, eval_mode=False):
     else:
         new_dataset = [example for example in dataset if len(
             example["transitions"]) <= seq_length]
-        print len(new_dataset), "/", len(dataset)
         return new_dataset
 
 
