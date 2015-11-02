@@ -14,14 +14,18 @@ EXP = "EXP"
 
 # - #
 
-sweep_name = "test_sweep"
-sweep_runs = 12
-queue = "nlp"
+# Non-tunable flags that must be passed in.
+FIXED_PARAMETERS = {
+    "data_type":     "sst",
+    "model_type":     "Model0",
+    "training_data_path":    "sst-data/train_expanded.txt",
+    "eval_data_path":    "sst-data/dev.txt",
+    "seq_length":	"100"
+}
 
 # Tunable parameters.
 SWEEP_PARAMETERS = {
-    "seq_length":    	  (LIN, 160, 160),
-    "embedding_dim":  	  (EXP, 5, 40),
+    "embedding_dim":  	  (EXP, 5, 50),
     "learning_rate":      (EXP, 0.0001, 0.01),
     "embedding_learning_rate": (EXP, 0.0001, 0.1),
     "clipping_max_norm":  (EXP, 0.5, 50.0),
@@ -29,17 +33,12 @@ SWEEP_PARAMETERS = {
     "init_range":         (EXP, 0.001, 0.2)
 }
 
-# Non-tunable flags that must be passed in.
-FIXED_PARAMETERS = {
-    "data_type":     "sst",
-    "model_type":     "Model0,
-    "training_data_path":    "sst-data/train_expanded.txt",
-    "eval_data_path":    "sst-data/dev.txt",
-    "seq_length":	"100"
-}
+sweep_name = "sweep_" + \
+    FIXED_PARAMETERS["data_type"] + "_" + FIXED_PARAMETERS["model_type"]
+sweep_runs = 12
+queue = "nlp"
 
 # - #
-
 print "# NAME: " + sweep_name
 print "# NUM RUNS: " + str(sweep_runs)
 print "# SWEEP PARAMETERS: " + str(SWEEP_PARAMETERS)
@@ -68,7 +67,7 @@ for run_id in range(sweep_runs):
 
         params[param] = sample
 
-    name = sweep_name + str(run_id)
+    name = sweep_name + "_" + str(run_id)
     flags = ""
     for param in params:
         value = params[param]
