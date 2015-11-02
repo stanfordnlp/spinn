@@ -60,7 +60,7 @@ class HardStack(object):
 
     def __init__(self, embedding_dim, vocab_size, seq_length, compose_network,
                  vs, predict_network=None, use_predictions=False, X=None,
-                 transitions=None):
+                 transitions=None, initial_embeddings=None):
         """
         Construct a HardStack.
 
@@ -96,6 +96,8 @@ class HardStack(object):
 
         self._vs = vs
 
+        self.initial_embeddings = initial_embeddings
+
         self.X = X
         self.transitions = transitions
 
@@ -108,8 +110,14 @@ class HardStack(object):
 
     def _make_params(self):
         # Per-token embeddings.
-        self.embeddings = self._vs.add_param(
-            "embeddings", (self.vocab_size, self.embedding_dim))
+        if self.initial_embeddings is not None:
+            def EmbeddingInitializer(shape):
+                return self.initial_embeddings
+            self.embeddings = self._vs.add_param(
+                "embeddings", (self.vocab_size, self.embedding_dim), initializer=EmbeddingInitializer)
+        else:
+            self.embeddings = self._vs.add_param(
+                "embeddings", (self.vocab_size, self.embedding_dim))
 
     def _make_inputs(self):
         self.X = self.X or T.imatrix("X")

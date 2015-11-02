@@ -263,3 +263,18 @@ def MakeEvalIterator(sources, batch_size):
         data_iter.append(tuple(source[start:start + batch_size]
                                for source in sources))
     return data_iter
+
+
+def LoadEmbeddingsFromASCII(vocabulary, vocab_size, embedding_dim, path):
+    """Prepopulates a numpy embedding matrix indexed by vocabulary with
+    values from a GloVe-format ASCII vector file.
+
+    For now, values not found in the file will be set to zero."""
+    emb = np.zeros((vocab_size, embedding_dim))
+    with open(path, 'r') as f:
+        for line in f:
+            spl = line.split(" ")
+            word = spl[0].lower()
+            if word in vocabulary:
+                emb[vocabulary[word], :] = [float(e) for e in spl[1:]]
+    return emb

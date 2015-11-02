@@ -28,7 +28,7 @@ FLAGS = gflags.FLAGS
 
 
 def build_hard_stack(cls, vocab_size, seq_length, tokens, transitions,
-                     num_classes, vs):
+                     num_classes, vs, initial_embeddings=None):
     """
     Construct a classifier which makes use of some hard-stack model.
 
@@ -49,7 +49,7 @@ def build_hard_stack(cls, vocab_size, seq_length, tokens, transitions,
     # Build hard stack which scans over input sequence.
     stack = cls(
         FLAGS.embedding_dim, vocab_size, seq_length,
-        compose_network, vs, X=tokens, transitions=transitions)
+        compose_network, vs, X=tokens, transitions=transitions, initial_embeddings=initial_embeddings)
 
     # Extract top element of final stack timestep.
     final_stack = stack.final_stack
@@ -117,7 +117,7 @@ def train():
     elif FLAGS.data_type == "sst":
         data_manager = load_sst_data
     else:
-        logging.error("Bad data type.")
+        logger.Log("Bad data type.")
         return
 
     pp = pprint.PrettyPrinter(indent=4)
@@ -133,6 +133,14 @@ def train():
             eval_filename, vocabulary=vocabulary, seq_length=FLAGS.eval_seq_length, batch_size=FLAGS.batch_size, eval_mode=True)
         eval_sets.append((eval_filename, eval_data_iter))
 
+    if FLAGS.embedding_data_path:
+        logger.Log(
+            "Initializing embeddings from: " + FLAGS.embedding_data_path)
+        initial_embeddings = util.LoadEmbeddingsFromASCII(
+            vocabulary, len(vocabulary), FLAGS.embedding_dim, FLAGS.embedding_data_path)
+    else:
+        initial_embeddings = None
+
     # Set up the placeholders.
     X = T.imatrix("X")
     transitions = T.imatrix("transitions")
@@ -146,7 +154,7 @@ def train():
     model_cls = getattr(rembed.stack, FLAGS.model_type)
     actions, logits = build_hard_stack(
         model_cls, len(vocabulary), FLAGS.seq_length,
-        X, transitions, data_manager.NUM_CLASSES, vs)
+        X, transitions, data_manager.NUM_CLASSES, vs, initial_embeddings=initial_embeddings)
 
     xent_cost, acc = build_cost(logits, y)
 
@@ -224,6 +232,9 @@ if __name__ == '__main__':
     gflags.DEFINE_string("eval_data_path", None, "")
     gflags.DEFINE_integer("seq_length", 25, "")
     gflags.DEFINE_integer("eval_seq_length", 29, "")
+
+    gflags.DEFINE_string("embedding_data_path", None,
+                         "If set, load GloVe formatted embeddings from here.")
 
     # Model architecture settings.
     gflags.DEFINE_enum("model_type", "Model0",

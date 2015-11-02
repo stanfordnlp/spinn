@@ -37,7 +37,8 @@ def convert_binary_bracketed_data(filename):
                     if word == ")":
                         example["transitions"].append(1)
                     else:
-                        example["tokens"].append(word[0])
+                        # Downcase all words to match GloVe.
+                        example["tokens"].append(word.lower())
                         example["transitions"].append(0)
             examples.append(example)
     return examples
@@ -60,7 +61,6 @@ def load_data(path, vocabulary=None, seq_length=None, batch_size=32, eval_mode=F
     dataset = util.trim_dataset(dataset, seq_length, eval_mode=eval_mode)
     dataset = util.tokens_to_ids(vocabulary, dataset)
     dataset = util.crop_and_pad(dataset, seq_length, logger=logger)
-    print dataset[0]
 
     X = np.array([example["tokens"] for example in dataset],
                  dtype=np.int32)
