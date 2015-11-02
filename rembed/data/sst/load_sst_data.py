@@ -34,8 +34,11 @@ def convert_binary_bracketed_data(filename):
 
             for word in example["sentence"].split(' '):
                 if word[0] != "(":
-                    example["tokens"].append(word)
-                    example["transitions"].append(1 if word == ")" else 0)
+                    if word == ")":
+                        example["transitions"].append(1)
+                    else:
+                        example["tokens"].append(word[0])
+                        example["transitions"].append(0)
             examples.append(example)
     return examples
 
@@ -56,6 +59,8 @@ def load_data(path, vocabulary=None, seq_length=None, batch_size=32, eval_mode=F
     # Convert token sequences to integer sequences
     dataset = util.tokens_to_ids(vocabulary, dataset)
     dataset = util.crop_and_pad(dataset, seq_length, logger=logger)
+    print dataset[0]
+
     X = np.array([example["tokens"] for example in dataset],
                  dtype=np.int32)
     transitions = np.array([example["transitions"] for example in dataset],
