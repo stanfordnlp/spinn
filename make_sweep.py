@@ -20,22 +20,22 @@ FIXED_PARAMETERS = {
     "model_type":     "Model0",
     "training_data_path":    "sst-data/train_expanded.txt",
     "eval_data_path":    "sst-data/dev.txt",
-    "seq_length":	"100"
+    "seq_length":	"100",
+    "clipping_max_norm":  5.0,
 }
 
 # Tunable parameters.
 SWEEP_PARAMETERS = {
-    "embedding_dim":  	  (EXP, 5, 50),
+    "embedding_dim":  	  (EXP, 5, 100),
     "learning_rate":      (EXP, 0.0001, 0.01),
     "embedding_learning_rate": (EXP, 0.0001, 0.1),
-    "clipping_max_norm":  (EXP, 0.5, 50.0),
     "l2_lambda":   		  (EXP, 1e-7, 1e-4),
-    "init_range":         (EXP, 0.001, 0.2)
+    "init_range":         (EXP, 0.001, 0.01)
 }
 
 sweep_name = "sweep_" + \
     FIXED_PARAMETERS["data_type"] + "_" + FIXED_PARAMETERS["model_type"]
-sweep_runs = 12
+sweep_runs = 10
 queue = "nlp"
 
 # - #
