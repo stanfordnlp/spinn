@@ -173,6 +173,17 @@ def RMSprop(cost, params, lr=0.001, rho=0.9, epsilon=1e-6):
     return updates
 
 
+def trim_dataset(dataset, seq_length, eval_mode=False):
+    """Avoid using excessively long training examples."""
+    if eval_mode:
+        return dataset
+    else:
+        new_dataset = [example for example in dataset if len(
+            example["transitions"]) <= seq_length]
+        print len(new_dataset), "/", len(dataset)
+        return new_dataset
+
+
 def tokens_to_ids(vocabulary, dataset):
     """Replace strings in original boolean dataset with token IDs."""
 

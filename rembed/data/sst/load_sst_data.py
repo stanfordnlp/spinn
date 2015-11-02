@@ -57,6 +57,7 @@ def load_data(path, vocabulary=None, seq_length=None, batch_size=32, eval_mode=F
         vocabulary.update({type: i + 2 for i, type in enumerate(types)})
 
     # Convert token sequences to integer sequences
+    dataset = util.trim_dataset(dataset, seq_length, eval_mode=eval_mode)
     dataset = util.tokens_to_ids(vocabulary, dataset)
     dataset = util.crop_and_pad(dataset, seq_length, logger=logger)
     print dataset[0]
