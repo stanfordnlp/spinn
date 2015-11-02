@@ -234,8 +234,8 @@ if __name__ == '__main__':
     # Optimization settings.
     gflags.DEFINE_integer("training_steps", 100000, "")
     gflags.DEFINE_integer("batch_size", 32, "")
-    gflags.DEFINE_float("learning_rate", 0.002, "")
-    gflags.DEFINE_float("embedding_learning_rate", 0.01, "")
+    gflags.DEFINE_float("learning_rate", 0.002, "Used in RMSProp.")
+    gflags.DEFINE_float("embedding_learning_rate", 0.01, "Used in plain SGD.")
     # gflags.DEFINE_float("momentum", 0.9, "")
     gflags.DEFINE_float("clipping_max_norm", 1.0, "")
     gflags.DEFINE_float("l2_lambda", 1e-5, "")
