@@ -127,6 +127,20 @@ def SGD(cost, params, lr=0.01):
     return new_values
 
 
+def embedding_SGD(cost, embedding_matrix, lr=0.01, used_embeddings=None):
+    new_values = OrderedDict()
+
+    if used_embeddings:
+        grads = T.grad(cost, wrt=used_embeddings)
+        new_value = (used_embeddings,
+                     T.inc_subtensor(used_embeddings, -lr * grads))
+    else:
+        new_values = SGD(cost, [embedding_matrix], lr)
+        new_value = (embedding_matrix, new_values[embedding_matrix])
+
+    return new_value
+
+
 def momentum(cost, params, lr=0.01, momentum=0.9):
     grads = T.grad(cost, params)
 

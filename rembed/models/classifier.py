@@ -138,6 +138,7 @@ def train():
     transitions = T.imatrix("transitions")
     y = T.ivector("y")
     lr = T.scalar("lr")
+    embedding_lr = T.scalar("embedding_lr")
 
     logger.Log("Building model.")
     vs = util.VariableStore(
@@ -168,9 +169,16 @@ def train():
     total_cost = xent_cost + l2_cost + action_cost
 
     # Set up optimization.
-    new_values = util.RMSprop(total_cost, vs.vars.values(), lr)
+    core_params = [vs.vars[key] for key in vs.vars if 'embedding' not in key]
+    embedding_params = [vs.vars[key] for key in vs.vars if 'embedding' in key]
+    embedding_params = embedding_params[0]
+
+    new_values = util.RMSprop(total_cost, core_params, lr)
+    new_values.append(
+        util.embedding_SGD(total_cost, embedding_params, embedding_lr))
+
     update_fn = theano.function(
-        [X, transitions, y, lr],
+        [X, transitions, y, lr, embedding_lr],
         [total_cost, xent_cost, action_cost, action_acc, l2_cost, acc],
         updates=new_values)
     eval_fn = theano.function([X, transitions, y], [acc, action_acc])
@@ -179,7 +187,7 @@ def train():
     for step in range(FLAGS.training_steps):
         X_batch, transitions_batch, y_batch = training_data_iter.next()
         ret = update_fn(X_batch, transitions_batch, y_batch,
-                        FLAGS.learning_rate)
+                        FLAGS.learning_rate, FLAGS.embedding_learning_rate)
         total_cost_val, xent_cost_val, action_cost_val, action_acc_val, l2_cost_val, acc_val = ret
 
         if step % FLAGS.statistics_interval_steps == 0:
@@ -227,6 +235,7 @@ if __name__ == '__main__':
     gflags.DEFINE_integer("training_steps", 100000, "")
     gflags.DEFINE_integer("batch_size", 32, "")
     gflags.DEFINE_float("learning_rate", 0.002, "")
+    gflags.DEFINE_float("embedding_learning_rate", 0.01, "")
     # gflags.DEFINE_float("momentum", 0.9, "")
     gflags.DEFINE_float("clipping_max_norm", 1.0, "")
     gflags.DEFINE_float("l2_lambda", 1e-5, "")
