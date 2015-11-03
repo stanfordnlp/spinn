@@ -128,7 +128,7 @@ def train():
         FLAGS.training_data_path, seq_length=FLAGS.seq_length, batch_size=FLAGS.batch_size, logger=logger)
 
     eval_sets = []
-    for eval_filename in FLAGS.eval_data_path.split(","):
+    for eval_filename in FLAGS.eval_data_path.split(":"):
         eval_data_iter, _ = data_manager.load_data(
             eval_filename, vocabulary=vocabulary, seq_length=FLAGS.eval_seq_length, batch_size=FLAGS.batch_size, eval_mode=True)
         eval_sets.append((eval_filename, eval_data_iter))
