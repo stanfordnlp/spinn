@@ -18,7 +18,7 @@ PADDING_TOKEN = "*PADDING*"
 UNK_TOKEN = "*UNK*"
 
 NUM_CLASSES = 5
-INCLUSION_THRESHOLD = 15
+MINIMUM_WORD_FREQUENCY = 15
 
 
 def convert_binary_bracketed_data(filename):
@@ -58,7 +58,7 @@ def load_data(path, vocabulary=None, seq_length=None, batch_size=32, eval_mode=F
         counter = collections.Counter(itertools.chain.from_iterable([example["tokens"]
                                                                      for example in dataset]))
         types = [
-            word for word in counter if counter[word] >= INCLUSION_THRESHOLD]
+            word for word in counter if counter[word] >= MINIMUM_WORD_FREQUENCY]
         vocabulary.update({type: i + 2 for i, type in enumerate(types)})
 
     # Convert token sequences to integer sequences
