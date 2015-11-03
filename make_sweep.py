@@ -19,7 +19,7 @@ FIXED_PARAMETERS = {
     "data_type":     "sst",
     "model_type":     "Model0",
     "training_data_path":    "sst-data/train_expanded.txt",
-    "eval_data_path":    "sst-data/dev.txt,sst-data/train_sample.txt",
+    "eval_data_path":    """sst-data/dev.txt,sst-data/train_sample.txt""",
     "embedding_data_path": "/scr/nlp/data/glove_vecs/glove.6B.50d.txt",
     "embedding_dim":	"50",
     "seq_length":	"100",

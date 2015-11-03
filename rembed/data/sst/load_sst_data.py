@@ -6,6 +6,7 @@
 # Example:
 # sentence_label	( ( word word ) ( ( word word ) word ) )
 
+import collections
 import itertools
 import numpy as np
 
@@ -17,6 +18,7 @@ PADDING_TOKEN = "*PADDING*"
 UNK_TOKEN = "*UNK*"
 
 NUM_CLASSES = 5
+INCLUSION_THRESHOLD = 15
 
 
 def convert_binary_bracketed_data(filename):
@@ -53,8 +55,10 @@ def load_data(path, vocabulary=None, seq_length=None, batch_size=32, eval_mode=F
         # to include vocab items that don't appear in the training data.
         vocabulary = {PADDING_TOKEN: 0,
                       UNK_TOKEN: 1}
-        types = set(itertools.chain.from_iterable([example["tokens"]
-                                                   for example in dataset]))
+        counter = collections.Counter(itertools.chain.from_iterable([example["tokens"]
+                                                                     for example in dataset]))
+        types = [
+            word for word in counter if counter[word] >= INCLUSION_THRESHOLD]
         vocabulary.update({type: i + 2 for i, type in enumerate(types)})
 
     # Convert token sequences to integer sequences
