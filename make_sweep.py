@@ -29,7 +29,7 @@ FIXED_PARAMETERS = {
 
 # Tunable parameters.
 SWEEP_PARAMETERS = {
-    "learning_rate":      (EXP, 0.0001, 0.01),
+    "learning_rate":      (EXP, 0.0001, 0.001),
     "embedding_learning_rate": (EXP, 0.0001, 0.1),
     "l2_lambda":   		  (EXP, 1e-7, 1e-4),
     "init_range":         (EXP, 0.001, 0.01)
