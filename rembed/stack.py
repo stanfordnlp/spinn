@@ -38,7 +38,8 @@ def update_hard_stack(stack_t, stack_pushed, stack_merged, push_value,
 
     # Make sure mask broadcasts over all dimensions after the first.
     mask = mask.dimshuffle(0, "x", "x")
-    stack_next = mask * stack_merged + (1 - mask) * stack_pushed
+    mask = T.cast(mask, dtype=theano.config.floatX)
+    stack_next = mask * stack_merged + (1. - mask) * stack_pushed
 
     return stack_next
 

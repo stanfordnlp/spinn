@@ -44,7 +44,8 @@ class VariableStore(object):
             if self.logger:
                 self.logger.Log(
                     "Created variable " + full_name, level=self.logger.DEBUG)
-            self.vars[name] = theano.shared(initializer(shape),
+            init_value = initializer(shape).astype(theano.config.floatX)
+            self.vars[name] = theano.shared(init_value,
                                             name=full_name)
         return self.vars[name]
 
@@ -270,7 +271,7 @@ def LoadEmbeddingsFromASCII(vocabulary, vocab_size, embedding_dim, path):
     values from a GloVe-format ASCII vector file.
 
     For now, values not found in the file will be set to zero."""
-    emb = np.zeros((vocab_size, embedding_dim))
+    emb = np.zeros((vocab_size, embedding_dim), dtype=theano.config.floatX)
     with open(path, 'r') as f:
         for line in f:
             spl = line.split(" ")

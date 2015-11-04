@@ -69,14 +69,14 @@ def build_cost(logits, targets):
     """
     # Clip gradients coming from the cost function.
     logits = theano.gradient.grad_clip(
-        logits, -1 * FLAGS.clipping_max_norm, FLAGS.clipping_max_norm)
+        logits, -1. * FLAGS.clipping_max_norm, FLAGS.clipping_max_norm)
 
     predicted_dist = T.nnet.softmax(logits)
     costs = T.nnet.categorical_crossentropy(predicted_dist, targets)
     cost = costs.mean()
 
     pred = T.argmax(logits, axis=1)
-    acc = 1 - T.mean(T.neq(pred, targets))
+    acc = 1. - T.mean(T.cast(T.neq(pred, targets), theano.config.floatX))
 
     return cost, acc
 
@@ -142,10 +142,10 @@ def train():
         initial_embeddings = None
 
     # Set up the placeholders.
-    X = T.imatrix("X")
+    X = T.matrix("X", dtype='int32')
     transitions = T.imatrix("transitions")
-    y = T.ivector("y")
-    lr = T.scalar("lr")
+    y = T.vector("y", dtype='int32')
+    lr = T.scalar("lr", dtype='float32')
     embedding_lr = T.scalar("embedding_lr")
 
     logger.Log("Building model.")
