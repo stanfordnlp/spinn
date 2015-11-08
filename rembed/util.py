@@ -206,10 +206,15 @@ def TrimDataset(dataset, seq_length, eval_mode=False):
 def TokensToIDs(vocabulary, dataset):
     """Replace strings in original boolean dataset with token IDs."""
 
-    unk_id = vocabulary[UNK_TOKEN]
-    for example in dataset:
-        example["tokens"] = [vocabulary.get(token, unk_id)
-                             for token in example["tokens"]]
+    if UNK_TOKEN in vocabulary:
+        unk_id = vocabulary[UNK_TOKEN]
+        for example in dataset:
+            example["tokens"] = [vocabulary.get(token, unk_id)
+                                 for token in example["tokens"]]
+    else:
+        for example in dataset:
+            example["tokens"] = [vocabulary[token]
+                                 for token in example["tokens"]]
     return dataset
 
 
@@ -326,6 +331,8 @@ def BuildVocabularyForASCIIEmbeddingFile(path, types_in_data, core_vocabulary):
     """Quickly iterates through a GloVe-formatted ASCII vector file to
     extract a working vocabulary of words that occur both in the data and
     in the vector file."""
+
+    # TODO(SB): Report on *which* words are skipped. See if any are common.
 
     vocabulary = {}
     vocabulary.update(core_vocabulary)

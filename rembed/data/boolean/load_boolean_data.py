@@ -14,12 +14,11 @@ NUM_CLASSES = 2
 
 FIXED_VOCABULARY = {
     util.PADDING_TOKEN: 0,
-    util.UNK_TOKEN: 1,
-    "T": 2,
-    "F": 3,
-    "not": 4,
-    "and": 5,
-    "or": 6
+    "T": 1,
+    "F": 2,
+    "not": 3,
+    "and": 4,
+    "or": 5
 }
 
 LABEL_MAP = {
