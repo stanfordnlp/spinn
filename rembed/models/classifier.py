@@ -283,8 +283,8 @@ if __name__ == '__main__':
     gflags.DEFINE_float("learning_rate", 0.001, "Used in RMSProp.")
     # gflags.DEFINE_float("momentum", 0.9, "")
     gflags.DEFINE_float("clipping_max_norm", 1.0, "")
-    gflags.DEFINE_float("l2_lambda", 1e-5, "")
-    gflags.DEFINE_float("init_range", 0.01, "")
+    gflags.DEFINE_float("l2_lambda", 3e-5, "")
+    gflags.DEFINE_float("init_range", 0.001, "")
 
     # Display settings.
     gflags.DEFINE_integer("statistics_interval_steps", 50, "")

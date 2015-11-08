@@ -30,15 +30,15 @@ FIXED_PARAMETERS = {
 
 # Tunable parameters.
 SWEEP_PARAMETERS = {
-    "learning_rate":      (EXP, 0.0001, 0.001),
+    "learning_rate":      (EXP, 0.0001, 0.0005),
     "embedding_learning_rate": (EXP, 0.0001, 0.1),
     "l2_lambda":   		  (EXP, 1e-7, 1e-4),
-    "init_range":         (EXP, 0.001, 0.01)
+    "init_range":         (EXP, 0.001, 0.005)
 }
 
 sweep_name = "sweep_" + \
     FIXED_PARAMETERS["data_type"] + "_" + FIXED_PARAMETERS["model_type"]
-sweep_runs = 8
+sweep_runs = 6
 queue = "nlp"
 
 # - #
