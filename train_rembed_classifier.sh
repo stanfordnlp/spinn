@@ -19,4 +19,4 @@ echo Flags: $REMBED_FLAGS
 # Log what we're running and where.
 echo `hostname` - $PBS_JOBID - $REMBED_FLAGS - at `git log --pretty=format:'%h' -n 1` >> ~/rembed_machine_assignments.txt
 
-python -m rembed.models.classifier $REMBED_FLAGS
+THEANO_FLAGS=allow_gc=False,cuda.root=/usr/bin/cuda,warn_float64=warn,device=gpu2,floatX=float32 python -m rembed.models.classifier $REMBED_FLAGS
