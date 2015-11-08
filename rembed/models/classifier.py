@@ -47,7 +47,6 @@ def build_hard_stack(cls, vocab_size, seq_length, tokens, transitions,
                               initializer=util.DoubleIdentityInitializer(FLAGS.init_range))
 
     if project_embeddings:
-        logger.Log("Adding a linear embedding projection layer.")
         embedding_projection_network = util.Linear
     else:
         embedding_projection_network = util.IdentityLayer
