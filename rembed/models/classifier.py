@@ -5,8 +5,8 @@ python -m rembed.models.classifier --training_data_path bl-data/pbl_train.tsv \
        --eval_data_path bl-data/pbl_dev.tsv
 
 SST sentiment:
-python -m rembed.models.classifier --data_type sst --embedding_dim 25 --training_data_path sst-data/train.txt \
-       --eval_data_path sst-data/dev.txt
+python -m rembed.models.classifier --data_type sst --training_data_path sst-data/train.txt \
+       --eval_data_path sst-data/dev.txt --embedding_data_path rembed/tests/test_embedding_matrix.5d.txt
 """
 
 from functools import partial
@@ -28,7 +28,7 @@ FLAGS = gflags.FLAGS
 
 
 def build_hard_stack(cls, vocab_size, seq_length, tokens, transitions,
-                     num_classes, vs, initial_embeddings=None):
+                     num_classes, vs, initial_embeddings=None, project_embeddings=False):
     """
     Construct a classifier which makes use of some hard-stack model.
 
@@ -46,10 +46,16 @@ def build_hard_stack(cls, vocab_size, seq_length, tokens, transitions,
     compose_network = partial(util.ReLULayer,
                               initializer=util.DoubleIdentityInitializer(FLAGS.init_range))
 
+    if project_embeddings:
+        embedding_projection_network = util.Linear
+    else:
+        embedding_projection_network = util.IdentityLayer
+
     # Build hard stack which scans over input sequence.
     stack = cls(
         FLAGS.embedding_dim, vocab_size, seq_length,
-        compose_network, vs, X=tokens, transitions=transitions, initial_embeddings=initial_embeddings)
+        compose_network, embedding_projection_network, vs, X=tokens, transitions=transitions, 
+        initial_embeddings=initial_embeddings)
 
     # Extract top element of final stack timestep.
     final_stack = stack.final_stack
@@ -123,30 +129,56 @@ def train():
     pp = pprint.PrettyPrinter(indent=4)
     logger.Log("Flag values:\n" + pp.pformat(FLAGS.FlagValuesDict()))
 
-    # Load the data
-    training_data_iter, vocabulary = data_manager.load_data(
-        FLAGS.training_data_path, seq_length=FLAGS.seq_length, batch_size=FLAGS.batch_size, logger=logger)
+    # Load the data.
+    raw_training_data, vocabulary = data_manager.load_data(
+        FLAGS.training_data_path)
 
-    eval_sets = []
+    # Load the eval data.
+    raw_eval_sets = []
     for eval_filename in FLAGS.eval_data_path.split(":"):
-        eval_data_iter, _ = data_manager.load_data(
-            eval_filename, vocabulary=vocabulary, seq_length=FLAGS.eval_seq_length, batch_size=FLAGS.batch_size, eval_mode=True)
-        eval_sets.append((eval_filename, eval_data_iter))
+        eval_data, _ = data_manager.load_data(eval_filename)
+        raw_eval_sets.append((eval_filename, eval_data))
 
+    # Prepare the vocabulary.
+    if not vocabulary:
+        logger.Log("In open vocabulary mode. Using loaded embeddings without fine-tuning.")
+        train_embeddings = False
+        vocabulary = util.BuildVocabulary(
+            raw_training_data, raw_eval_sets, FLAGS.embedding_data_path, logger=logger)
+    else:
+        logger.Log("In fixed vocabulary mode. Training embeddings.")
+        train_embeddings = True
+
+    # Load pretrained embeddings.
     if FLAGS.embedding_data_path:
-        logger.Log(
-            "Initializing embeddings from: " + FLAGS.embedding_data_path)
+        logger.Log("Loading vocabulary with " + str(len(vocabulary))
+                   + " words from " + FLAGS.embedding_data_path)
         initial_embeddings = util.LoadEmbeddingsFromASCII(
-            vocabulary, len(vocabulary), FLAGS.embedding_dim, FLAGS.embedding_data_path)
+            vocabulary, FLAGS.embedding_dim, FLAGS.embedding_data_path)
     else:
         initial_embeddings = None
 
+    # Trim dataset, convert token sequences to integer sequences, crop, and
+    # pad.
+    training_data = util.PreprocessDataset(
+        raw_training_data, vocabulary, FLAGS.seq_length, data_manager, eval_mode=False, logger=logger)
+    training_data_iter = util.MakeTrainingIterator(
+        training_data, FLAGS.batch_size)
+
+    eval_iterators = []
+    for filename, raw_eval_set in raw_eval_sets:
+        e_X, e_transitions, e_y = util.PreprocessDataset(
+            raw_eval_set, vocabulary, FLAGS.seq_length, data_manager, eval_mode=True, logger=logger)
+        eval_iterators.append((filename,
+            util.MakeEvalIterator((e_X, e_transitions, e_y), FLAGS.batch_size)))
+
+    # TODO(SB): Make sure unk and padding get gradients or random inits.
+
     # Set up the placeholders.
-    X = T.matrix("X", dtype='int32')
+    X = T.matrix("X", dtype="int32")
     transitions = T.imatrix("transitions")
-    y = T.vector("y", dtype='int32')
-    lr = T.scalar("lr", dtype='float32')
-    embedding_lr = T.scalar("embedding_lr")
+    y = T.vector("y", dtype="int32")
+    lr = T.scalar("lr")
 
     logger.Log("Building model.")
     vs = util.VariableStore(
@@ -154,7 +186,7 @@ def train():
     model_cls = getattr(rembed.stack, FLAGS.model_type)
     actions, logits = build_hard_stack(
         model_cls, len(vocabulary), FLAGS.seq_length,
-        X, transitions, data_manager.NUM_CLASSES, vs, initial_embeddings=initial_embeddings)
+        X, transitions, len(data_manager.LABEL_MAP), vs, initial_embeddings=initial_embeddings, project_embeddings=(not train_embeddings))
 
     xent_cost, acc = build_cost(logits, y)
 
@@ -177,16 +209,18 @@ def train():
     total_cost = xent_cost + l2_cost + action_cost
 
     # Set up optimization.
-    core_params = [vs.vars[key] for key in vs.vars if 'embedding' not in key]
-    embedding_params = [vs.vars[key] for key in vs.vars if 'embedding' in key]
-    embedding_params = embedding_params[0]
+    if train_embeddings:
+        trained_params = vs.vars.values()
+    else:
+        trained_params = [vs.vars[key] for key in vs.vars if 'embedding' not in key]
 
-    new_values = util.RMSprop(total_cost, core_params, lr)
-    new_values.append(
-        util.embedding_SGD(total_cost, embedding_params, embedding_lr))
+    new_values = util.RMSprop(total_cost, trained_params, lr)
+    # Training open-vocabulary embeddings is a questionable idea right now. Disabled:
+    # new_values.append(
+    #     util.embedding_SGD(total_cost, embedding_params, embedding_lr))
 
     update_fn = theano.function(
-        [X, transitions, y, lr, embedding_lr],
+        [X, transitions, y, lr],
         [total_cost, xent_cost, action_cost, action_acc, l2_cost, acc],
         updates=new_values)
     eval_fn = theano.function([X, transitions, y], [acc, action_acc])
@@ -195,7 +229,7 @@ def train():
     for step in range(FLAGS.training_steps):
         X_batch, transitions_batch, y_batch = training_data_iter.next()
         ret = update_fn(X_batch, transitions_batch, y_batch,
-                        FLAGS.learning_rate, FLAGS.embedding_learning_rate)
+                        FLAGS.learning_rate)
         total_cost_val, xent_cost_val, action_cost_val, action_acc_val, l2_cost_val, acc_val = ret
 
         if step % FLAGS.statistics_interval_steps == 0:
@@ -205,7 +239,7 @@ def train():
                    l2_cost_val))
 
         if step % FLAGS.eval_interval_steps == 0:
-            for eval_set in eval_sets:
+            for eval_set in eval_iterators:
                 # Evaluate
                 acc_accum = 0.0
                 action_acc_accum = 0.0
@@ -246,8 +280,7 @@ if __name__ == '__main__':
     # Optimization settings.
     gflags.DEFINE_integer("training_steps", 100000, "")
     gflags.DEFINE_integer("batch_size", 32, "")
-    gflags.DEFINE_float("learning_rate", 0.002, "Used in RMSProp.")
-    gflags.DEFINE_float("embedding_learning_rate", 0.01, "Used in plain SGD.")
+    gflags.DEFINE_float("learning_rate", 0.001, "Used in RMSProp.")
     # gflags.DEFINE_float("momentum", 0.9, "")
     gflags.DEFINE_float("clipping_max_norm", 1.0, "")
     gflags.DEFINE_float("l2_lambda", 1e-5, "")

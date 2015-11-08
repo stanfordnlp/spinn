@@ -1,9 +1,22 @@
 from collections import OrderedDict
+import itertools
 import random
 
 import numpy as np
 import theano
 from theano import tensor as T
+
+# With loaded embedding matrix, the padding vector will be initialized to zero
+# and will not be trained. Hopefully this isn't a problem. It seems better than
+# random initialization...
+PADDING_TOKEN = "*PADDING*"
+
+# Temporary hack: Map UNK to "_" when loading pretrained embedding matrices:
+# it's a common token that is pretrained, but shouldn't look like any content words.
+UNK_TOKEN = "_"
+
+CORE_VOCABULARY = {PADDING_TOKEN: 0,
+                   UNK_TOKEN: 1}
 
 
 def UniformInitializer(range):
@@ -71,6 +84,12 @@ def Linear(inp, inp_dim, outp_dim, vs, name="linear_layer", use_bias=True, initi
     return outp
 
 
+def IdentityLayer(inp, inp_dim, outp_dim, vs, name="identity_layer", use_bias=True, initializer=None):
+    """An identity function that takes the same parameters as the above layers."""
+    assert inp_dim == outp_dim, "Identity layer requires inp_dim == outp_dim."
+    return inp
+
+
 def LSTM(lstm_prev, inp, inp_dim, hidden_dim, vs, name="lstm"):
     # input -> hidden mapping
     W = vs.add_param("%s/W" % name, (inp_dim, hidden_dim * 4))
@@ -128,7 +147,7 @@ def SGD(cost, params, lr=0.01):
     return new_values
 
 
-def embedding_SGD(cost, embedding_matrix, lr=0.01, used_embeddings=None):
+def EmbeddingSGD(cost, embedding_matrix, lr=0.01, used_embeddings=None):
     new_values = OrderedDict()
 
     if used_embeddings:
@@ -142,7 +161,7 @@ def embedding_SGD(cost, embedding_matrix, lr=0.01, used_embeddings=None):
     return new_value
 
 
-def momentum(cost, params, lr=0.01, momentum=0.9):
+def Momentum(cost, params, lr=0.01, momentum=0.9):
     grads = T.grad(cost, params)
 
     new_values = OrderedDict()
@@ -174,7 +193,7 @@ def RMSprop(cost, params, lr=0.001, rho=0.9, epsilon=1e-6):
     return updates
 
 
-def trim_dataset(dataset, seq_length, eval_mode=False):
+def TrimDataset(dataset, seq_length, eval_mode=False):
     """Avoid using excessively long training examples."""
     if eval_mode:
         return dataset
@@ -184,17 +203,17 @@ def trim_dataset(dataset, seq_length, eval_mode=False):
         return new_dataset
 
 
-def tokens_to_ids(vocabulary, dataset):
+def TokensToIDs(vocabulary, dataset):
     """Replace strings in original boolean dataset with token IDs."""
 
-    unk_id = vocabulary["*UNK*"]
+    unk_id = vocabulary[UNK_TOKEN]
     for example in dataset:
         example["tokens"] = [vocabulary.get(token, unk_id)
                              for token in example["tokens"]]
     return dataset
 
 
-def crop_and_pad_example(example, left_padding, target_length, key, logger=None):
+def CropAndPad_example(example, left_padding, target_length, key, logger=None):
     """
     Crop/pad a sequence value of the given dict `example`.
     """
@@ -209,7 +228,7 @@ def crop_and_pad_example(example, left_padding, target_length, key, logger=None)
         example[key] + ([0] * right_padding)
 
 
-def crop_and_pad(dataset, length, logger=None):
+def CropAndPad(dataset, length, logger=None):
     # NOTE: This can probably be done faster in NumPy if it winds up making a
     # difference.
     # Always make sure that the transitions are aligned at the left edge, so
@@ -217,13 +236,13 @@ def crop_and_pad(dataset, length, logger=None):
     # just introduce empty nodes into the tree.
     for example in dataset:
         transitions_left_padding = length - len(example["transitions"])
-        shifts_before_crop_and_pad = example["transitions"].count(0)
-        crop_and_pad_example(
+        shifts_before_CropAndPad = example["transitions"].count(0)
+        CropAndPad_example(
             example, transitions_left_padding, length, "transitions", logger=logger)
-        shifts_after_crop_and_pad = example["transitions"].count(0)
-        tokens_left_padding = shifts_after_crop_and_pad - \
-            shifts_before_crop_and_pad
-        crop_and_pad_example(
+        shifts_after_CropAndPad = example["transitions"].count(0)
+        tokens_left_padding = shifts_after_CropAndPad - \
+            shifts_before_CropAndPad
+        CropAndPad_example(
             example, tokens_left_padding, length, "tokens", logger=logger)
     return dataset
 
@@ -266,16 +285,72 @@ def MakeEvalIterator(sources, batch_size):
     return data_iter
 
 
-def LoadEmbeddingsFromASCII(vocabulary, vocab_size, embedding_dim, path):
+def PreprocessDataset(dataset, vocabulary, seq_length, data_manager, eval_mode=False, logger=None):
+    dataset = TrimDataset(dataset, seq_length, eval_mode=eval_mode)
+    dataset = TokensToIDs(vocabulary, dataset)
+    dataset = CropAndPad(dataset, seq_length, logger=logger)
+
+    X = np.array([example["tokens"] for example in dataset],
+                 dtype=np.int32)
+    transitions = np.array([example["transitions"] for example in dataset],
+                           dtype=np.int32)
+    y = np.array(
+        [data_manager.LABEL_MAP[example["label"]] for example in dataset],
+        dtype=np.int32)
+    return X, transitions, y
+
+
+def BuildVocabulary(raw_training_data, raw_eval_sets, embedding_path, logger=None):
+    # Find the set of words that occur in the data.
+    logger.Log("Constructing vocabulary...")
+    types_in_data = set()
+    for dataset in [raw_training_data] + [eval_dataset[1] for eval_dataset in raw_eval_sets]:
+        types_in_data.update(itertools.chain.from_iterable([example["tokens"]
+                                                            for example in dataset]))
+    logger.Log("Found " + str(len(types_in_data)) + " word types.")
+
+    if embedding_path == None:
+        logger.Log(
+            "Warning: Open-vocabulary models require pretrained vectors. Running with empty vocabulary.")
+        vocabulary = CORE_VOCABULARY
+    else:
+        # Build a vocabulary of words in the data for which we have an
+        # embedding.
+        vocabulary = BuildVocabularyForASCIIEmbeddingFile(
+            embedding_path, types_in_data, CORE_VOCABULARY)
+
+    return vocabulary
+
+
+def BuildVocabularyForASCIIEmbeddingFile(path, types_in_data, core_vocabulary):
+    """Quickly iterates through a GloVe-formatted ASCII vector file to
+    extract a working vocabulary of words that occur both in the data and
+    in the vector file."""
+
+    vocabulary = {}
+    vocabulary.update(core_vocabulary)
+    next_index = len(vocabulary)
+    with open(path, 'r') as f:
+        for line in f:
+            spl = line.split(" ", 1)
+            word = spl[0]
+            if word in types_in_data:
+                vocabulary[word] = next_index
+                next_index += 1
+    return vocabulary
+
+
+def LoadEmbeddingsFromASCII(vocabulary, embedding_dim, path):
     """Prepopulates a numpy embedding matrix indexed by vocabulary with
-    values from a GloVe-format ASCII vector file.
+    values from a GloVe - format ASCII vector file.
 
     For now, values not found in the file will be set to zero."""
-    emb = np.zeros((vocab_size, embedding_dim), dtype=theano.config.floatX)
+    emb = np.zeros(
+        (len(vocabulary), embedding_dim), dtype=theano.config.floatX)
     with open(path, 'r') as f:
         for line in f:
             spl = line.split(" ")
-            word = spl[0].lower()
+            word = spl[0]
             if word in vocabulary:
                 emb[vocabulary[word], :] = [float(e) for e in spl[1:]]
     return emb

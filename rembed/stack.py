@@ -60,8 +60,8 @@ class HardStack(object):
     """
 
     def __init__(self, embedding_dim, vocab_size, seq_length, compose_network,
-                 vs, predict_network=None, use_predictions=False, X=None,
-                 transitions=None, initial_embeddings=None):
+                 embedding_projection_network, vs, predict_network=None, 
+                 use_predictions=False, X=None, transitions=None, initial_embeddings=None):
         """
         Construct a HardStack.
 
@@ -92,6 +92,7 @@ class HardStack(object):
         self.seq_length = seq_length
 
         self._compose_network = compose_network
+        self._embedding_projection_network = embedding_projection_network
         self._predict_network = predict_network
         self.use_predictions = use_predictions
 
@@ -137,8 +138,13 @@ class HardStack(object):
         stack_pushed = T.zeros(stack_shape)
         stack_merged = T.zeros(stack_shape)
 
-        # Allocate a "buffer" stack and maintain a cursor in this buffer.
-        buffer_t = self.embeddings[self.X]  # batch_size * seq_length * emb_dim
+        # Look up all of the embeddings that will be used.
+        raw_embeddings = self.embeddings[self.X]  # batch_size * seq_length * emb_dim
+
+        # Allocate a "buffer" stack initialized with projected embeddings,
+        # and maintain a cursor in this buffer.
+        buffer_t = self._embedding_projection_network(
+            raw_embeddings, self.embedding_dim, self.embedding_dim, self._vs, name="project")
         buffer_cur_init = T.zeros((batch_size,), dtype="int")
 
         # TODO(jgauthier): Implement linear memory (was in previous HardStack;

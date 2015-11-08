@@ -7,18 +7,17 @@
 # sentence_label	( ( word word ) ( ( word word ) word ) )
 
 import collections
-import itertools
 import numpy as np
 
 from rembed import util
 
-
-REDUCE_OP = '*MERGE*'
-PADDING_TOKEN = "*PADDING*"
-UNK_TOKEN = "*UNK*"
-
-NUM_CLASSES = 5
-MINIMUM_WORD_FREQUENCY = 15
+LABEL_MAP = {
+    "0": 0,
+    "1": 1,
+    "2": 2,
+    "3": 3,
+    "4": 4
+}
 
 
 def convert_binary_bracketed_data(filename):
@@ -48,43 +47,7 @@ def convert_binary_bracketed_data(filename):
 
 def load_data(path, vocabulary=None, seq_length=None, batch_size=32, eval_mode=False, logger=None):
     dataset = convert_binary_bracketed_data(path)
-
-    if not vocabulary:
-        # Build vocabulary from data
-        # TODO(SB): Use a fixed vocab file in case this takes especially long, or we want
-        # to include vocab items that don't appear in the training data.
-        vocabulary = {PADDING_TOKEN: 0,
-                      UNK_TOKEN: 1}
-        counter = collections.Counter(itertools.chain.from_iterable([example["tokens"]
-                                                                     for example in dataset]))
-        types = [
-            word for word in counter if counter[word] >= MINIMUM_WORD_FREQUENCY]
-        vocabulary.update({type: i + 2 for i, type in enumerate(types)})
-
-    # Convert token sequences to integer sequences
-    dataset = util.trim_dataset(dataset, seq_length, eval_mode=eval_mode)
-    dataset = util.tokens_to_ids(vocabulary, dataset)
-    dataset = util.crop_and_pad(dataset, seq_length, logger=logger)
-
-    X = np.array([example["tokens"] for example in dataset],
-                 dtype=np.int32)
-    transitions = np.array([example["transitions"] for example in dataset],
-                           dtype=np.int32)
-    y = np.array([int(example["label"]) for example in dataset],
-                 dtype=np.int32)
-
-    if logger:
-        logger.Log("Loaded %i examples to sequences of length %i" %
-                   (len(dataset), seq_length))
-
-    # Build batched data iterator.
-    all_data = (X, transitions, y)
-    if eval_mode:
-        data_iter = util.MakeEvalIterator(all_data, batch_size)
-    else:
-        data_iter = util.MakeTrainingIterator(all_data, batch_size)
-
-    return data_iter, vocabulary
+    return dataset, None
 
 
 if __name__ == "__main__":
