@@ -47,6 +47,7 @@ def build_hard_stack(cls, vocab_size, seq_length, tokens, transitions,
                               initializer=util.DoubleIdentityInitializer(FLAGS.init_range))
 
     if project_embeddings:
+        logger.Log("Adding a linear embedding projection layer.")
         embedding_projection_network = util.Linear
     else:
         embedding_projection_network = util.IdentityLayer
@@ -264,8 +265,8 @@ if __name__ == '__main__':
     # Data settings.
     gflags.DEFINE_string("training_data_path", None, "")
     gflags.DEFINE_string("eval_data_path", None, "")
-    gflags.DEFINE_integer("seq_length", 25, "")
-    gflags.DEFINE_integer("eval_seq_length", 29, "")
+    gflags.DEFINE_integer("seq_length", 30, "")
+    gflags.DEFINE_integer("eval_seq_length", 30, "")
 
     gflags.DEFINE_string("embedding_data_path", None,
                          "If set, load GloVe formatted embeddings from here.")
@@ -280,7 +281,7 @@ if __name__ == '__main__':
     # Optimization settings.
     gflags.DEFINE_integer("training_steps", 100000, "")
     gflags.DEFINE_integer("batch_size", 32, "")
-    gflags.DEFINE_float("learning_rate", 0.002, "Used in RMSProp.")
+    gflags.DEFINE_float("learning_rate", 0.001, "Used in RMSProp.")
     # gflags.DEFINE_float("momentum", 0.9, "")
     gflags.DEFINE_float("clipping_max_norm", 1.0, "")
     gflags.DEFINE_float("l2_lambda", 1e-5, "")

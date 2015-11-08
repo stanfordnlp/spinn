@@ -218,7 +218,7 @@ def TokensToIDs(vocabulary, dataset):
     return dataset
 
 
-def CropAndPad_example(example, left_padding, target_length, key, logger=None):
+def CropAndPadExample(example, left_padding, target_length, key, logger=None):
     """
     Crop/pad a sequence value of the given dict `example`.
     """
@@ -241,13 +241,13 @@ def CropAndPad(dataset, length, logger=None):
     # just introduce empty nodes into the tree.
     for example in dataset:
         transitions_left_padding = length - len(example["transitions"])
-        shifts_before_CropAndPad = example["transitions"].count(0)
-        CropAndPad_example(
+        shifts_before_crop_and_pad = example["transitions"].count(0)
+        CropAndPadExample(
             example, transitions_left_padding, length, "transitions", logger=logger)
-        shifts_after_CropAndPad = example["transitions"].count(0)
-        tokens_left_padding = shifts_after_CropAndPad - \
-            shifts_before_CropAndPad
-        CropAndPad_example(
+        shifts_after_crop_and_pad = example["transitions"].count(0)
+        tokens_left_padding = shifts_after_crop_and_pad - \
+            shifts_before_crop_and_pad
+        CropAndPadExample(
             example, tokens_left_padding, length, "tokens", logger=logger)
     return dataset
 
