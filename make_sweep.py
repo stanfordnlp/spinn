@@ -26,6 +26,7 @@ FIXED_PARAMETERS = {
     "seq_length":	"100",
     "eval_seq_length":	"150",
     "clipping_max_norm":  "5.0",
+    "batch_size":  "128",
 }
 
 # Tunable parameters.
