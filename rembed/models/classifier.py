@@ -28,7 +28,7 @@ FLAGS = gflags.FLAGS
 
 
 def build_hard_stack(cls, vocab_size, seq_length, tokens, transitions,
-                     num_classes, vs, initial_embeddings=None, project_embeddings=False):
+                     num_classes, apply_dropout, vs, initial_embeddings=None, project_embeddings=False):
     """
     Construct a classifier which makes use of some hard-stack model.
 
@@ -39,6 +39,7 @@ def build_hard_stack(cls, vocab_size, seq_length, tokens, transitions,
       tokens: Theano batch (integer matrix), `batch_size * seq_length`
       transitions: Theano batch (integer matrix), `batch_size * seq_length`
       num_classes: Number of output classes
+      apply_dropout: 1.0 at training time, 0.0 at eval time (to avoid corrupting outputs in dropout)
       vs: Variable store.
     """
 
@@ -60,11 +61,13 @@ def build_hard_stack(cls, vocab_size, seq_length, tokens, transitions,
     # Extract top element of final stack timestep.
     final_stack = stack.final_stack
     stack_top = final_stack[:, 0]
-    embeddings = stack_top.reshape((-1, FLAGS.embedding_dim))
+    sentence_vector = stack_top.reshape((-1, FLAGS.embedding_dim))
+
+    sentence_vector = util.Dropout(sentence_vector, FLAGS.semantic_classifier_keep_rate, apply_dropout)
 
     # Feed forward through a single output layer
     logits = util.Linear(
-        embeddings, FLAGS.embedding_dim, num_classes, vs, use_bias=True)
+        sentence_vector, FLAGS.embedding_dim, num_classes, vs, use_bias=True)
 
     return stack.transitions_pred, logits
 
@@ -180,6 +183,7 @@ def train():
     transitions = T.imatrix("transitions")
     y = T.vector("y", dtype="int32")
     lr = T.scalar("lr")
+    apply_dropout = T.scalar("apply_dropout")  # 1: Training with dropout, 0: Eval
 
     logger.Log("Building model.")
     vs = util.VariableStore(
@@ -187,7 +191,8 @@ def train():
     model_cls = getattr(rembed.stack, FLAGS.model_type)
     actions, logits = build_hard_stack(
         model_cls, len(vocabulary), FLAGS.seq_length,
-        X, transitions, len(data_manager.LABEL_MAP), vs, initial_embeddings=initial_embeddings, project_embeddings=(not train_embeddings))
+        X, transitions, len(data_manager.LABEL_MAP), apply_dropout, vs, 
+        initial_embeddings=initial_embeddings, project_embeddings=(not train_embeddings))
 
     xent_cost, acc = build_cost(logits, y)
 
@@ -221,16 +226,16 @@ def train():
     #     util.embedding_SGD(total_cost, embedding_params, embedding_lr))
 
     update_fn = theano.function(
-        [X, transitions, y, lr],
+        [X, transitions, y, lr, apply_dropout],
         [total_cost, xent_cost, action_cost, action_acc, l2_cost, acc],
         updates=new_values)
-    eval_fn = theano.function([X, transitions, y], [acc, action_acc])
+    eval_fn = theano.function([X, transitions, y, apply_dropout], [acc, action_acc])
 
     # Main training loop.
     for step in range(FLAGS.training_steps):
         X_batch, transitions_batch, y_batch = training_data_iter.next()
         ret = update_fn(X_batch, transitions_batch, y_batch,
-                        FLAGS.learning_rate)
+                        FLAGS.learning_rate, 1.0)
         total_cost_val, xent_cost_val, action_cost_val, action_acc_val, l2_cost_val, acc_val = ret
 
         if step % FLAGS.statistics_interval_steps == 0:
@@ -248,7 +253,7 @@ def train():
                 for (eval_X_batch, eval_transitions_batch, eval_y_batch) in eval_set[1]:
                     acc_value, action_acc_value = eval_fn(
                         eval_X_batch, eval_transitions_batch,
-                        eval_y_batch)
+                        eval_y_batch, 0.0)
                     acc_accum += acc_value
                     action_acc_accum += action_acc_value
                     eval_batches += 1.0
@@ -276,6 +281,8 @@ if __name__ == '__main__':
                        ["Model0", "Model1", "Model2"],
                        "")
     gflags.DEFINE_integer("embedding_dim", 5, "")
+    gflags.DEFINE_float("semantic_classifier_keep_rate", 0.5, 
+        "Used for dropout in the semantic task classifier.")
     # gflags.DEFINE_integer("num_composition_layers", 1, "")
 
     # Optimization settings.

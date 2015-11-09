@@ -6,6 +6,9 @@ import numpy as np
 import theano
 from theano import tensor as T
 
+numpy_random = np.random.RandomState(1234)
+theano_random = T.shared_randomstreams.RandomStreams(numpy_random.randint(999999))
+
 # With loaded embedding matrix, the padding vector will be initialized to zero
 # and will not be trained. Hopefully this isn't a problem. It seems better than
 # random initialization...
@@ -82,6 +85,27 @@ def Linear(inp, inp_dim, outp_dim, vs, name="linear_layer", use_bias=True, initi
         outp += b
 
     return outp
+
+
+def Dropout(inp, keep_rate, apply_dropout):
+    """Apply dropout to a set of activations.
+
+    Args:
+      inp: Input vector.
+      keep_rate: Dropout parameter. 1.0 entails no dropout.
+      apply_dropout: A Theano scalar indicating whether to apply dropout (1.0)
+        or eval-mode rescaling (0.0).
+    """
+    # TODO(SB): Investigate whether a Theano conditional would be faster than the linear combination below.
+
+    dropout_mask = theano_random.binomial(n=1, p=keep_rate, size=inp.shape, dtype=theano.config.floatX)
+
+    dropout_candidate = dropout_mask * inp 
+    rescaling_candidate = keep_rate * inp
+    result = apply_dropout * dropout_candidate + (1 - apply_dropout) * rescaling_candidate
+
+    return result
+
 
 
 def IdentityLayer(inp, inp_dim, outp_dim, vs, name="identity_layer", use_bias=True, initializer=None):
