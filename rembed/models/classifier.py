@@ -135,9 +135,10 @@ def train():
 
     # Load the eval data.
     raw_eval_sets = []
-    for eval_filename in FLAGS.eval_data_path.split(":"):
-        eval_data, _ = data_manager.load_data(eval_filename)
-        raw_eval_sets.append((eval_filename, eval_data))
+    if FLAGS.eval_data_path:
+        for eval_filename in FLAGS.eval_data_path.split(":"):
+            eval_data, _ = data_manager.load_data(eval_filename)
+            raw_eval_sets.append((eval_filename, eval_data))
 
     # Prepare the vocabulary.
     if not vocabulary:
