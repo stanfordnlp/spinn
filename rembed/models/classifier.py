@@ -55,8 +55,11 @@ def build_hard_stack(cls, vocab_size, seq_length, tokens, transitions,
     # Build hard stack which scans over input sequence.
     stack = cls(
         FLAGS.embedding_dim, vocab_size, seq_length,
-        compose_network, embedding_projection_network, vs, X=tokens, transitions=transitions, 
-        initial_embeddings=initial_embeddings)
+        compose_network, embedding_projection_network, apply_dropout, vs, 
+        X=tokens, 
+        transitions=transitions, 
+        initial_embeddings=initial_embeddings, 
+        embedding_dropout_keep_rate=FLAGS.embedding_keep_rate)
 
     # Extract top element of final stack timestep.
     final_stack = stack.final_stack
@@ -197,7 +200,6 @@ def train():
     xent_cost, acc = build_cost(logits, y)
 
     # Set up L2 regularization.
-    # TODO(SB): Don't naively L2ify the embedding matrix. It'll break on NL.
     l2_cost = 0.0
     for var in vs.vars:
         if "embedding" not in var:
@@ -283,6 +285,8 @@ if __name__ == '__main__':
     gflags.DEFINE_integer("embedding_dim", 5, "")
     gflags.DEFINE_float("semantic_classifier_keep_rate", 0.5, 
         "Used for dropout in the semantic task classifier.")
+    gflags.DEFINE_float("embedding_keep_rate", 0.5, 
+        "Used for dropout on transformed embeddings.")
     # gflags.DEFINE_integer("num_composition_layers", 1, "")
 
     # Optimization settings.

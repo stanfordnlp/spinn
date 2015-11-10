@@ -5,7 +5,7 @@ import theano
 from theano import tensor as T
 
 from rembed.stack import HardStack
-from rembed.util import VariableStore, crop_and_pad
+from rembed.util import VariableStore, CropAndPad, IdentityLayer
 
 
 class HardStackTestCase(unittest.TestCase):
@@ -24,10 +24,11 @@ class HardStackTestCase(unittest.TestCase):
 
         X = T.imatrix("X")
         transitions = T.imatrix("transitions")
+        apply_dropout = T.scalar("apply_dropout")
         vs = VariableStore()
         self.stack = HardStack(
             embedding_dim, vocab_size, seq_length, compose_network,
-            vs,
+            IdentityLayer, apply_dropout, vs,
             X=X, transitions=transitions)
 
         # Swap in our own dummy embeddings and weights.
@@ -60,7 +61,7 @@ class HardStackTestCase(unittest.TestCase):
                               [0, 0, 0],
                               [0, 0, 0]]])
 
-        ret = self.stack.scan_fn(X, transitions)
+        ret = self.stack.scan_fn(X, transitions, 1.0)
         np.testing.assert_almost_equal(ret, expected)
 
     def test_with_cropped_data(self):
@@ -82,7 +83,7 @@ class HardStackTestCase(unittest.TestCase):
         seq_length = 5
         self._make_stack(seq_length)
 
-        dataset = crop_and_pad(dataset, seq_length)
+        dataset = CropAndPad(dataset, seq_length)
         X = np.array([example["tokens"] for example in dataset],
                      dtype=np.int32)
         transitions = np.array([example["transitions"] for example in dataset],
@@ -103,7 +104,7 @@ class HardStackTestCase(unittest.TestCase):
                               [0, 0, 0],
                               [0, 0, 0]]])
 
-        ret = self.stack.scan_fn(X, transitions)
+        ret = self.stack.scan_fn(X, transitions, 1.0)
         np.testing.assert_almost_equal(ret, expected)
 
 if __name__ == '__main__':

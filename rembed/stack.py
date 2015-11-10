@@ -60,8 +60,9 @@ class HardStack(object):
     """
 
     def __init__(self, embedding_dim, vocab_size, seq_length, compose_network,
-                 embedding_projection_network, vs, predict_network=None, 
-                 use_predictions=False, X=None, transitions=None, initial_embeddings=None):
+                 embedding_projection_network, apply_dropout, vs, predict_network=None, 
+                 use_predictions=False, X=None, transitions=None, initial_embeddings=None,
+                 embedding_dropout_keep_rate=1.0):
         """
         Construct a HardStack.
 
@@ -75,6 +76,9 @@ class HardStack(object):
               Given a Theano batch `inp` of dimension `batch_size * inp_dim`,
               returns a transformed Theano batch of dimension
               `batch_size * outp_dim`.
+            embedding_projection_network: Same form as `compose_network`.
+            apply_dropout: A Theano scalar indicating whether to apply dropout (1.0)
+              or eval-mode rescaling (0.0).
             vs: VariableStore instance for parameter storage
             predict_network: Blocks-like function which maps values
               `3 * embedding_dim` to `action_dim`
@@ -85,6 +89,8 @@ class HardStack(object):
               this instance will make its own batch variable).
             transitions: Theano batch describing transition matrix, or `None`
               (in which case this instance will make its own batch variable).
+            embedding_dropout_keep_rate: The keep rate for dropout on projected 
+              embeddings.
         """
 
         self.embedding_dim = embedding_dim
@@ -100,6 +106,9 @@ class HardStack(object):
 
         self.initial_embeddings = initial_embeddings
 
+        self.apply_dropout = apply_dropout
+        self.embedding_dropout_keep_rate = embedding_dropout_keep_rate
+
         self.X = X
         self.transitions = transitions
 
@@ -107,7 +116,7 @@ class HardStack(object):
         self._make_inputs()
         self._make_scan()
 
-        self.scan_fn = theano.function([self.X, self.transitions],
+        self.scan_fn = theano.function([self.X, self.transitions, self.apply_dropout],
                                        self.final_stack)
 
     def _make_params(self):
@@ -145,6 +154,8 @@ class HardStack(object):
         # and maintain a cursor in this buffer.
         buffer_t = self._embedding_projection_network(
             raw_embeddings, self.embedding_dim, self.embedding_dim, self._vs, name="project")
+        buffer_t = util.Dropout(buffer_t, self.embedding_dropout_keep_rate, self.apply_dropout)
+
         buffer_cur_init = T.zeros((batch_size,), dtype="int")
 
         # TODO(jgauthier): Implement linear memory (was in previous HardStack;
