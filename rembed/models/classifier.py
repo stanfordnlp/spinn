@@ -45,7 +45,7 @@ def build_hard_stack(cls, vocab_size, seq_length, tokens, transitions,
 
     # Prepare layer which performs stack element composition.
     compose_network = partial(util.ReLULayer,
-                              initializer=util.DoubleIdentityInitializer(FLAGS.init_range))
+                              initializer=util.DoubleIdentityInitializer(FLAGS.double_identity_init_range))
 
     if project_embeddings:
         embedding_projection_network = util.Linear
@@ -297,6 +297,7 @@ if __name__ == '__main__':
     gflags.DEFINE_float("clipping_max_norm", 1.0, "")
     gflags.DEFINE_float("l2_lambda", 1e-5, "")
     gflags.DEFINE_float("init_range", 0.01, "")
+    gflags.DEFINE_float("double_identity_init_range", 0.001, "")
 
     # Display settings.
     gflags.DEFINE_integer("statistics_interval_steps", 50, "")

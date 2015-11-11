@@ -34,6 +34,7 @@ SWEEP_PARAMETERS = {
     "learning_rate":      (EXP, 0.00005, 0.0005),
     "l2_lambda":   		  (EXP, 1e-7, 1e-4),
     "init_range":         (EXP, 0.001, 0.005),
+    "double_identity_init_range": (EXP, 0.0001, 0.005),
     "semantic_classifier_keep_rate": (LIN, 0.5, 1.0),
     "embedding_keep_rate": (LIN, 0.5, 1.0)
 }
