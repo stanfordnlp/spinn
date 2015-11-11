@@ -50,11 +50,13 @@ def build_hard_stack(cls, vocab_size, seq_length, tokens, transitions,
     if project_embeddings:
         embedding_projection_network = util.Linear
     else:
+        assert (FLAGS.word_embedding_dim == FLAGS.model_dim, 
+            "word_embedding_dim must equal model_dim unless a projection layer is used.")
         embedding_projection_network = util.IdentityLayer
 
     # Build hard stack which scans over input sequence.
     stack = cls(
-        FLAGS.model_dim, vocab_size, seq_length,
+        FLAGS.model_dim, FLAGS.word_embedding_dim, vocab_size, seq_length,
         compose_network, embedding_projection_network, apply_dropout, vs, 
         X=tokens, 
         transitions=transitions, 
@@ -161,7 +163,7 @@ def train():
         logger.Log("Loading vocabulary with " + str(len(vocabulary))
                    + " words from " + FLAGS.embedding_data_path)
         initial_embeddings = util.LoadEmbeddingsFromASCII(
-            vocabulary, FLAGS.model_dim, FLAGS.embedding_data_path)
+            vocabulary, FLAGS.word_embedding_dim, FLAGS.embedding_data_path)
     else:
         initial_embeddings = None
 
@@ -283,6 +285,7 @@ if __name__ == '__main__':
                        ["Model0", "Model1", "Model2"],
                        "")
     gflags.DEFINE_integer("model_dim", 5, "")
+    gflags.DEFINE_integer("word_embedding_dim", 5, "")
     gflags.DEFINE_float("semantic_classifier_keep_rate", 0.5, 
         "Used for dropout in the semantic task classifier.")
     gflags.DEFINE_float("embedding_keep_rate", 0.5, 

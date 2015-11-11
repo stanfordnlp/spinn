@@ -59,7 +59,7 @@ class HardStack(object):
     Model 2: predict_network=something, use_predictions=True
     """
 
-    def __init__(self, model_dim, vocab_size, seq_length, compose_network,
+    def __init__(self, model_dim, word_embedding_dim, vocab_size, seq_length, compose_network,
                  embedding_projection_network, apply_dropout, vs, predict_network=None, 
                  use_predictions=False, X=None, transitions=None, initial_embeddings=None,
                  embedding_dropout_keep_rate=1.0):
@@ -94,6 +94,7 @@ class HardStack(object):
         """
 
         self.model_dim = model_dim
+        self.word_embedding_dim = word_embedding_dim
         self.vocab_size = vocab_size
         self.seq_length = seq_length
 
@@ -125,10 +126,10 @@ class HardStack(object):
             def EmbeddingInitializer(shape):
                 return self.initial_embeddings
             self.embeddings = self._vs.add_param(
-                "embeddings", (self.vocab_size, self.model_dim), initializer=EmbeddingInitializer)
+                "embeddings", (self.vocab_size, self.word_embedding_dim), initializer=EmbeddingInitializer)
         else:
             self.embeddings = self._vs.add_param(
-                "embeddings", (self.vocab_size, self.model_dim))
+                "embeddings", (self.vocab_size, self.word_embedding_dim))
 
     def _make_inputs(self):
         self.X = self.X or T.imatrix("X")
@@ -153,7 +154,7 @@ class HardStack(object):
         # Allocate a "buffer" stack initialized with projected embeddings,
         # and maintain a cursor in this buffer.
         buffer_t = self._embedding_projection_network(
-            raw_embeddings, self.model_dim, self.model_dim, self._vs, name="project")
+            raw_embeddings, self.word_embedding_dim, self.model_dim, self._vs, name="project")
         buffer_t = util.Dropout(buffer_t, self.embedding_dropout_keep_rate, self.apply_dropout)
 
         buffer_cur_init = T.zeros((batch_size,), dtype="int")
