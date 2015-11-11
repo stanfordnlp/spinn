@@ -46,7 +46,6 @@ def update_hard_stack(stack_t, stack_cur_t, stack_pushed, stack_merged,
     mask = mask.dimshuffle(0, "x", "x")
     mask = T.cast(mask, dtype=theano.config.floatX)
     stack_next = mask * stack_merged + (1. - mask) * stack_pushed
-    stack_next = theano.printing.Print("stack_next")(stack_next)
 
     return stack_next
 
@@ -212,7 +211,6 @@ class HardStack(object):
             # after pushing (mask = 0).)
             stack_cur_next = stack_cur_t + mask * -2 + 1
             stack_cur_next = T.maximum(0, stack_cur_next)
-            stack_cur_next = theano.printing.Print("stack_cur_next")(stack_cur_next)
 
             # Move buffer cursor as necessary. Since mask == 1 when merge, we
             # should increment each buffer cursor by 1 - mask
