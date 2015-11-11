@@ -1,14 +1,15 @@
 """Theano-based stack implementations."""
 
 
+import numpy as np
 import theano
 from theano import tensor as T
 
 from rembed import util
 
 
-def update_hard_stack(stack_t, stack_pushed, stack_merged, push_value,
-                      merge_value, mask):
+def update_hard_stack(stack_t, stack_cur_t, stack_pushed, stack_merged,
+                      push_value, merge_value, mask):
     """Compute the new value of the given hard stack.
 
     This performs stack pushes and pops in parallel, and somewhat wastefully.
@@ -25,21 +26,27 @@ def update_hard_stack(stack_t, stack_pushed, stack_merged, push_value,
         mask: Batch of booleans: 1 if merge, 0 if push
     """
 
+    batch_idxs = T.arange(stack_t.shape[0])
+
+    # TODO(jgauthier): how to tell set_subtensor to write updated value into
+    # existing helper memory stack_merged, stack_pushed? Something like numpy's
+    # `out` kwarg.
+
     # Build two copies of the stack batch: one where every stack has received
     # a push op, and one where every stack has received a merge op.
     #
     # Copy 1: Push.
-    stack_pushed = T.set_subtensor(stack_pushed[:, 0], push_value)
-    stack_pushed = T.set_subtensor(stack_pushed[:, 1:], stack_t[:, :-1])
+    stack_pushed = T.set_subtensor(stack_t[batch_idxs, stack_cur_t], push_value)
 
     # Copy 2: Merge.
-    stack_merged = T.set_subtensor(stack_merged[:, 0], merge_value)
-    stack_merged = T.set_subtensor(stack_merged[:, 1:-1], stack_t[:, 2:])
+    stack_merged = T.set_subtensor(stack_t[batch_idxs, stack_cur_t - 2], merge_value)
+    stack_merged = T.set_subtensor(stack_merged[batch_idxs, stack_cur_t - 1], 0.0)
 
     # Make sure mask broadcasts over all dimensions after the first.
     mask = mask.dimshuffle(0, "x", "x")
     mask = T.cast(mask, dtype=theano.config.floatX)
     stack_next = mask * stack_merged + (1. - mask) * stack_pushed
+    stack_next = theano.printing.Print("stack_next")(stack_next)
 
     return stack_next
 
@@ -60,7 +67,7 @@ class HardStack(object):
     """
 
     def __init__(self, embedding_dim, vocab_size, seq_length, compose_network,
-                 embedding_projection_network, apply_dropout, vs, predict_network=None, 
+                 embedding_projection_network, apply_dropout, vs, predict_network=None,
                  use_predictions=False, X=None, transitions=None, initial_embeddings=None,
                  embedding_dropout_keep_rate=1.0):
         """
@@ -89,7 +96,7 @@ class HardStack(object):
               this instance will make its own batch variable).
             transitions: Theano batch describing transition matrix, or `None`
               (in which case this instance will make its own batch variable).
-            embedding_dropout_keep_rate: The keep rate for dropout on projected 
+            embedding_dropout_keep_rate: The keep rate for dropout on projected
               embeddings.
         """
 
@@ -147,6 +154,11 @@ class HardStack(object):
         stack_pushed = T.zeros(stack_shape)
         stack_merged = T.zeros(stack_shape)
 
+        # Maintain a stack cursor for each example. The stack cursor points to
+        # the next push location on the stack (i.e., the first empty element at
+        # the top of the stack.)
+        stack_cur_init = T.zeros((batch_size,), dtype="int")
+
         # Look up all of the embeddings that will be used.
         raw_embeddings = self.embeddings[self.X]  # batch_size * seq_length * emb_dim
 
@@ -161,7 +173,7 @@ class HardStack(object):
         # TODO(jgauthier): Implement linear memory (was in previous HardStack;
         # dropped it during a refactor)
 
-        def step(transitions_t, stack_t, buffer_cur_t, stack_pushed,
+        def step(transitions_t, stack_t, stack_cur_t, buffer_cur_t, stack_pushed,
                  stack_merged, buffer):
             # Extract top buffer values.
             buffer_top_t = buffer_t[T.arange(batch_size), buffer_cur_t]
@@ -182,24 +194,34 @@ class HardStack(object):
                 mask = transitions_t
 
             # Now update the stack: first precompute merge results.
-            merge_items = stack_t[:, :2].reshape((-1, self.embedding_dim * 2))
+            stack_idxs = T.repeat(stack_cur_t[:, np.newaxis], 2, axis=1) + [-1, -2]
+            stack_idxs = stack_idxs.flatten()
+            batch_idxs = T.repeat(T.arange(batch_size), 2)
+            merge_items = stack_t[batch_idxs, stack_idxs]
+            merge_items = merge_items.reshape((-1, self.embedding_dim * 2))
             merge_value = self._compose_network(
                 merge_items, self.embedding_dim * 2, self.embedding_dim,
                 self._vs, name="compose")
 
             # Compute new stack value.
             stack_next = update_hard_stack(
-                stack_t, stack_pushed, stack_merged, buffer_top_t,
+                stack_t, stack_cur_t, stack_pushed, stack_merged, buffer_top_t,
                 merge_value, mask)
+
+            # Move stack cursor. (Shift -1 after merging (mask = 1); shift +1
+            # after pushing (mask = 0).)
+            stack_cur_next = stack_cur_t + mask * -2 + 1
+            stack_cur_next = T.maximum(0, stack_cur_next)
+            stack_cur_next = theano.printing.Print("stack_cur_next")(stack_cur_next)
 
             # Move buffer cursor as necessary. Since mask == 1 when merge, we
             # should increment each buffer cursor by 1 - mask
             buffer_cur_next = buffer_cur_t + (1 - mask)
 
             if self._predict_network is not None:
-                return stack_next, actions_t, buffer_cur_next
+                return stack_next, actions_t, stack_cur_next, buffer_cur_next
             else:
-                return stack_next, buffer_cur_next
+                return stack_next, stack_cur_next, buffer_cur_next
 
         # Dimshuffle inputs to seq_len * batch_size for scanning
         transitions = self.transitions.dimshuffle(1, 0)
@@ -207,9 +229,9 @@ class HardStack(object):
         # If we have a prediction network, we need an extra outputs_info
         # element (the `None`) to carry along prediction values
         if self._predict_network is not None:
-            outputs_info = [stack_init, None, buffer_cur_init]
+            outputs_info = [stack_init, None, stack_cur_init, buffer_cur_init]
         else:
-            outputs_info = [stack_init, buffer_cur_init]
+            outputs_info = [stack_init, stack_cur_init, buffer_cur_init]
 
         scan_ret = theano.scan(
             step, transitions,

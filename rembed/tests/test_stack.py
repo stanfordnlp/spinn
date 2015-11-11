@@ -52,12 +52,12 @@ class HardStackTestCase(unittest.TestCase):
             [0, 0, 1, 0]
         ], dtype=np.int32)
 
-        expected = np.array([[[0, 0, 0],
-                              [2, 2, 2],
+        expected = np.array([[[3, 3, 3],
                               [1, 1, 1],
-                              [3, 3, 3]],
-                             [[4, 4, 4],
-                              [5, 5, 5],
+                              [2, 2, 2],
+                              [0, 0, 0]],
+                             [[5, 5, 5],
+                              [4, 4, 4],
                               [0, 0, 0],
                               [0, 0, 0]]])
 
