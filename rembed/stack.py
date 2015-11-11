@@ -1,14 +1,16 @@
 """Theano-based stack implementations."""
 
 
+import numpy as np
 import theano
+from theano.ifelse import ifelse
 from theano import tensor as T
 
 from rembed import util
 
 
-def update_hard_stack(stack_t, stack_pushed, stack_merged, push_value,
-                      merge_value, mask):
+def update_hard_stack(stack_t, cursor_t, stack_pushed, stack_merged,
+                      push_value, merge_value, mask):
     """Compute the new value of the given hard stack.
 
     This performs stack pushes and pops in parallel, and somewhat wastefully.
@@ -25,23 +27,32 @@ def update_hard_stack(stack_t, stack_pushed, stack_merged, push_value,
         mask: Batch of booleans: 1 if merge, 0 if push
     """
 
+    # TODO push to top, not bottom
+
     # Build two copies of the stack batch: one where every stack has received
     # a push op, and one where every stack has received a merge op.
     #
     # Copy 1: Push.
-    stack_pushed = T.set_subtensor(stack_pushed[:, 0], push_value)
-    stack_pushed = T.set_subtensor(stack_pushed[:, 1:], stack_t[:, :-1])
+    stack_pushed = T.set_subtensor(stack_pushed[cursor_t], push_value)
+    pushed_cursor = cursor_t + 1
 
     # Copy 2: Merge.
-    stack_merged = T.set_subtensor(stack_merged[:, 0], merge_value)
-    stack_merged = T.set_subtensor(stack_merged[:, 1:-1], stack_t[:, 2:])
+    stack_merged = T.set_subtensor(stack_merged[cursor_t - 1], 0.)
+    stack_merged = T.set_subtensor(stack_merged[cursor_t - 2], merge_value)
+    merged_cursor = cursor_t - 1
 
-    # Make sure mask broadcasts over all dimensions after the first.
-    mask = mask.dimshuffle(0, "x", "x")
-    mask = T.cast(mask, dtype=theano.config.floatX)
-    stack_next = mask * stack_merged + (1. - mask) * stack_pushed
+    print stack_merged.dtype, stack_pushed.dtype
+    print "values", push_value.dtype, merge_value.dtype
+    stack_next = ifelse(mask, stack_merged, stack_pushed)
+    print "now stack", stack_next.dtype
+    print "cursors", merged_cursor.dtype, pushed_cursor.dtype
+    cursor_next = ifelse(mask, merged_cursor, pushed_cursor)
+    print "new cursor", cursor_next.dtype
 
-    return stack_next
+    # Guard against negative cursor values (bad transition predictions).
+    cursor_next = T.maximum(0, cursor_next)
+
+    return stack_next, cursor_next
 
 
 class HardStack(object):
@@ -59,8 +70,8 @@ class HardStack(object):
     Model 2: predict_network=something, use_predictions=True
     """
 
-    def __init__(self, embedding_dim, vocab_size, seq_length, compose_network,
-                 embedding_projection_network, vs, predict_network=None, 
+    def __init__(self, embedding_dim, vocab_size, batch_size, seq_length, compose_network,
+                 embedding_projection_network, vs, predict_network=None,
                  use_predictions=False, X=None, transitions=None, initial_embeddings=None):
         """
         Construct a HardStack.
@@ -89,6 +100,7 @@ class HardStack(object):
 
         self.embedding_dim = embedding_dim
         self.vocab_size = vocab_size
+        self.batch_size = batch_size
         self.seq_length = seq_length
 
         self._compose_network = compose_network
@@ -107,8 +119,8 @@ class HardStack(object):
         self._make_inputs()
         self._make_scan()
 
-        self.scan_fn = theano.function([self.X, self.transitions],
-                                       self.final_stack)
+        # self.scan_fn = theano.function([self.X, self.transitions],
+        #                                self.final_stack)
 
     def _make_params(self):
         # Per-token embeddings.
@@ -122,38 +134,41 @@ class HardStack(object):
                 "embeddings", (self.vocab_size, self.embedding_dim))
 
     def _make_inputs(self):
-        self.X = self.X or T.imatrix("X")
-        self.transitions = self.transitions or T.imatrix("transitions")
+        self.X = self.X or T.ivector("X")
+        self.transitions = self.transitions or T.ivector("transitions")
+
+        # Stack helpers
+        stack_shape = (self.batch_size, self.seq_length, self.embedding_dim)
+        self.stack_init = theano.shared(np.zeros(stack_shape, dtype=theano.config.floatX), name="stack")
+        self.stack_pushed = theano.shared(np.zeros(stack_shape, dtype=theano.config.floatX), name="stack_pushed")
+        self.stack_merged = theano.shared(np.zeros(stack_shape, dtype=theano.config.floatX), name="stack_merged")
+        self.stack_i = T.iscalar("stack_i")
 
     def _make_scan(self):
         """Build the sequential composition / scan graph."""
 
-        batch_size, max_stack_size = self.X.shape
-
-        # Stack batch is a 3D tensor.
-        stack_shape = (batch_size, max_stack_size, self.embedding_dim)
-        stack_init = T.zeros(stack_shape)
-
-        # Allocate two helper stack copies (passed as non_seqs into scan).
-        stack_pushed = T.zeros(stack_shape)
-        stack_merged = T.zeros(stack_shape)
+        batch_size = 1
+        max_stack_size = self.X.shape[0]
 
         # Look up all of the embeddings that will be used.
         raw_embeddings = self.embeddings[self.X]  # batch_size * seq_length * emb_dim
+
+        cursor_init = T.zeros([], dtype="int")
 
         # Allocate a "buffer" stack initialized with projected embeddings,
         # and maintain a cursor in this buffer.
         buffer_t = self._embedding_projection_network(
             raw_embeddings, self.embedding_dim, self.embedding_dim, self._vs, name="project")
-        buffer_cur_init = T.zeros((batch_size,), dtype="int")
+        buffer_cur_init = T.zeros([], dtype="int")
 
         # TODO(jgauthier): Implement linear memory (was in previous HardStack;
         # dropped it during a refactor)
 
-        def step(transitions_t, stack_t, buffer_cur_t, stack_pushed,
+        def step(transitions_t, stack_t, cursor_t, buffer_cur_t, stack_pushed,
                  stack_merged, buffer):
             # Extract top buffer values.
-            buffer_top_t = buffer_t[T.arange(batch_size), buffer_cur_t]
+            buffer_top_t = buffer_t[buffer_cur_t]
+            print buffer_top_t.ndim
 
             if self._predict_network is not None:
                 # We are predicting our own stack operations.
@@ -171,14 +186,15 @@ class HardStack(object):
                 mask = transitions_t
 
             # Now update the stack: first precompute merge results.
-            merge_items = stack_t[:, :2].reshape((-1, self.embedding_dim * 2))
+            merge_items = stack_t[cursor_t - 2:cursor_t].reshape((1, self.embedding_dim * 2))
             merge_value = self._compose_network(
                 merge_items, self.embedding_dim * 2, self.embedding_dim,
                 self._vs, name="compose")
+            merge_value = merge_value.flatten()
 
             # Compute new stack value.
-            stack_next = update_hard_stack(
-                stack_t, stack_pushed, stack_merged, buffer_top_t,
+            stack_next, cursor_next = update_hard_stack(
+                stack_t, cursor_t, stack_pushed, stack_merged, buffer_top_t,
                 merge_value, mask)
 
             # Move buffer cursor as necessary. Since mask == 1 when merge, we
@@ -186,22 +202,26 @@ class HardStack(object):
             buffer_cur_next = buffer_cur_t + (1 - mask)
 
             if self._predict_network is not None:
-                return stack_next, actions_t, buffer_cur_next
+                return stack_next, cursor_next, actions_t, buffer_cur_next
             else:
-                return stack_next, buffer_cur_next
+                return stack_next, cursor_next, buffer_cur_next
 
-        # Dimshuffle inputs to seq_len * batch_size for scanning
-        transitions = self.transitions.dimshuffle(1, 0)
+        # stack_init = T.set_subtensor(self.stack_init[self.stack_i], 0)
+        # stack_pushed = T.set_subtensor(self.stack_pushed[self.stack_i], 0)
+        # stack_merged = T.set_subtensor(self.stack_merged[self.stack_i], 0)
+        stack_init = self.stack_init[self.stack_i] * 0.0
+        stack_pushed = self.stack_pushed[self.stack_i] * 0.0
+        stack_merged = self.stack_merged[self.stack_i] * 0.0
 
         # If we have a prediction network, we need an extra outputs_info
         # element (the `None`) to carry along prediction values
         if self._predict_network is not None:
-            outputs_info = [stack_init, None, buffer_cur_init]
+            outputs_info = [stack_init, cursor_init, None, buffer_cur_init]
         else:
-            outputs_info = [stack_init, buffer_cur_init]
+            outputs_info = [stack_init, cursor_init, buffer_cur_init]
 
         scan_ret = theano.scan(
-            step, transitions,
+            step, self.transitions,
             non_sequences=[stack_pushed, stack_merged, buffer_t],
             outputs_info=outputs_info)[0]
 

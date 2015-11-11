@@ -14,6 +14,7 @@ import pprint
 import sys
 
 import gflags
+import numpy as np
 from theano import tensor as T
 import theano
 
@@ -53,20 +54,22 @@ def build_hard_stack(cls, vocab_size, seq_length, tokens, transitions,
 
     # Build hard stack which scans over input sequence.
     stack = cls(
-        FLAGS.embedding_dim, vocab_size, seq_length,
-        compose_network, embedding_projection_network, vs, X=tokens, transitions=transitions, 
+        FLAGS.embedding_dim, vocab_size, FLAGS.batch_size, seq_length,
+        compose_network, embedding_projection_network, vs, X=tokens, transitions=transitions,
         initial_embeddings=initial_embeddings)
 
     # Extract top element of final stack timestep.
     final_stack = stack.final_stack
-    stack_top = final_stack[:, 0]
-    embeddings = stack_top.reshape((-1, FLAGS.embedding_dim))
+    stack_top = final_stack[0]
+    embeddings = stack_top.reshape((1, FLAGS.embedding_dim))
 
-    # Feed forward through a single output layer
-    logits = util.Linear(
-        embeddings, FLAGS.embedding_dim, num_classes, vs, use_bias=True)
+    return stack, stack.transitions_pred, embeddings
 
-    return stack.transitions_pred, logits
+
+def build_classifier(embeddings, num_classes, vs):
+    logits = util.Linear(embeddings, FLAGS.embedding_dim, num_classes,
+                         vs, use_bias=True)
+    return logits
 
 
 def build_cost(logits, targets):
@@ -176,8 +179,8 @@ def train():
     # TODO(SB): Make sure unk and padding get gradients or random inits.
 
     # Set up the placeholders.
-    X = T.matrix("X", dtype="int32")
-    transitions = T.imatrix("transitions")
+    X = T.ivector("X")
+    transitions = T.ivector("transitions")
     y = T.vector("y", dtype="int32")
     lr = T.scalar("lr")
 
@@ -185,11 +188,12 @@ def train():
     vs = util.VariableStore(
         default_initializer=util.UniformInitializer(FLAGS.init_range), logger=logger)
     model_cls = getattr(rembed.stack, FLAGS.model_type)
-    actions, logits = build_hard_stack(
+    stack, actions, embeddings = build_hard_stack(
         model_cls, len(vocabulary), FLAGS.seq_length,
         X, transitions, len(data_manager.LABEL_MAP), vs, initial_embeddings=initial_embeddings, project_embeddings=(not train_embeddings))
+    logits_i = build_classifier(embeddings, len(data_manager.LABEL_MAP), vs)
 
-    xent_cost, acc = build_cost(logits, y)
+    xent_cost, acc = build_cost(logits_i, y)
 
     # Set up L2 regularization.
     # TODO(SB): Don't naively L2ify the embedding matrix. It'll break on NL.
@@ -220,18 +224,44 @@ def train():
     # new_values.append(
     #     util.embedding_SGD(total_cost, embedding_params, embedding_lr))
 
+    # Allocate stack helpers
+    stack_shape = (FLAGS.seq_length, FLAGS.embedding_dim)
+    stack_helpers = []
+    for i in range(FLAGS.batch_size):
+        helpers_i = []
+        for stack_name in ["", "_push", "_merge"]:
+            helpers_i.append(theano.shared(np.zeros(stack_shape),
+                                           name="stack_%i%s" % (i, stack_name)))
+        stack_helpers.append(helpers_i)
+
     update_fn = theano.function(
-        [X, transitions, y, lr],
+        [X, transitions, y, lr, stack.stack_i],
         [total_cost, xent_cost, action_cost, action_acc, l2_cost, acc],
         updates=new_values)
-    eval_fn = theano.function([X, transitions, y], [acc, action_acc])
+#    eval_fn = theano.function([X, transitions, y], [acc, action_acc])
 
     # Main training loop.
     for step in range(FLAGS.training_steps):
         X_batch, transitions_batch, y_batch = training_data_iter.next()
-        ret = update_fn(X_batch, transitions_batch, y_batch,
-                        FLAGS.learning_rate)
-        total_cost_val, xent_cost_val, action_cost_val, action_acc_val, l2_cost_val, acc_val = ret
+        total_costs, xent_costs, action_costs, action_accs_val, l2_costs_val, accs_val = \
+            [], [], [], [], [], []
+        for i, (X_i, transitions_i, y_i) in enumerate(zip(X_batch, transitions_batch, y_batch)):
+            stack_helper, stack_push_helper, stack_merge_helper = stack_helpers[i]
+            ret = update_fn(X_i, transitions_i, [y_i], FLAGS.learning_rate, i)
+
+            total_costs.append(ret[0])
+            xent_costs.append(ret[1])
+            action_costs.append(ret[2])
+            action_accs_val.append(ret[3])
+            l2_costs_val.append(ret[4])
+            accs_val.append(ret[5])
+
+        total_cost_val = np.mean(total_costs)
+        xent_cost_val = np.mean(xent_costs)
+        action_cost_val = np.mean(action_costs)
+        action_acc_val = np.mean(action_accs_val)
+        l2_cost_val = np.mean(l2_costs_val)
+        acc_val = np.mean(accs_val)
 
         if step % FLAGS.statistics_interval_steps == 0:
             logger.Log(
@@ -239,21 +269,21 @@ def train():
                 % (step, acc_val, action_acc_val, total_cost_val, xent_cost_val, action_cost_val,
                    l2_cost_val))
 
-        if step % FLAGS.eval_interval_steps == 0:
-            for eval_set in eval_iterators:
-                # Evaluate
-                acc_accum = 0.0
-                action_acc_accum = 0.0
-                eval_batches = 0.0
-                for (eval_X_batch, eval_transitions_batch, eval_y_batch) in eval_set[1]:
-                    acc_value, action_acc_value = eval_fn(
-                        eval_X_batch, eval_transitions_batch,
-                        eval_y_batch)
-                    acc_accum += acc_value
-                    action_acc_accum += action_acc_value
-                    eval_batches += 1.0
-                logger.Log("Step: %i\tEval acc: %f\t %f\t%s" %
-                          (step, acc_accum / eval_batches, action_acc_accum / eval_batches, eval_set[0]))
+        # if step % FLAGS.eval_interval_steps == 0:
+        #     for eval_set in eval_iterators:
+        #         # Evaluate
+        #         acc_accum = 0.0
+        #         action_acc_accum = 0.0
+        #         eval_batches = 0.0
+        #         for (eval_X_batch, eval_transitions_batch, eval_y_batch) in eval_set[1]:
+        #             acc_value, action_acc_value = eval_fn(
+        #                 eval_X_batch, eval_transitions_batch,
+        #                 eval_y_batch)
+        #             acc_accum += acc_value
+        #             action_acc_accum += action_acc_value
+        #             eval_batches += 1.0
+        #         logger.Log("Step: %i\tEval acc: %f\t %f\t%s" %
+        #                   (step, acc_accum / eval_batches, action_acc_accum / eval_batches, eval_set[0]))
 
 if __name__ == '__main__':
     # Experiment naming.
