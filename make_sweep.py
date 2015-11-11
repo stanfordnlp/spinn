@@ -21,8 +21,9 @@ FIXED_PARAMETERS = {
     "model_type":     "Model0",
     "training_data_path":    "sst-data/train_expanded.txt",
     "eval_data_path":    "sst-data/dev.txt:sst-data/train_sample.txt",
-    "embedding_data_path": "/scr/nlp/data/glove_vecs/glove.6B.50d.txt",
-    "embedding_dim":	"50",
+    "embedding_data_path": "/scr/nlp/data/glove_vecs/glove.840B.300d.txt",
+    "word_embedding_dim":	"300",
+    "model_dim":   "50",
     "seq_length":	"100",
     "eval_seq_length":	"150",
     "clipping_max_norm":  "5.0",
@@ -33,7 +34,7 @@ FIXED_PARAMETERS = {
 SWEEP_PARAMETERS = {
     "learning_rate":      (EXP, 0.00005, 0.0005),
     "l2_lambda":   		  (EXP, 1e-7, 1e-4),
-    "init_range":         (EXP, 0.001, 0.005),
+    "init_range":         (EXP, 0.0005, 0.005),
     "double_identity_init_range": (EXP, 0.0001, 0.005),
     "semantic_classifier_keep_rate": (LIN, 0.5, 1.0),
     "embedding_keep_rate": (LIN, 0.5, 1.0)

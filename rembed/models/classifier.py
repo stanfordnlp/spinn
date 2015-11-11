@@ -6,7 +6,8 @@ python -m rembed.models.classifier --training_data_path bl-data/pbl_train.tsv \
 
 SST sentiment (Demo only, model needs a full GloVe embeddings file to do well):
 python -m rembed.models.classifier --data_type sst --training_data_path sst-data/train.txt \
-       --eval_data_path sst-data/dev.txt --embedding_data_path rembed/tests/test_embedding_matrix.5d.txt
+       --eval_data_path sst-data/dev.txt --embedding_data_path rembed/tests/test_embedding_matrix.5d.txt \
+       --model_dim 10
 """
 
 from functools import partial
