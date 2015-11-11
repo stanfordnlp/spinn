@@ -54,7 +54,7 @@ def build_hard_stack(cls, vocab_size, seq_length, tokens, transitions,
 
     # Build hard stack which scans over input sequence.
     stack = cls(
-        FLAGS.embedding_dim, vocab_size, seq_length,
+        FLAGS.model_dim, vocab_size, seq_length,
         compose_network, embedding_projection_network, apply_dropout, vs, 
         X=tokens, 
         transitions=transitions, 
@@ -64,13 +64,13 @@ def build_hard_stack(cls, vocab_size, seq_length, tokens, transitions,
     # Extract top element of final stack timestep.
     final_stack = stack.final_stack
     stack_top = final_stack[:, 0]
-    sentence_vector = stack_top.reshape((-1, FLAGS.embedding_dim))
+    sentence_vector = stack_top.reshape((-1, FLAGS.model_dim))
 
     sentence_vector = util.Dropout(sentence_vector, FLAGS.semantic_classifier_keep_rate, apply_dropout)
 
     # Feed forward through a single output layer
     logits = util.Linear(
-        sentence_vector, FLAGS.embedding_dim, num_classes, vs, use_bias=True)
+        sentence_vector, FLAGS.model_dim, num_classes, vs, use_bias=True)
 
     return stack.transitions_pred, logits
 
@@ -161,7 +161,7 @@ def train():
         logger.Log("Loading vocabulary with " + str(len(vocabulary))
                    + " words from " + FLAGS.embedding_data_path)
         initial_embeddings = util.LoadEmbeddingsFromASCII(
-            vocabulary, FLAGS.embedding_dim, FLAGS.embedding_data_path)
+            vocabulary, FLAGS.model_dim, FLAGS.embedding_data_path)
     else:
         initial_embeddings = None
 
@@ -282,7 +282,7 @@ if __name__ == '__main__':
     gflags.DEFINE_enum("model_type", "Model0",
                        ["Model0", "Model1", "Model2"],
                        "")
-    gflags.DEFINE_integer("embedding_dim", 5, "")
+    gflags.DEFINE_integer("model_dim", 5, "")
     gflags.DEFINE_float("semantic_classifier_keep_rate", 0.5, 
         "Used for dropout in the semantic task classifier.")
     gflags.DEFINE_float("embedding_keep_rate", 0.5, 

@@ -59,7 +59,7 @@ class HardStack(object):
     Model 2: predict_network=something, use_predictions=True
     """
 
-    def __init__(self, embedding_dim, vocab_size, seq_length, compose_network,
+    def __init__(self, model_dim, vocab_size, seq_length, compose_network,
                  embedding_projection_network, apply_dropout, vs, predict_network=None, 
                  use_predictions=False, X=None, transitions=None, initial_embeddings=None,
                  embedding_dropout_keep_rate=1.0):
@@ -67,7 +67,7 @@ class HardStack(object):
         Construct a HardStack.
 
         Args:
-            embedding_dim: Dimensionality of token embeddings and stack values
+            model_dim: Dimensionality of token embeddings and stack values
             vocab_size: Number of unique tokens in vocabulary
             seq_length: Maximum sequence length which will be processed by this
               stack
@@ -81,7 +81,7 @@ class HardStack(object):
               or eval-mode rescaling (0.0).
             vs: VariableStore instance for parameter storage
             predict_network: Blocks-like function which maps values
-              `3 * embedding_dim` to `action_dim`
+              `3 * model_dim` to `action_dim`
             use_predictions: If `True`, use the predictions from the model
               (rather than the ground-truth `transitions`) to perform stack
               operations
@@ -93,7 +93,7 @@ class HardStack(object):
               embeddings.
         """
 
-        self.embedding_dim = embedding_dim
+        self.model_dim = model_dim
         self.vocab_size = vocab_size
         self.seq_length = seq_length
 
@@ -125,10 +125,10 @@ class HardStack(object):
             def EmbeddingInitializer(shape):
                 return self.initial_embeddings
             self.embeddings = self._vs.add_param(
-                "embeddings", (self.vocab_size, self.embedding_dim), initializer=EmbeddingInitializer)
+                "embeddings", (self.vocab_size, self.model_dim), initializer=EmbeddingInitializer)
         else:
             self.embeddings = self._vs.add_param(
-                "embeddings", (self.vocab_size, self.embedding_dim))
+                "embeddings", (self.vocab_size, self.model_dim))
 
     def _make_inputs(self):
         self.X = self.X or T.imatrix("X")
@@ -140,7 +140,7 @@ class HardStack(object):
         batch_size, max_stack_size = self.X.shape
 
         # Stack batch is a 3D tensor.
-        stack_shape = (batch_size, max_stack_size, self.embedding_dim)
+        stack_shape = (batch_size, max_stack_size, self.model_dim)
         stack_init = T.zeros(stack_shape)
 
         # Allocate two helper stack copies (passed as non_seqs into scan).
@@ -153,7 +153,7 @@ class HardStack(object):
         # Allocate a "buffer" stack initialized with projected embeddings,
         # and maintain a cursor in this buffer.
         buffer_t = self._embedding_projection_network(
-            raw_embeddings, self.embedding_dim, self.embedding_dim, self._vs, name="project")
+            raw_embeddings, self.model_dim, self.model_dim, self._vs, name="project")
         buffer_t = util.Dropout(buffer_t, self.embedding_dropout_keep_rate, self.apply_dropout)
 
         buffer_cur_init = T.zeros((batch_size,), dtype="int")
@@ -171,7 +171,7 @@ class HardStack(object):
                 predict_inp = T.concatenate(
                     [stack_t[:, 0], stack_t[:, 1], buffer_top_t], axis=1)
                 actions_t = self._predict_network(
-                    predict_inp, self.embedding_dim * 3, 2, self._vs,
+                    predict_inp, self.model_dim * 3, 2, self._vs,
                     name="predict_actions")
 
             if self.use_predictions:
@@ -182,9 +182,9 @@ class HardStack(object):
                 mask = transitions_t
 
             # Now update the stack: first precompute merge results.
-            merge_items = stack_t[:, :2].reshape((-1, self.embedding_dim * 2))
+            merge_items = stack_t[:, :2].reshape((-1, self.model_dim * 2))
             merge_value = self._compose_network(
-                merge_items, self.embedding_dim * 2, self.embedding_dim,
+                merge_items, self.model_dim * 2, self.model_dim,
                 self._vs, name="compose")
 
             # Compute new stack value.
