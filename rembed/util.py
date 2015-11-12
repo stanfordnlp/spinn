@@ -264,7 +264,8 @@ def CropAndPad(dataset, length, logger=None):
     # the final stack top is the root of the tree. If cropping is used, it should
     # just introduce empty nodes into the tree.
     for example in dataset:
-        transitions_left_padding = length - len(example["transitions"])
+        example["num_transitions"] = len(example["transitions"])
+        transitions_left_padding = length - example["num_transitions"]
         shifts_before_crop_and_pad = example["transitions"].count(0)
         CropAndPadExample(
             example, transitions_left_padding, length, "transitions", logger=logger)
@@ -326,7 +327,11 @@ def PreprocessDataset(dataset, vocabulary, seq_length, data_manager, eval_mode=F
     y = np.array(
         [data_manager.LABEL_MAP[example["label"]] for example in dataset],
         dtype=np.int32)
-    return X, transitions, y
+    num_transitions = np.array(
+        [example["num_transitions"] for example in dataset],
+        dtype=np.int32)
+
+    return X, transitions, y, num_transitions
 
 
 def BuildVocabulary(raw_training_data, raw_eval_sets, embedding_path, logger=None):

@@ -51,8 +51,8 @@ def build_hard_stack(cls, vocab_size, seq_length, tokens, transitions,
     if project_embeddings:
         embedding_projection_network = util.Linear
     else:
-        assert (FLAGS.word_embedding_dim == FLAGS.model_dim, 
-            "word_embedding_dim must equal model_dim unless a projection layer is used.")
+        assert FLAGS.word_embedding_dim == FLAGS.model_dim, \
+            "word_embedding_dim must equal model_dim unless a projection layer is used."
         embedding_projection_network = util.IdentityLayer
 
     # Build hard stack which scans over input sequence.
@@ -96,7 +96,7 @@ def build_cost(logits, targets):
     return cost, acc
 
 
-def build_action_cost(logits, targets):
+def build_action_cost(logits, targets, num_transitions):
     """
     Build a parse action prediction cost function.
     """
@@ -118,9 +118,20 @@ def build_action_cost(logits, targets):
     results, _ = theano.scan(cost_t, [logits, targets])
     costs, errors = results
 
-    # Take mean over both example- and timestep-dimensions
+    # Create a mask that selects only transitions that involve real data.
+    unrolling_length = T.shape(costs)[0]
+    padding = unrolling_length - num_transitions
+    padding = T.reshape(padding, (1, -1))
+    rng = T.arange(unrolling_length) + 1
+    rng = T.reshape(rng, (-1, 1))
+    mask = T.gt(rng, padding)
+
+    # Compute acc using the mask
+    acc = 1 - T.cast(T.sum(errors * mask), theano.config.floatX) / T.sum(num_transitions)
+
+    # Compute cost directly, since we *do* want a cost incentive to get the padding
+    # transitions right.
     cost = T.mean(costs)
-    acc = 1 - T.mean(errors)
     return cost, acc
 
 
@@ -177,10 +188,10 @@ def train():
 
     eval_iterators = []
     for filename, raw_eval_set in raw_eval_sets:
-        e_X, e_transitions, e_y = util.PreprocessDataset(
+        e_X, e_transitions, e_y, e_num_transitions = util.PreprocessDataset(
             raw_eval_set, vocabulary, FLAGS.seq_length, data_manager, eval_mode=True, logger=logger)
         eval_iterators.append((filename,
-            util.MakeEvalIterator((e_X, e_transitions, e_y), FLAGS.batch_size)))
+            util.MakeEvalIterator((e_X, e_transitions, e_y, e_num_transitions), FLAGS.batch_size)))
 
     # TODO(SB): Make sure unk and padding get gradients or random inits.
 
@@ -188,6 +199,7 @@ def train():
     X = T.matrix("X", dtype="int32")
     transitions = T.imatrix("transitions")
     y = T.vector("y", dtype="int32")
+    num_transitions = T.vector("num_transitions", dtype="int32")
     lr = T.scalar("lr")
     apply_dropout = T.scalar("apply_dropout")  # 1: Training with dropout, 0: Eval
 
@@ -210,7 +222,7 @@ def train():
 
     if actions is not None:
         # Compute cross-entropy cost on action predictions.
-        action_cost, action_acc = build_action_cost(actions, transitions)
+        action_cost, action_acc = build_action_cost(actions, transitions, num_transitions)
     else:
         action_cost = T.constant(0.0)
         action_acc = T.constant(0.0)
@@ -230,16 +242,21 @@ def train():
     # new_values.append(
     #     util.embedding_SGD(total_cost, embedding_params, embedding_lr))
 
+    # Create training and eval functions. 
+    # Unused variable warnings are supressed so that num_transitions can be passed in when training Model 0,
+    # which ignores it. This yields more readable code that is very slightly slower.
     update_fn = theano.function(
-        [X, transitions, y, lr, apply_dropout],
+        [X, transitions, y, num_transitions, lr, apply_dropout],
         [total_cost, xent_cost, action_cost, action_acc, l2_cost, acc],
-        updates=new_values)
-    eval_fn = theano.function([X, transitions, y, apply_dropout], [acc, action_acc])
+        updates=new_values,
+        on_unused_input='warn')
+    eval_fn = theano.function([X, transitions, y, num_transitions, apply_dropout], [acc, action_acc],
+        on_unused_input='warn')
 
     # Main training loop.
     for step in range(FLAGS.training_steps):
-        X_batch, transitions_batch, y_batch = training_data_iter.next()
-        ret = update_fn(X_batch, transitions_batch, y_batch,
+        X_batch, transitions_batch, y_batch, num_transitions_batch = training_data_iter.next()
+        ret = update_fn(X_batch, transitions_batch, y_batch, num_transitions_batch,
                         FLAGS.learning_rate, 1.0)
         total_cost_val, xent_cost_val, action_cost_val, action_acc_val, l2_cost_val, acc_val = ret
 
@@ -255,10 +272,10 @@ def train():
                 acc_accum = 0.0
                 action_acc_accum = 0.0
                 eval_batches = 0.0
-                for (eval_X_batch, eval_transitions_batch, eval_y_batch) in eval_set[1]:
+                for (eval_X_batch, eval_transitions_batch, eval_y_batch, eval_num_transitions_batch) in eval_set[1]:
                     acc_value, action_acc_value = eval_fn(
                         eval_X_batch, eval_transitions_batch,
-                        eval_y_batch, 0.0)
+                        eval_y_batch, eval_num_transitions_batch, 0.0)
                     acc_accum += acc_value
                     action_acc_accum += action_acc_value
                     eval_batches += 1.0
