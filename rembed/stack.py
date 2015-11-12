@@ -8,8 +8,7 @@ from theano import tensor as T
 from rembed import util
 
 
-def update_hard_stack(stack_t, stack_cur_t, stack_pushed, stack_merged,
-                      push_value, merge_value, mask):
+def update_hard_stack(stack_t, stack_cur_t, push_value, merge_value, mask):
     """Compute the new value of the given hard stack.
 
     This performs stack pushes and pops in parallel, and somewhat wastefully.
@@ -26,26 +25,34 @@ def update_hard_stack(stack_t, stack_cur_t, stack_pushed, stack_merged,
         mask: Batch of booleans: 1 if merge, 0 if push
     """
 
-    batch_idxs = T.arange(stack_t.shape[0])
+    embedding_dim = stack_t.shape[2]
 
-    # TODO(jgauthier): how to tell set_subtensor to write updated value into
-    # existing helper memory stack_merged, stack_pushed? Something like numpy's
-    # `out` kwarg.
+    # Extract "top three" for each example
+    batch_idxs = T.arange(stack_t.shape[0])[:, np.newaxis].repeat(3, axis=1)
+    batch_idxs = batch_idxs.flatten()
+    stack_idxs = stack_cur_t[:, np.newaxis].repeat(3, axis=1) + [-2, -1, 0]
+    stack_idxs = stack_idxs.flatten()
 
-    # Build two copies of the stack batch: one where every stack has received
-    # a push op, and one where every stack has received a merge op.
+    top_three = stack_t[batch_idxs, stack_idxs].reshape((-1, 3, embedding_dim))
+
+    # Build two copies of the top three: one where every stack has received a
+    # push op, and one where every stack has received a merge op.
     #
     # Copy 1: Push.
-    stack_pushed = T.set_subtensor(stack_t[batch_idxs, stack_cur_t], push_value)
+    top_pushed = T.set_subtensor(top_three[:, 2], push_value)
 
     # Copy 2: Merge.
-    stack_merged = T.set_subtensor(stack_t[batch_idxs, stack_cur_t - 2], merge_value)
-    stack_merged = T.set_subtensor(stack_merged[batch_idxs, stack_cur_t - 1], 0.0)
+    top_merged = T.set_subtensor(top_three[:, 0], merge_value)
+    top_merged = T.set_subtensor(top_merged[:, 1], 0.0)
 
     # Make sure mask broadcasts over all dimensions after the first.
     mask = mask.dimshuffle(0, "x", "x")
     mask = T.cast(mask, dtype=theano.config.floatX)
-    stack_next = mask * stack_merged + (1. - mask) * stack_pushed
+    top_three_next = mask * top_merged + (1. - mask) * top_pushed
+
+    stack_next = T.set_subtensor(stack_t[batch_idxs, stack_idxs],
+                                 top_three_next.reshape((-1, embedding_dim)))
+#    stack_next = theano.printing.Print("stack_next")(stack_next)
 
     return stack_next
 
@@ -149,10 +156,6 @@ class HardStack(object):
         stack_shape = (batch_size, max_stack_size, self.embedding_dim)
         stack_init = T.zeros(stack_shape)
 
-        # Allocate two helper stack copies (passed as non_seqs into scan).
-        stack_pushed = T.zeros(stack_shape)
-        stack_merged = T.zeros(stack_shape)
-
         # Maintain a stack cursor for each example. The stack cursor points to
         # the next push location on the stack (i.e., the first empty element at
         # the top of the stack.)
@@ -172,10 +175,13 @@ class HardStack(object):
         # TODO(jgauthier): Implement linear memory (was in previous HardStack;
         # dropped it during a refactor)
 
-        def step(transitions_t, stack_t, stack_cur_t, buffer_cur_t, stack_pushed,
-                 stack_merged, buffer):
+        # DEV
+        self._vs.add_param("compose_W", (self.embedding_dim * 2, self.embedding_dim))
+        self._vs.add_param("compose_b", (self.embedding_dim,), initializer=util.ZeroInitializer())
+
+        def step(transitions_t, stack_t, stack_cur_t, buffer_cur_t, buffer, *args):
             # Extract top buffer values.
-            buffer_top_t = buffer_t[T.arange(batch_size), buffer_cur_t]
+            buffer_top_t = buffer[T.arange(batch_size), buffer_cur_t]
 
             if self._predict_network is not None:
                 # We are predicting our own stack operations.
@@ -204,13 +210,13 @@ class HardStack(object):
 
             # Compute new stack value.
             stack_next = update_hard_stack(
-                stack_t, stack_cur_t, stack_pushed, stack_merged, buffer_top_t,
-                merge_value, mask)
+                stack_t, stack_cur_t, buffer_top_t, merge_value, mask)
 
             # Move stack cursor. (Shift -1 after merging (mask = 1); shift +1
             # after pushing (mask = 0).)
             stack_cur_next = stack_cur_t + mask * -2 + 1
             stack_cur_next = T.maximum(0, stack_cur_next)
+#            stack_cur_next = theano.printing.Print("stack_cur_next")(stack_cur_next)
 
             # Move buffer cursor as necessary. Since mask == 1 when merge, we
             # should increment each buffer cursor by 1 - mask
@@ -233,8 +239,8 @@ class HardStack(object):
 
         scan_ret = theano.scan(
             step, transitions,
-            non_sequences=[stack_pushed, stack_merged, buffer_t],
-            outputs_info=outputs_info)[0]
+            non_sequences=[buffer_t] + self._vs.vars.values(),
+            outputs_info=outputs_info, strict=True)[0]
 
         self.final_stack = scan_ret[0][-1]
 

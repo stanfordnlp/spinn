@@ -88,6 +88,7 @@ class HardStackTestCase(unittest.TestCase):
                      dtype=np.int32)
         transitions = np.array([example["transitions"] for example in dataset],
                                dtype=np.int32)
+        print transitions
         expected = np.array([[[8, 8, 8],
                               [0, 0, 0],
                               [0, 0, 0],
@@ -105,6 +106,7 @@ class HardStackTestCase(unittest.TestCase):
                               [0, 0, 0]]])
 
         ret = self.stack.scan_fn(X, transitions, 1.0)
+        print "ret", ret
         np.testing.assert_almost_equal(ret, expected)
 
 if __name__ == '__main__':
