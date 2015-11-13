@@ -27,7 +27,7 @@ class HardStackTestCase(unittest.TestCase):
         apply_dropout = T.scalar("apply_dropout")
         vs = VariableStore()
         self.stack = HardStack(
-            embedding_dim, vocab_size, seq_length, compose_network,
+            embedding_dim, embedding_dim, vocab_size, seq_length, compose_network,
             IdentityLayer, apply_dropout, vs,
             X=X, transitions=transitions)
 
