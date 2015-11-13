@@ -60,7 +60,7 @@ class HardStack(object):
     """
 
     def __init__(self, model_dim, word_embedding_dim, vocab_size, seq_length, compose_network,
-                 embedding_projection_network, apply_dropout, vs, predict_network=None, 
+                 embedding_projection_network, apply_dropout, vs, predict_network=None,
                  use_predictions=False, X=None, transitions=None, initial_embeddings=None,
                  embedding_dropout_keep_rate=1.0):
         """
@@ -89,7 +89,7 @@ class HardStack(object):
               this instance will make its own batch variable).
             transitions: Theano batch describing transition matrix, or `None`
               (in which case this instance will make its own batch variable).
-            embedding_dropout_keep_rate: The keep rate for dropout on projected 
+            embedding_dropout_keep_rate: The keep rate for dropout on projected
               embeddings.
         """
 
@@ -157,6 +157,9 @@ class HardStack(object):
             raw_embeddings, self.word_embedding_dim, self.model_dim, self._vs, name="project")
         buffer_t = util.Dropout(buffer_t, self.embedding_dropout_keep_rate, self.apply_dropout)
 
+        # Collapse buffer to (batch_size * buffer_size) * emb_dim for fast indexing.
+        buffer_t = buffer_t.reshape((-1, self.model_dim))
+
         buffer_cur_init = T.zeros((batch_size,), dtype="int")
 
         # TODO(jgauthier): Implement linear memory (was in previous HardStack;
@@ -165,7 +168,8 @@ class HardStack(object):
         def step(transitions_t, stack_t, buffer_cur_t, stack_pushed,
                  stack_merged, buffer):
             # Extract top buffer values.
-            buffer_top_t = buffer_t[T.arange(batch_size), buffer_cur_t]
+            idxs = buffer_cur_t + (T.arange(batch_size) * self.seq_length)
+            buffer_top_t = buffer[idxs]
 
             if self._predict_network is not None:
                 # We are predicting our own stack operations.
