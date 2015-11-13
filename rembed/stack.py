@@ -170,6 +170,9 @@ class HardStack(object):
             raw_embeddings, self.embedding_dim, self.embedding_dim, self._vs, name="project")
         buffer_t = util.Dropout(buffer_t, self.embedding_dropout_keep_rate, self.apply_dropout)
 
+        # Collapse buffer to (batch_size * buffer_size) * emb_dim for fast indexing.
+        buffer_t = buffer_t.reshape((-1, self.embedding_dim))
+
         buffer_cur_init = T.zeros((batch_size,), dtype="int")
 
         # TODO(jgauthier): Implement linear memory (was in previous HardStack;
@@ -181,7 +184,8 @@ class HardStack(object):
 
         def step(transitions_t, stack_t, stack_cur_t, buffer_cur_t, buffer, *args):
             # Extract top buffer values.
-            buffer_top_t = buffer[T.arange(batch_size), buffer_cur_t]
+            idxs = buffer_cur_t + (T.arange(batch_size) * self.seq_length)
+            buffer_top_t = buffer[idxs]
 
             if self._predict_network is not None:
                 # We are predicting our own stack operations.
