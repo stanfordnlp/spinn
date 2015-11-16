@@ -10,8 +10,8 @@ python -m rembed.models.classifier --data_type sst --training_data_path sst-data
        --model_dim 10
 
 SNLI entailment (Demo only, model needs a full GloVe embeddings file to do well):
-python -m rembed.models.classifier --data_type snli --training_data_path snli-data/snli_1.0_dev.jsonl \
-       --eval_data_path snli-data/snli_1.0_dev.jsonl --embedding_data_path rembed/tests/test_embedding_matrix.5d.txt \
+python -m rembed.models.classifier --data_type snli --training_data_path snli_1.0/snli_1.0_dev.jsonl \
+       --eval_data_path snli_1.0/snli_1.0_dev.jsonl --embedding_data_path rembed/tests/test_embedding_matrix.5d.txt \
        --model_dim 10
 """
 
