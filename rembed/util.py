@@ -114,6 +114,44 @@ def IdentityLayer(inp, inp_dim, outp_dim, vs, name="identity_layer", use_bias=Tr
     return inp
 
 
+def TreeLSTMLayer(lstm_prev, _, full_memory_dim, vs, name="tree_lstm"):
+    assert full_memory_dim % 2 == 0, "Input is concatenated (h, c); dim must be even."
+    hidden_dim = full_memory_dim / 2
+
+    W = vs.add_param("%s/W" % name, (hidden_dim * 2, hidden_dim * 5))
+    b = vs.add_param("%s/b" % name, (hidden_dim * 5,),
+                     initializer=ZeroInitializer())
+
+    def slice_gate(gate_data, i):
+        return gate_data[:, i * hidden_dim:(i + 1) * hidden_dim]
+
+    # Decompose previous LSTM value into hidden and cell value
+    l_h_prev = lstm_prev[:, :hidden_dim]
+    l_c_prev = lstm_prev[:, hidden_dim:2 * hidden_dim]
+    r_h_prev = lstm_prev[:, 2 * hidden_dim:3 * hidden_dim]
+    r_c_prev = lstm_prev[:, 3 * hidden_dim:]
+
+    h_prev = T.concatenate([l_h_prev, r_h_prev], axis=1)
+
+    # Compute and slice gate values
+    gates = T.dot(h_prev, W) + b
+    i_gate, fl_gate, fr_gate, o_gate, cell_inp = [slice_gate(gates, i) for i in range(5)]
+
+    # Apply nonlinearities
+    i_gate = T.nnet.sigmoid(i_gate)
+    fl_gate = T.nnet.sigmoid(fl_gate)
+    fr_gate = T.nnet.sigmoid(fr_gate) 
+    o_gate = T.nnet.sigmoid(o_gate)
+    cell_inp = T.tanh(cell_inp)
+
+    # Compute new cell and hidden value
+    c_t = fl_gate * l_c_prev + fr_gate * r_c_prev + i_gate * cell_inp
+    h_t = o_gate * T.tanh(c_t)
+
+    return T.concatenate([h_t, c_t], axis=1)
+
+
+
 def LSTM(lstm_prev, inp, inp_dim, hidden_dim, vs, name="lstm"):
     # input -> hidden mapping
     W = vs.add_param("%s/W" % name, (inp_dim, hidden_dim * 4))
@@ -299,7 +337,6 @@ def MakeTrainingIterator(sources, batch_size):
 
     def data_iter():
         dataset_size = len(sources[0])
-        print "Dataset size ", dataset_size
         start = -1 * batch_size
         order = range(dataset_size)
         random.shuffle(order)

@@ -52,8 +52,11 @@ def build_sentence_model(cls, vocab_size, seq_length, tokens, transitions,
     """
 
     # Prepare layer which performs stack element composition.
-    compose_network = partial(util.ReLULayer,
-                              initializer=util.DoubleIdentityInitializer(FLAGS.double_identity_init_range))
+    if FLAGS.lstm_composition:
+        compose_network = util.TreeLSTMLayer
+    else:
+        compose_network = partial(util.ReLULayer,
+                                  initializer=util.DoubleIdentityInitializer(FLAGS.double_identity_init_range))
 
     if project_embeddings:
         embedding_projection_network = util.Linear
@@ -414,6 +417,7 @@ if __name__ == '__main__':
         "Used for dropout in the semantic task classifier.")
     gflags.DEFINE_float("embedding_keep_rate", 0.5, 
         "Used for dropout on transformed embeddings.")
+    gflags.DEFINE_boolean("lstm_composition", False, "")
     # gflags.DEFINE_integer("num_composition_layers", 1, "")
 
     # Optimization settings.

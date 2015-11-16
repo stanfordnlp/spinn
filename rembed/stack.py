@@ -189,6 +189,8 @@ class HardStack(object):
                 mask = transitions_t
 
             # Now update the stack: first precompute merge results.
+
+            # Q(jgauthier): Does this yield the same result as a left/right concatenation? [-SB]
             merge_items = stack_t[:, :2].reshape((-1, self.model_dim * 2))
             merge_value = self._compose_network(
                 merge_items, self.model_dim * 2, self.model_dim,
