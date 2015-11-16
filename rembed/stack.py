@@ -62,7 +62,7 @@ class HardStack(object):
     def __init__(self, model_dim, word_embedding_dim, vocab_size, seq_length, compose_network,
                  embedding_projection_network, apply_dropout, vs, predict_network=None,
                  use_predictions=False, X=None, transitions=None, initial_embeddings=None,
-                 embedding_dropout_keep_rate=1.0):
+                 make_test_fn=False, embedding_dropout_keep_rate=1.0):
         """
         Construct a HardStack.
 
@@ -89,6 +89,7 @@ class HardStack(object):
               this instance will make its own batch variable).
             transitions: Theano batch describing transition matrix, or `None`
               (in which case this instance will make its own batch variable).
+            make_test_fn: If set, create a function to run a scan for testing.
             embedding_dropout_keep_rate: The keep rate for dropout on projected
               embeddings.
         """
@@ -117,8 +118,9 @@ class HardStack(object):
         self._make_inputs()
         self._make_scan()
 
-        self.scan_fn = theano.function([self.X, self.transitions, self.apply_dropout],
-                                       self.final_stack)
+        if make_test_fn:
+            self.scan_fn = theano.function([self.X, self.transitions, self.apply_dropout],
+                                           self.final_stack)
 
     def _make_params(self):
         # Per-token embeddings.

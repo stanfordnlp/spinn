@@ -11,6 +11,8 @@ import numpy as np
 
 from rembed import util
 
+SENTENCE_PAIR_DATA = False
+
 LABEL_MAP = {
     "0": 0,
     "1": 1,

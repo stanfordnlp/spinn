@@ -12,6 +12,8 @@ from rembed import util
 
 NUM_CLASSES = 2
 
+SENTENCE_PAIR_DATA = False
+
 FIXED_VOCABULARY = {
     util.PADDING_TOKEN: 0,
     "T": 1,

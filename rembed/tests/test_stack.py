@@ -29,7 +29,7 @@ class HardStackTestCase(unittest.TestCase):
         self.stack = HardStack(
             embedding_dim, embedding_dim, vocab_size, seq_length, compose_network,
             IdentityLayer, apply_dropout, vs,
-            X=X, transitions=transitions)
+            X=X, transitions=transitions, make_test_fn=True)
 
         # Swap in our own dummy embeddings and weights.
         embeddings = np.arange(vocab_size).reshape(

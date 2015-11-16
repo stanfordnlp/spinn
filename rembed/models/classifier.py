@@ -8,6 +8,11 @@ SST sentiment (Demo only, model needs a full GloVe embeddings file to do well):
 python -m rembed.models.classifier --data_type sst --training_data_path sst-data/train.txt \
        --eval_data_path sst-data/dev.txt --embedding_data_path rembed/tests/test_embedding_matrix.5d.txt \
        --model_dim 10
+
+SNLI entailment (Demo only, model needs a full GloVe embeddings file to do well):
+python -m rembed.models.classifier --data_type snli --training_data_path snli-data/snli_1.0_dev.jsonl \
+       --eval_data_path snli-data/snli_1.0_dev.jsonl --embedding_data_path rembed/tests/test_embedding_matrix.5d.txt \
+       --model_dim 10
 """
 
 from functools import partial
@@ -22,13 +27,15 @@ from rembed import afs_safe_logger
 from rembed import util
 from rembed.data.boolean import load_boolean_data
 from rembed.data.sst import load_sst_data
+from rembed.data.snli import load_snli_data
+
 import rembed.stack
 
 
 FLAGS = gflags.FLAGS
 
 
-def build_hard_stack(cls, vocab_size, seq_length, tokens, transitions,
+def build_sentence_model(cls, vocab_size, seq_length, tokens, transitions,
                      num_classes, apply_dropout, vs, initial_embeddings=None, project_embeddings=False):
     """
     Construct a classifier which makes use of some hard-stack model.
@@ -78,6 +85,79 @@ def build_hard_stack(cls, vocab_size, seq_length, tokens, transitions,
     return stack.transitions_pred, logits
 
 
+
+def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
+                     num_classes, apply_dropout, vs, initial_embeddings=None, project_embeddings=False):
+    """
+    Construct a classifier which makes use of some hard-stack model.
+
+    Args:
+      cls: Hard stack class to use (from e.g. `rembed.stack`)
+      vocab_size:
+      seq_length: Length of each sequence provided to the stack model
+      tokens: Theano batch (integer matrix), `batch_size * seq_length`
+      transitions: Theano batch (integer matrix), `batch_size * seq_length`
+      num_classes: Number of output classes
+      apply_dropout: 1.0 at training time, 0.0 at eval time (to avoid corrupting outputs in dropout)
+      vs: Variable store.
+    """
+
+    # Prepare layer which performs stack element composition.
+    compose_network = partial(util.ReLULayer,
+                              initializer=util.DoubleIdentityInitializer(FLAGS.double_identity_init_range))
+
+    if project_embeddings:
+        embedding_projection_network = util.Linear
+    else:
+        assert FLAGS.word_embedding_dim == FLAGS.model_dim, \
+            "word_embedding_dim must equal model_dim unless a projection layer is used."
+        embedding_projection_network = util.IdentityLayer
+
+    # Split the two sentences
+    premise_tokens = tokens[:, :, 0]
+    hypothesis_tokens = tokens[:, :, 1]
+
+    premise_transitions = transitions[:, :, 0]
+    hypothesis_transitions = transitions[:, :, 1]
+
+    # Build two hard stack models which scan over input sequences.
+    premise_model = cls(
+        FLAGS.model_dim, FLAGS.word_embedding_dim, vocab_size, seq_length,
+        compose_network, embedding_projection_network, apply_dropout, vs, 
+        X=premise_tokens, 
+        transitions=premise_transitions, 
+        initial_embeddings=initial_embeddings, 
+        embedding_dropout_keep_rate=FLAGS.embedding_keep_rate)
+    hypothesis_model = cls(
+        FLAGS.model_dim, FLAGS.word_embedding_dim, vocab_size, seq_length,
+        compose_network, embedding_projection_network, apply_dropout, vs, 
+        X=hypothesis_tokens, 
+        transitions=hypothesis_transitions, 
+        initial_embeddings=initial_embeddings, 
+        embedding_dropout_keep_rate=FLAGS.embedding_keep_rate)
+
+    # Extract top element of final stack timestep.
+    premise_stack_top = premise_model.final_stack[:, 0]
+    hypothesis_stack_top = hypothesis_model.final_stack[:, 0]
+    
+    premise_vector = premise_stack_top.reshape((-1, FLAGS.model_dim))
+    hypothesis_vector = hypothesis_stack_top.reshape((-1, FLAGS.model_dim))
+
+    # Concatenate and apply dropout
+    mlp_input = T.concatenate([premise_vector, hypothesis_vector], axis=1)
+    dropout_mlp_input = util.Dropout(mlp_input, FLAGS.semantic_classifier_keep_rate, apply_dropout)
+
+    # Apply a combining MLP
+    pair_features = util.MLP(dropout_mlp_input, 2 * FLAGS.model_dim, FLAGS.model_dim, vs, hidden_dims=[FLAGS.model_dim],
+        name="combining_mlp")
+
+    # Feed forward through a single output layer
+    logits = util.Linear(
+        pair_features, FLAGS.model_dim, num_classes, vs, use_bias=True)
+
+    return premise_model.transitions_pred, hypothesis_model.transitions_pred, logits
+
+
 def build_cost(logits, targets):
     """
     Build a classification cost function.
@@ -87,6 +167,7 @@ def build_cost(logits, targets):
         logits, -1. * FLAGS.clipping_max_norm, FLAGS.clipping_max_norm)
 
     predicted_dist = T.nnet.softmax(logits)
+
     costs = T.nnet.categorical_crossentropy(predicted_dist, targets)
     cost = costs.mean()
 
@@ -142,6 +223,8 @@ def train():
         data_manager = load_boolean_data
     elif FLAGS.data_type == "sst":
         data_manager = load_sst_data
+    elif FLAGS.data_type == "snli":
+        data_manager = load_snli_data
     else:
         logger.Log("Bad data type.")
         return
@@ -165,7 +248,8 @@ def train():
         logger.Log("In open vocabulary mode. Using loaded embeddings without fine-tuning.")
         train_embeddings = False
         vocabulary = util.BuildVocabulary(
-            raw_training_data, raw_eval_sets, FLAGS.embedding_data_path, logger=logger)
+            raw_training_data, raw_eval_sets, FLAGS.embedding_data_path, logger=logger,
+            sentence_pair_data=data_manager.SENTENCE_PAIR_DATA)
     else:
         logger.Log("In fixed vocabulary mode. Training embeddings.")
         train_embeddings = True
@@ -181,25 +265,25 @@ def train():
 
     # Trim dataset, convert token sequences to integer sequences, crop, and
     # pad.
+    logger.Log("Preprocessing training data.")
     training_data = util.PreprocessDataset(
-        raw_training_data, vocabulary, FLAGS.seq_length, data_manager, eval_mode=False, logger=logger)
+        raw_training_data, vocabulary, FLAGS.seq_length, data_manager, eval_mode=False, logger=logger,
+        sentence_pair_data=data_manager.SENTENCE_PAIR_DATA)
     training_data_iter = util.MakeTrainingIterator(
         training_data, FLAGS.batch_size)
 
     eval_iterators = []
     for filename, raw_eval_set in raw_eval_sets:
+        logger.Log("Preprocessing eval data: " + filename)
         e_X, e_transitions, e_y, e_num_transitions = util.PreprocessDataset(
-            raw_eval_set, vocabulary, FLAGS.seq_length, data_manager, eval_mode=True, logger=logger)
+            raw_eval_set, vocabulary, FLAGS.seq_length, data_manager, eval_mode=True, logger=logger,
+            sentence_pair_data=data_manager.SENTENCE_PAIR_DATA)
         eval_iterators.append((filename,
             util.MakeEvalIterator((e_X, e_transitions, e_y, e_num_transitions), FLAGS.batch_size)))
 
-    # TODO(SB): Make sure unk and padding get gradients or random inits.
-
     # Set up the placeholders.
-    X = T.matrix("X", dtype="int32")
-    transitions = T.imatrix("transitions")
+
     y = T.vector("y", dtype="int32")
-    num_transitions = T.vector("num_transitions", dtype="int32")
     lr = T.scalar("lr")
     apply_dropout = T.scalar("apply_dropout")  # 1: Training with dropout, 0: Eval
 
@@ -207,10 +291,24 @@ def train():
     vs = util.VariableStore(
         default_initializer=util.UniformInitializer(FLAGS.init_range), logger=logger)
     model_cls = getattr(rembed.stack, FLAGS.model_type)
-    actions, logits = build_hard_stack(
-        model_cls, len(vocabulary), FLAGS.seq_length,
-        X, transitions, len(data_manager.LABEL_MAP), apply_dropout, vs, 
-        initial_embeddings=initial_embeddings, project_embeddings=(not train_embeddings))
+    if data_manager.SENTENCE_PAIR_DATA:
+        X = T.itensor3("X")
+        transitions = T.itensor3("transitions")   
+        num_transitions = T.imatrix("num_transitions")
+
+        predicted_premise_transitions, predicted_hypothesis_transitions, logits = build_sentence_pair_model(
+            model_cls, len(vocabulary), FLAGS.seq_length,
+            X, transitions, len(data_manager.LABEL_MAP), apply_dropout, vs, 
+            initial_embeddings=initial_embeddings, project_embeddings=(not train_embeddings))
+    else:
+        X = T.matrix("X", dtype="int32")
+        transitions = T.imatrix("transitions")   
+        num_transitions = T.vector("num_transitions", dtype="int32")
+
+        predicted_transitions, logits = build_sentence_model(
+            model_cls, len(vocabulary), FLAGS.seq_length,
+            X, transitions, len(data_manager.LABEL_MAP), apply_dropout, vs, 
+            initial_embeddings=initial_embeddings, project_embeddings=(not train_embeddings))        
 
     xent_cost, acc = build_cost(logits, y)
 
@@ -220,9 +318,14 @@ def train():
         if "embedding" not in var:
             l2_cost += FLAGS.l2_lambda * T.sum(T.sqr(vs.vars[var]))
 
-    if actions is not None:
-        # Compute cross-entropy cost on action predictions.
-        action_cost, action_acc = build_action_cost(actions, transitions, num_transitions)
+    # Compute cross-entropy cost on action predictions.
+    if (not data_manager.SENTENCE_PAIR_DATA) and predicted_transitions is not None:
+        action_cost, action_acc = build_action_cost(predicted_transitions, transitions, num_transitions)
+    if data_manager.SENTENCE_PAIR_DATA and predicted_hypothesis_transitions is not None:
+        p_action_cost, p_action_acc = build_action_cost(predicted_premise_transitions, transitions[:, :, 0], num_transitions[:, 0])
+        h_action_cost, h_action_acc = build_action_cost(predicted_premise_transitions, transitions[:, :, 1], num_transitions[:, 1])
+        action_cost = p_action_cost + h_action_cost
+        action_acc = (p_action_acc + h_action_acc) / 2  # TODO(SB): Average over transitions, not words.
     else:
         action_cost = T.constant(0.0)
         action_acc = T.constant(0.0)
@@ -245,13 +348,16 @@ def train():
     # Create training and eval functions. 
     # Unused variable warnings are supressed so that num_transitions can be passed in when training Model 0,
     # which ignores it. This yields more readable code that is very slightly slower.
+    logger.Log("Building update function.")
     update_fn = theano.function(
         [X, transitions, y, num_transitions, lr, apply_dropout],
         [total_cost, xent_cost, action_cost, action_acc, l2_cost, acc],
         updates=new_values,
         on_unused_input='warn')
+    logger.Log("Building eval function.")
     eval_fn = theano.function([X, transitions, y, num_transitions, apply_dropout], [acc, action_acc],
         on_unused_input='warn')
+    logger.Log("Training.")
 
     # Main training loop.
     for step in range(FLAGS.training_steps):
@@ -287,7 +393,7 @@ if __name__ == '__main__':
     gflags.DEFINE_string("experiment_name", "experiment", "")
 
     # Data types.
-    gflags.DEFINE_string("data_type", "bl", "Values: bl, sst")
+    gflags.DEFINE_string("data_type", "bl", "Values: bl, sst, snli")
 
     # Data settings.
     gflags.DEFINE_string("training_data_path", None, "")

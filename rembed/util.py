@@ -217,28 +217,38 @@ def RMSprop(cost, params, lr=0.001, rho=0.9, epsilon=1e-6):
     return updates
 
 
-def TrimDataset(dataset, seq_length, eval_mode=False):
+def TrimDataset(dataset, seq_length, eval_mode=False, sentence_pair_data=False):
     """Avoid using excessively long training examples."""
     if eval_mode:
         return dataset
     else:
-        new_dataset = [example for example in dataset if len(
-            example["transitions"]) <= seq_length]
+        if sentence_pair_data:
+            new_dataset = [example for example in dataset if
+                len(example["premise_transitions"]) <= seq_length and 
+                len(example["hypothesis_transitions"]) <= seq_length]   
+        else:
+            new_dataset = [example for example in dataset if len(
+                example["transitions"]) <= seq_length]         
         return new_dataset
 
 
-def TokensToIDs(vocabulary, dataset):
+def TokensToIDs(vocabulary, dataset, sentence_pair_data=False):
     """Replace strings in original boolean dataset with token IDs."""
-
-    if UNK_TOKEN in vocabulary:
-        unk_id = vocabulary[UNK_TOKEN]
-        for example in dataset:
-            example["tokens"] = [vocabulary.get(token, unk_id)
-                                 for token in example["tokens"]]
+    if sentence_pair_data:
+        keys = ["premise_tokens", "hypothesis_tokens"]
     else:
-        for example in dataset:
-            example["tokens"] = [vocabulary[token]
-                                 for token in example["tokens"]]
+        keys = ["tokens"]
+
+    for key in keys:
+        if UNK_TOKEN in vocabulary:
+            unk_id = vocabulary[UNK_TOKEN]
+            for example in dataset:
+                example[key] = [vocabulary.get(token, unk_id)
+                                     for token in example[key]]
+        else:
+            for example in dataset:
+                example[key] = [vocabulary[token]
+                                for token in example[key]]
     return dataset
 
 
@@ -257,23 +267,30 @@ def CropAndPadExample(example, left_padding, target_length, key, logger=None):
         example[key] + ([0] * right_padding)
 
 
-def CropAndPad(dataset, length, logger=None):
+def CropAndPad(dataset, length, logger=None, sentence_pair_data=False):
     # NOTE: This can probably be done faster in NumPy if it winds up making a
     # difference.
     # Always make sure that the transitions are aligned at the left edge, so
     # the final stack top is the root of the tree. If cropping is used, it should
     # just introduce empty nodes into the tree.
+    if sentence_pair_data:
+        keys = [("premise_transitions", "num_premise_transitions", "premise_tokens"), 
+                ("hypothesis_transitions", "num_hypothesis_transitions", "hypothesis_tokens")]
+    else:
+        keys = [("transitions", "num_transitions", "tokens")]
+
     for example in dataset:
-        example["num_transitions"] = len(example["transitions"])
-        transitions_left_padding = length - example["num_transitions"]
-        shifts_before_crop_and_pad = example["transitions"].count(0)
-        CropAndPadExample(
-            example, transitions_left_padding, length, "transitions", logger=logger)
-        shifts_after_crop_and_pad = example["transitions"].count(0)
-        tokens_left_padding = shifts_after_crop_and_pad - \
-            shifts_before_crop_and_pad
-        CropAndPadExample(
-            example, tokens_left_padding, length, "tokens", logger=logger)
+        for (transitions_key, num_transitions_key, tokens_key) in keys:
+            example[num_transitions_key] = len(example[transitions_key])
+            transitions_left_padding = length - example[num_transitions_key]
+            shifts_before_crop_and_pad = example[transitions_key].count(0)
+            CropAndPadExample(
+                example, transitions_left_padding, length, transitions_key, logger=logger)
+            shifts_after_crop_and_pad = example[transitions_key].count(0)
+            tokens_left_padding = shifts_after_crop_and_pad - \
+                shifts_before_crop_and_pad
+            CropAndPadExample(
+                example, tokens_left_padding, length, tokens_key, logger=logger)
     return dataset
 
 
@@ -282,6 +299,7 @@ def MakeTrainingIterator(sources, batch_size):
 
     def data_iter():
         dataset_size = len(sources[0])
+        print "Dataset size ", dataset_size
         start = -1 * batch_size
         order = range(dataset_size)
         random.shuffle(order)
@@ -315,32 +333,51 @@ def MakeEvalIterator(sources, batch_size):
     return data_iter
 
 
-def PreprocessDataset(dataset, vocabulary, seq_length, data_manager, eval_mode=False, logger=None):
-    dataset = TrimDataset(dataset, seq_length, eval_mode=eval_mode)
-    dataset = TokensToIDs(vocabulary, dataset)
-    dataset = CropAndPad(dataset, seq_length, logger=logger)
+def PreprocessDataset(dataset, vocabulary, seq_length, data_manager, eval_mode=False, logger=None, 
+                      sentence_pair_data=False):
+    dataset = TrimDataset(dataset, seq_length, eval_mode=eval_mode, sentence_pair_data=sentence_pair_data)
+    dataset = TokensToIDs(vocabulary, dataset, sentence_pair_data=sentence_pair_data)
+    dataset = CropAndPad(dataset, seq_length, logger=logger, sentence_pair_data=sentence_pair_data)
 
-    X = np.array([example["tokens"] for example in dataset],
-                 dtype=np.int32)
-    transitions = np.array([example["transitions"] for example in dataset],
-                           dtype=np.int32)
+    if sentence_pair_data:
+        X = np.transpose(np.array([[example["premise_tokens"] for example in dataset],
+                      [example["hypothesis_tokens"] for example in dataset]],
+                     dtype=np.int32), (1, 2, 0))
+        transitions = np.transpose(np.array([[example["premise_transitions"] for example in dataset],
+                                [example["hypothesis_transitions"] for example in dataset]],
+                               dtype=np.int32), (1, 2, 0))
+        num_transitions = np.transpose(np.array(
+            [[example["num_premise_transitions"] for example in dataset],
+             [example["num_hypothesis_transitions"] for example in dataset]],
+            dtype=np.int32), (1, 0))
+    else:
+        X = np.array([example["tokens"] for example in dataset],
+                     dtype=np.int32)
+        transitions = np.array([example["transitions"] for example in dataset],
+                               dtype=np.int32)
+        num_transitions = np.array(
+            [example["num_transitions"] for example in dataset],
+            dtype=np.int32)
     y = np.array(
         [data_manager.LABEL_MAP[example["label"]] for example in dataset],
-        dtype=np.int32)
-    num_transitions = np.array(
-        [example["num_transitions"] for example in dataset],
         dtype=np.int32)
 
     return X, transitions, y, num_transitions
 
 
-def BuildVocabulary(raw_training_data, raw_eval_sets, embedding_path, logger=None):
+def BuildVocabulary(raw_training_data, raw_eval_sets, embedding_path, logger=None, sentence_pair_data=False):
     # Find the set of words that occur in the data.
     logger.Log("Constructing vocabulary...")
     types_in_data = set()
     for dataset in [raw_training_data] + [eval_dataset[1] for eval_dataset in raw_eval_sets]:
-        types_in_data.update(itertools.chain.from_iterable([example["tokens"]
-                                                            for example in dataset]))
+        if sentence_pair_data:
+            types_in_data.update(itertools.chain.from_iterable([example["premise_tokens"]
+                                                                for example in dataset]))
+            types_in_data.update(itertools.chain.from_iterable([example["hypothesis_tokens"]
+                                                                for example in dataset]))
+        else:
+            types_in_data.update(itertools.chain.from_iterable([example["tokens"]
+                                                                for example in dataset]))
     logger.Log("Found " + str(len(types_in_data)) + " word types.")
 
     if embedding_path == None:
