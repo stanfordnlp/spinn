@@ -15,7 +15,7 @@ import re
 USAGE_THRESHOLD = 90
 
 proc = subprocess.Popen("nvidia-smi", stdout=subprocess.PIPE, 
-                                   stderr=subprocess.PIPE)
+                                      stderr=subprocess.PIPE)
 output, error = proc.communicate()
 if error:
     sys.stderr.write()
