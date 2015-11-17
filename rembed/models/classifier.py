@@ -421,7 +421,7 @@ if __name__ == '__main__':
     # gflags.DEFINE_integer("num_composition_layers", 1, "")
 
     # Optimization settings.
-    gflags.DEFINE_integer("training_steps", 100000, "")
+    gflags.DEFINE_integer("training_steps", 1000000, "")
     gflags.DEFINE_integer("batch_size", 32, "")
     gflags.DEFINE_float("learning_rate", 0.001, "Used in RMSProp.")
     # gflags.DEFINE_float("momentum", 0.9, "")
