@@ -42,8 +42,12 @@ usage_amts = [int(usage_amt) for usage_amt in matches]
 print usage_amts
 
 # Get GPU
+gpus = [index for index in range(len(usage_amts))]
 open_gpus = [index for index in range(len(usage_amts)) if usage_amts[index] < USAGE_THRESHOLD]
+
 if open_gpus:
-    print random.choice(open_gpus)
+    print "gpu" + str(random.choice(open_gpus))
+elif gpus:
+    print "gpu" + str(random.choice(gpus))
 else:
     print "cpu"
