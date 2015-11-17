@@ -15,8 +15,9 @@
 cd $PBS_O_WORKDIR
 echo Lauching from working directory: $PBS_O_WORKDIR
 echo Flags: $REMBED_FLAGS
+DEVICE=`python pick_gpu.py`
 
 # Log what we're running and where.
-echo `hostname` - $PBS_JOBID - $REMBED_FLAGS - at `git log --pretty=format:'%h' -n 1` >> ~/rembed_machine_assignments.txt
+echo `hostname` - $PBS_JOBID - $REMBED_FLAGS - $DEVICE - at `git log --pretty=format:'%h' -n 1` >> ~/rembed_machine_assignments.txt
 
-THEANO_FLAGS=allow_gc=False,cuda.root=/usr/bin/cuda,warn_float64=warn,device=`python pick_gpu.py`,floatX=float32 python -m rembed.models.classifier $REMBED_FLAGS
+THEANO_FLAGS=allow_gc=False,cuda.root=/usr/bin/cuda,warn_float64=warn,device=$DEVICE,floatX=float32 python -m rembed.models.classifier $REMBED_FLAGS
