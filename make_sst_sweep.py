@@ -28,12 +28,13 @@ FIXED_PARAMETERS = {
     "eval_seq_length":	"150",
     "clipping_max_norm":  "5.0",
     "batch_size":  "128",
+    "lstm_composition": ""
 }
 
 # Tunable parameters.
 SWEEP_PARAMETERS = {
     "learning_rate":      (EXP, 0.00005, 0.0003),
-    "l2_lambda":   		  (EXP, 5e-7, 1e-4),
+    "l2_lambda":   		  (EXP, 5e-7, 1e-5),
     "init_range":         (EXP, 0.001, 0.005),
     "double_identity_init_range": (EXP, 0.0005, 0.005),
     "semantic_classifier_keep_rate": (LIN, 0.66, 1.0),
