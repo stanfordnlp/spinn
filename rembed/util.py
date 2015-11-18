@@ -34,6 +34,14 @@ def ZeroInitializer():
     return lambda shape: np.zeros(shape)
 
 
+def TreeLSTMBiasInitializer():
+    def init(shape):
+        hidden_dim = shape[0] / 5
+        value = np.zeros(shape)
+        value[hidden_dim:3*hidden_dim] = 1
+        return value
+
+
 def DoubleIdentityInitializer(range):
     def init(shape):
         half_d = shape[0] / 2
@@ -114,13 +122,14 @@ def IdentityLayer(inp, inp_dim, outp_dim, vs, name="identity_layer", use_bias=Tr
     return inp
 
 
-def TreeLSTMLayer(lstm_prev, _, full_memory_dim, vs, name="tree_lstm"):
+def TreeLSTMLayer(lstm_prev, _, full_memory_dim, vs, name="tree_lstm", initializer=None):
     assert full_memory_dim % 2 == 0, "Input is concatenated (h, c); dim must be even."
     hidden_dim = full_memory_dim / 2
 
-    W = vs.add_param("%s/W" % name, (hidden_dim * 2, hidden_dim * 5))
+    W = vs.add_param("%s/W" % name, (hidden_dim * 2, hidden_dim * 5),
+                     initializer=initializer)
     b = vs.add_param("%s/b" % name, (hidden_dim * 5,),
-                     initializer=ZeroInitializer())
+                     initializer=TreeLSTMBiasInitializer())
 
     def slice_gate(gate_data, i):
         return gate_data[:, i * hidden_dim:(i + 1) * hidden_dim]

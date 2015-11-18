@@ -53,7 +53,8 @@ def build_sentence_model(cls, vocab_size, seq_length, tokens, transitions,
 
     # Prepare layer which performs stack element composition.
     if FLAGS.lstm_composition:
-        compose_network = util.TreeLSTMLayer
+        compose_network = partial(util.TreeLSTMLayer,
+                                  initializer=util.UniformInitializer(FLAGS.init_range))
     else:
         compose_network = partial(util.ReLULayer,
                                   initializer=util.DoubleIdentityInitializer(FLAGS.double_identity_init_range))
