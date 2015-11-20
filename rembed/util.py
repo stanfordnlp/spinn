@@ -5,6 +5,7 @@ import random
 import numpy as np
 import theano
 from theano import tensor as T
+from theano.ifelse import ifelse
 
 numpy_random = np.random.RandomState(1234)
 theano_random = T.shared_randomstreams.RandomStreams(numpy_random.randint(999999))
@@ -100,9 +101,9 @@ def Dropout(inp, keep_rate, apply_dropout):
 
     dropout_mask = theano_random.binomial(n=1, p=keep_rate, size=inp.shape, dtype=theano.config.floatX)
 
-    dropout_candidate = dropout_mask * inp 
+    dropout_candidate = dropout_mask * inp
     rescaling_candidate = keep_rate * inp
-    result = apply_dropout * dropout_candidate + (1 - apply_dropout) * rescaling_candidate
+    result = ifelse(apply_dropout, dropout_candidate, rescaling_candidate)
 
     return result
 
