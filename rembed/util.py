@@ -1,5 +1,6 @@
 from collections import OrderedDict
 import itertools
+import math
 import random
 
 import numpy as np
@@ -24,6 +25,11 @@ CORE_VOCABULARY = {PADDING_TOKEN: 0,
 
 def UniformInitializer(range):
     return lambda shape: np.random.uniform(-range, range, shape)
+
+
+
+def HeKaimingInitializer():
+    return lambda shape: np.random.normal(scale=math.sqrt(4.0/(shape[0] + shape[1])), size=shape)
 
 
 def NormalInitializer(std):

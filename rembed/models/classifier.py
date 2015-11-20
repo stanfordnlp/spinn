@@ -54,10 +54,10 @@ def build_sentence_model(cls, vocab_size, seq_length, tokens, transitions,
     # Prepare layer which performs stack element composition.
     if FLAGS.lstm_composition:
         compose_network = partial(util.TreeLSTMLayer,
-                                  initializer=util.UniformInitializer(FLAGS.init_range))
+                                  initializer=util.HeKaimingInitializer())
     else:
         compose_network = partial(util.ReLULayer,
-                                  initializer=util.DoubleIdentityInitializer(FLAGS.double_identity_init_range))
+                                  initializer=util.HeKaimingInitializer())
 
     if project_embeddings:
         embedding_projection_network = util.Linear
@@ -412,8 +412,8 @@ if __name__ == '__main__':
     gflags.DEFINE_enum("model_type", "Model0",
                        ["Model0", "Model1", "Model2"],
                        "")
-    gflags.DEFINE_integer("model_dim", 5, "")
-    gflags.DEFINE_integer("word_embedding_dim", 5, "")
+    gflags.DEFINE_integer("model_dim", 8, "")
+    gflags.DEFINE_integer("word_embedding_dim", 8, "")
     gflags.DEFINE_float("semantic_classifier_keep_rate", 0.5, 
         "Used for dropout in the semantic task classifier.")
     gflags.DEFINE_float("embedding_keep_rate", 0.5, 
