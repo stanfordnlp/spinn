@@ -33,9 +33,9 @@ FIXED_PARAMETERS = {
 
 # Tunable parameters.
 SWEEP_PARAMETERS = {
-    "learning_rate":      (EXP, 0.00005, 0.0003),
+    "learning_rate":      (EXP, 0.0001, 0.0003),
     "l2_lambda":   		  (EXP, 5e-7, 1e-5),
-    "init_range":         (EXP, 0.001, 0.005),
+    "init_range":         (EXP, 0.001, 0.004),
     "double_identity_init_range": (EXP, 0.0005, 0.005),
     "semantic_classifier_keep_rate": (LIN, 0.66, 1.0),
     "embedding_keep_rate": (LIN, 0.5, 1.0)
@@ -43,7 +43,7 @@ SWEEP_PARAMETERS = {
 
 sweep_name = "sweep_" + \
     FIXED_PARAMETERS["data_type"] + "_" + FIXED_PARAMETERS["model_type"]
-sweep_runs = 6
+sweep_runs = 4
 queue = "jag"
 
 # - #
