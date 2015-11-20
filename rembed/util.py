@@ -202,15 +202,17 @@ def LSTM(lstm_prev, inp, inp_dim, hidden_dim, vs, name="lstm"):
 
 
 def MLP(inp, inp_dim, outp_dim, vs, layer=ReLULayer, hidden_dims=None,
-        name="mlp"):
+        name="mlp", initializer=None):
     if hidden_dims is None:
         hidden_dims = []
 
     prev_val = inp
     dims = [inp_dim] + hidden_dims + [outp_dim]
     for i, (src_dim, tgt_dim) in enumerate(zip(dims, dims[1:])):
-        prev_val = layer(prev_val, src_dim, tgt_dim, vs, use_bias=True,
-                         name="%s/%i" % (name, i))
+        prev_val = layer(prev_val, src_dim, tgt_dim, vs, 
+                         use_bias=True,
+                         name="%s/%i" % (name, i),
+                         initializer=initializer)
     return prev_val
 
 

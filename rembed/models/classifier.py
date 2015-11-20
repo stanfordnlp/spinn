@@ -7,12 +7,12 @@ python -m rembed.models.classifier --training_data_path bl-data/pbl_train.tsv \
 SST sentiment (Demo only, model needs a full GloVe embeddings file to do well):
 python -m rembed.models.classifier --data_type sst --training_data_path sst-data/train.txt \
        --eval_data_path sst-data/dev.txt --embedding_data_path rembed/tests/test_embedding_matrix.5d.txt \
-       --model_dim 10
+       --model_dim 10 --word_embedding_dim 5
 
 SNLI entailment (Demo only, model needs a full GloVe embeddings file to do well):
 python -m rembed.models.classifier --data_type snli --training_data_path snli_1.0/snli_1.0_dev.jsonl \
        --eval_data_path snli_1.0/snli_1.0_dev.jsonl --embedding_data_path rembed/tests/test_embedding_matrix.5d.txt \
-       --model_dim 10
+       --model_dim 10 --word_embedding_dim 5
 """
 
 from functools import partial
@@ -107,8 +107,12 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
     """
 
     # Prepare layer which performs stack element composition.
-    compose_network = partial(util.ReLULayer,
-                              initializer=util.DoubleIdentityInitializer(FLAGS.double_identity_init_range))
+    if FLAGS.lstm_composition:
+        compose_network = partial(util.TreeLSTMLayer,
+                                  initializer=util.HeKaimingInitializer())
+    else:
+        compose_network = partial(util.ReLULayer,
+                                  initializer=util.HeKaimingInitializer())
 
     if project_embeddings:
         embedding_projection_network = util.Linear
@@ -153,7 +157,8 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
 
     # Apply a combining MLP
     pair_features = util.MLP(dropout_mlp_input, 2 * FLAGS.model_dim, FLAGS.model_dim, vs, hidden_dims=[FLAGS.model_dim],
-        name="combining_mlp")
+        name="combining_mlp",
+        initializer=util.HeKaimingInitializer())
 
     # Feed forward through a single output layer
     logits = util.Linear(
