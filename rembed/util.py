@@ -6,9 +6,10 @@ import numpy as np
 import theano
 from theano import tensor as T
 from theano.ifelse import ifelse
+from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 
 numpy_random = np.random.RandomState(1234)
-theano_random = T.shared_randomstreams.RandomStreams(numpy_random.randint(999999))
+theano_random = RandomStreams(numpy_random.randint(999999))
 
 # With loaded embedding matrix, the padding vector will be initialized to zero
 # and will not be trained. Hopefully this isn't a problem. It seems better than
