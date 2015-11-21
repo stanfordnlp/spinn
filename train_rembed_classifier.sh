@@ -3,7 +3,7 @@
 ### Generic job script for all experiments.
 
 # Usage example:
-# export REMBED_FLAGS="--learning_rate 0.2"; qsub -v REMBED_FLAGS run.sh
+# export REMBED_FLAGS="--learning_rate 0.01 --batch_size 256"; qsub -v REMBED_FLAGS train_rembed_classifier.sh
 
 ### The below are not comments, but actual PBS flags:
 #PBS -l walltime=99:00:00	### Die after four days
