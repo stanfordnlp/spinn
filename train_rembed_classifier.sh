@@ -6,8 +6,8 @@
 # export REMBED_FLAGS="--learning_rate 0.01 --batch_size 256"; qsub -v REMBED_FLAGS train_rembed_classifier.sh
 
 ### The below are not comments, but actual PBS flags:
-#PBS -l walltime=99:00:00	### Die after four days
-#PBS -l mem=4000MB   ### Request 4G RAM
+#PBS -l walltime=99:00:00	### Die after four-ish days
+#PBS -l mem=16000MB   ### Request 16G RAM. We don't need it, but it helps make sure we don't wind up on machines with overloaded GPUs.
 #PBS -q jag   ### Run on the jagupard* queue
 
 # Change to the submission directory.
