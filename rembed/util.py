@@ -59,7 +59,7 @@ def DoubleIdentityInitializer(range):
 
 class VariableStore(object):
 
-    def __init__(self, prefix="vs", default_initializer=UniformInitializer(0.1), logger=None):
+    def __init__(self, prefix="vs", default_initializer=HeKaimingInitializer(), logger=None):
         self.prefix = prefix
         self.default_initializer = default_initializer
         self.vars = {}
