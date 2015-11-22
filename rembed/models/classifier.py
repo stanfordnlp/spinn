@@ -330,7 +330,7 @@ def train():
     # Compute cross-entropy cost on action predictions.
     if (not data_manager.SENTENCE_PAIR_DATA) and predicted_transitions is not None:
         action_cost, action_acc = build_action_cost(predicted_transitions, transitions, num_transitions)
-    if data_manager.SENTENCE_PAIR_DATA and predicted_hypothesis_transitions is not None:
+    elif data_manager.SENTENCE_PAIR_DATA and predicted_hypothesis_transitions is not None:
         p_action_cost, p_action_acc = build_action_cost(predicted_premise_transitions, transitions[:, :, 0], num_transitions[:, 0])
         h_action_cost, h_action_acc = build_action_cost(predicted_premise_transitions, transitions[:, :, 1], num_transitions[:, 1])
         action_cost = p_action_cost + h_action_cost
