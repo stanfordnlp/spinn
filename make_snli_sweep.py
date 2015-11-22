@@ -26,7 +26,7 @@ FIXED_PARAMETERS = {
     "model_dim":   "100",
     "seq_length":	"50",
     "eval_seq_length":	"100",
-    "clipping_max_norm":  "5.0",
+    "clipping_max_value":  "5.0",
     "batch_size":  "64",
     "lstm_composition": ""
 }

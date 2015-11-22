@@ -173,7 +173,7 @@ def build_cost(logits, targets):
     """
     # Clip gradients coming from the cost function.
     logits = theano.gradient.grad_clip(
-        logits, -1. * FLAGS.clipping_max_norm, FLAGS.clipping_max_norm)
+        logits, -1. * FLAGS.clipping_max_value, FLAGS.clipping_max_value)
 
     predicted_dist = T.nnet.softmax(logits)
 
@@ -431,7 +431,7 @@ if __name__ == '__main__':
     gflags.DEFINE_integer("batch_size", 32, "")
     gflags.DEFINE_float("learning_rate", 0.001, "Used in RMSProp.")
     # gflags.DEFINE_float("momentum", 0.9, "")
-    gflags.DEFINE_float("clipping_max_norm", 1.0, "")
+    gflags.DEFINE_float("clipping_max_value", 1.0, "")
     gflags.DEFINE_float("l2_lambda", 1e-5, "")
     gflags.DEFINE_float("init_range", 0.01, "")
     gflags.DEFINE_float("double_identity_init_range", 0.001, "")
