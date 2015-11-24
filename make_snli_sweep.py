@@ -19,8 +19,8 @@ EXP = "EXP"
 FIXED_PARAMETERS = {
     "data_type":     "snli",
     "model_type":     "Model0",
-    "training_data_path":    "snli_1.0/snli_1.0_train.jsonl",
-    "eval_data_path":    "snli_1.0/snli_1.0_dev.jsonl",
+    "training_data_path":    "/scr/nlp/data/snli_1.0/snli_1.0_train.jsonl",
+    "eval_data_path":    "/scr/nlp/data/snli_1.0/snli_1.0_dev.jsonl",
     "embedding_data_path": "/scr/nlp/data/glove_vecs/glove.840B.300d.txt",
     "word_embedding_dim":	"300",
     "model_dim":   "200",
