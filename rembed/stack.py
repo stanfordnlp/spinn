@@ -29,35 +29,34 @@ def update_hard_stack(stack_t, stack_cur_t, push_value, merge_value, mask,
     """
 
     model_dim = stack_t.shape[-1]
+    stack_idxs = stack_cur_t + (T.arange(batch_size) * stack_size)
 
-    # Extract "top three" for each example
+    # Build mask + other helpers
+    mask = T.cast(mask.dimshuffle(0, "x"), "float32")
+    not_mask = 1 - mask
+    zero = np.array(0.0).astype(theano.config.floatX)
+
+    # Build the top-three elements of each stack instance as a batch.
+    new_top_three = []
+    for delta in [-2, -1, 0]:
+        stack_idxs_d = stack_idxs + delta
+        if delta == -2:
+            update_val = mask * merge_value + not_mask * stack_t[stack_idxs_d]
+        elif delta == -1:
+            update_val = mask * zero + not_mask * stack_t[stack_idxs_d]
+        elif delta == 0:
+            update_val = mask * stack_t[stack_idxs_d] + not_mask * push_value
+
+        new_top_three.append(update_val)
+
+    # batch of dim (3 * batch_size) * model_dim
+    new_top_three = T.concatenate(new_top_three, axis=0)
+
     stack_idxs = stack_cur_t[:, np.newaxis].repeat(3, axis=1) + [-2, -1, 0]
-    stack_idxs += (T.arange(batch_size) * stack_size).dimshuffle(0, "x") # DEV: broadcast-add over each example
-    stack_idxs = stack_idxs.flatten()
+    stack_idxs += (T.arange(batch_size) * stack_size).dimshuffle(0, "x")
+    stack_idxs = stack_idxs.T.flatten()
 
-    # Enforce shape 3 * batch_size * model_dim
-    # TODO(jgauthier): Can we avoid a dimshuffle by just shuffling stack_idxs?
-    top_three = stack_t[stack_idxs]
-    top_three = top_three.reshape((-1, 3, model_dim))
-    top_three = top_three.dimshuffle(1, 0, 2)
-
-    # Build two copies of the top three: one where every stack has received a
-    # push op, and one where every stack has received a merge op.
-    #
-    # Copy 1: Push.
-    top_pushed = T.set_subtensor(top_three[2], push_value)
-
-    # Copy 2: Merge.
-    top_merged = T.set_subtensor(top_three[0], merge_value)
-    top_merged = T.set_subtensor(top_merged[1], 0.0)
-
-    # Make sure mask broadcasts over all dimensions after the first.
-    mask = mask.dimshuffle("x", 0, "x")
-    mask = T.cast(mask, dtype=theano.config.floatX)
-    top_three_next = mask * top_merged + (1. - mask) * top_pushed
-
-    stack_next = T.set_subtensor(stack_t[stack_idxs],
-                                 top_three_next.dimshuffle(1, 0, 2).reshape((-1, model_dim)))
+    stack_next = T.set_subtensor(stack_t[stack_idxs], new_top_three)
 
     return stack_next
 

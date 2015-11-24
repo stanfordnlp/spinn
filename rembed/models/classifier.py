@@ -55,10 +55,10 @@ def build_hard_stack(cls, vocab_size, seq_length, tokens, transitions,
     # Build hard stack which scans over input sequence.
     stack = cls(
         FLAGS.embedding_dim, vocab_size, seq_length,
-        compose_network, embedding_projection_network, apply_dropout, vs, 
-        X=tokens, 
-        transitions=transitions, 
-        initial_embeddings=initial_embeddings, 
+        compose_network, embedding_projection_network, apply_dropout, vs,
+        X=tokens,
+        transitions=transitions,
+        initial_embeddings=initial_embeddings,
         embedding_dropout_keep_rate=FLAGS.embedding_keep_rate)
 
     # Extract top element of final stack timestep.

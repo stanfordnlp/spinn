@@ -33,7 +33,7 @@ class HardStackTestCase(unittest.TestCase):
 
         # Swap in our own dummy embeddings and weights.
         embeddings = np.arange(vocab_size).reshape(
-            (vocab_size, 1)).repeat(embedding_dim, axis=1)
+            (vocab_size, 1)).repeat(embedding_dim, axis=1).astype(theano.config.floatX)
         self.stack.embeddings.set_value(embeddings)
 
     def test_basic_ff(self):
