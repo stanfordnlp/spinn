@@ -72,7 +72,7 @@ def build_hard_stack(cls, vocab_size, seq_length, tokens, transitions,
     logits = util.Linear(
         sentence_vector, FLAGS.embedding_dim, num_classes, vs, use_bias=True)
 
-    return stack.transitions_pred, logits
+    return stack, stack.transitions_pred, logits
 
 
 def build_cost(logits, targets):
@@ -192,9 +192,9 @@ def train():
     vs = util.VariableStore(
         default_initializer=util.UniformInitializer(FLAGS.init_range), logger=logger)
     model_cls = getattr(rembed.stack, FLAGS.model_type)
-    actions, logits = build_hard_stack(
+    stack, actions, logits = build_hard_stack(
         model_cls, len(vocabulary), FLAGS.seq_length,
-        X, transitions, len(data_manager.LABEL_MAP), apply_dropout, vs, 
+        X, transitions, len(data_manager.LABEL_MAP), apply_dropout, vs,
         initial_embeddings=initial_embeddings, project_embeddings=(not train_embeddings))
 
     xent_cost, acc = build_cost(logits, y)
@@ -236,6 +236,7 @@ def train():
     # Main training loop.
     for step in range(FLAGS.training_steps):
         X_batch, transitions_batch, y_batch = training_data_iter.next()
+        stack.zero_stack()
         ret = update_fn(X_batch, transitions_batch, y_batch,
                         FLAGS.learning_rate, 1.0)
         total_cost_val, xent_cost_val, action_cost_val, action_acc_val, l2_cost_val, acc_val = ret
@@ -283,9 +284,9 @@ if __name__ == '__main__':
                        ["Model0", "Model1", "Model2"],
                        "")
     gflags.DEFINE_integer("embedding_dim", 5, "")
-    gflags.DEFINE_float("semantic_classifier_keep_rate", 0.5, 
+    gflags.DEFINE_float("semantic_classifier_keep_rate", 0.5,
         "Used for dropout in the semantic task classifier.")
-    gflags.DEFINE_float("embedding_keep_rate", 0.5, 
+    gflags.DEFINE_float("embedding_keep_rate", 0.5,
         "Used for dropout on transformed embeddings.")
     # gflags.DEFINE_integer("num_composition_layers", 1, "")
 

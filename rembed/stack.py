@@ -136,6 +136,10 @@ class HardStack(object):
 
         self.scan_fn = theano.function([self.X, self.transitions, self.apply_dropout],
                                        self.final_stack)
+        theano.printing.debugprint(self.scan_fn.maker.fgraph.outputs[0])
+
+        self.zero_stack = theano.function([], [], updates={self.stack: self._zero_stack_val,
+                                                           self.buffer_cur: self._zero_buffer_cur})
 
     def _make_params(self):
         # Per-token embeddings.
@@ -148,6 +152,14 @@ class HardStack(object):
             self.embeddings = self._vs.add_param(
                 "embeddings", (self.vocab_size, self.embedding_dim))
 
+        # DEV
+        zeroed = np.zeros((100 * 1000, self.embedding_dim), dtype=theano.config.floatX)
+        self._zero_stack_val = theano.shared(zeroed, borrow=False, name="zero_stack")
+        self.stack = theano.shared(zeroed, borrow=False, name="stack_shared")
+        zeroed = np.zeros((256,), dtype=np.int32)
+        self._zero_buffer_cur = theano.shared(zeroed, borrow=False, name="zero_buffer_cur")
+        self.buffer_cur = theano.shared(zeroed, borrow=False, name="buffer_cur")
+
     def _make_inputs(self):
         self.X = self.X or T.imatrix("X")
         self.transitions = self.transitions or T.imatrix("transitions")
@@ -158,13 +170,14 @@ class HardStack(object):
         batch_size, max_stack_size = self.X.shape
 
         # Stack batch is a 2D tensor.
-        stack_shape = (max_stack_size * batch_size, self.embedding_dim)
-        stack_init = T.zeros(stack_shape)
+#        stack_shape = (max_stack_size * batch_size, self.embedding_dim)
+#        stack_init = T.zeros(stack_shape)
+        stack_init = self.stack[:max_stack_size * batch_size]
 
         # Maintain a stack cursor for each example. The stack cursor points to
         # the next push location on the stack (i.e., the first empty element at
         # the top of the stack.)
-        stack_cur_init = T.zeros((batch_size,), dtype="int")
+        stack_cur_init = T.zeros((batch_size,), dtype="int32")
 
         # Look up all of the embeddings that will be used.
         raw_embeddings = self.embeddings[self.X]  # batch_size * seq_length * emb_dim
@@ -178,7 +191,7 @@ class HardStack(object):
         # Collapse buffer to (batch_size * buffer_size) * emb_dim for fast indexing.
         buffer_t = buffer_t.reshape((-1, self.embedding_dim))
 
-        buffer_cur_init = T.zeros((batch_size,), dtype="int")
+        buffer_cur_init = self.buffer_cur[:batch_size]#T.zeros((batch_size,), dtype="int")
 
         # TODO(jgauthier): Implement linear memory (was in previous HardStack;
         # dropped it during a refactor)
