@@ -182,9 +182,9 @@ def train():
     # TODO(SB): Make sure unk and padding get gradients or random inits.
 
     # Set up the placeholders.
-    X = T.matrix("X", dtype="int32")
+    X = T.imatrix("X")
     transitions = T.imatrix("transitions")
-    y = T.vector("y", dtype="int32")
+    y = T.ivector("y")
     lr = T.scalar("lr")
     apply_dropout = T.scalar("apply_dropout")  # 1: Training with dropout, 0: Eval
 
