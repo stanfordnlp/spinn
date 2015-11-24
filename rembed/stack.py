@@ -28,7 +28,6 @@ def update_hard_stack(stack_t, stack_cur_t, push_value, merge_value, mask,
         stack_size:
     """
 
-    model_dim = stack_t.shape[-1]
     stack_idxs = stack_cur_t + (T.arange(batch_size, dtype="int32") * stack_size)
 
     # Build mask + other helpers
@@ -52,7 +51,8 @@ def update_hard_stack(stack_t, stack_cur_t, push_value, merge_value, mask,
     # batch of dim (3 * batch_size) * model_dim
     new_top_three = T.concatenate(new_top_three, axis=0)
 
-    stack_idxs = stack_cur_t[:, np.newaxis].repeat(3, axis=1) + [-2, -1, 0]
+    element_shift = np.array([-2, -1, 0], dtype=np.int32)
+    stack_idxs = stack_cur_t[:, np.newaxis].repeat(3, axis=1) + element_shift
     stack_idxs += (T.arange(batch_size, dtype="int32") * stack_size).dimshuffle(0, "x")
     stack_idxs = stack_idxs.T.flatten()
 
@@ -200,7 +200,7 @@ class HardStack(object):
 
         def step(transitions_t, stack_t, stack_cur_t, buffer_cur_t, buffer, *args):
             # Extract top buffer values.
-            idxs = buffer_cur_t + (T.arange(batch_size) * self.seq_length)
+            idxs = buffer_cur_t + (T.arange(batch_size, dtype="int32") * self.seq_length)
             buffer_top_t = buffer[idxs]
 
             if self._predict_network is not None:
