@@ -29,7 +29,7 @@ def update_hard_stack(stack_t, stack_cur_t, push_value, merge_value, mask,
     """
 
     model_dim = stack_t.shape[-1]
-    stack_idxs = stack_cur_t + (T.arange(batch_size) * stack_size)
+    stack_idxs = stack_cur_t + (T.arange(batch_size, dtype="int32") * stack_size)
 
     # Build mask + other helpers
     mask = T.cast(mask.dimshuffle(0, "x"), "float32")
@@ -53,7 +53,7 @@ def update_hard_stack(stack_t, stack_cur_t, push_value, merge_value, mask,
     new_top_three = T.concatenate(new_top_three, axis=0)
 
     stack_idxs = stack_cur_t[:, np.newaxis].repeat(3, axis=1) + [-2, -1, 0]
-    stack_idxs += (T.arange(batch_size) * stack_size).dimshuffle(0, "x")
+    stack_idxs += (T.arange(batch_size, dtype="int32") * stack_size).dimshuffle(0, "x")
     stack_idxs = stack_idxs.T.flatten()
 
     stack_next = T.set_subtensor(stack_t[stack_idxs], new_top_three)
@@ -135,7 +135,6 @@ class HardStack(object):
 
         self.scan_fn = theano.function([self.X, self.transitions, self.apply_dropout],
                                        self.final_stack)
-        theano.printing.debugprint(self.scan_fn.maker.fgraph.outputs[0])
 
         self.zero_stack = theano.function([], [], updates={self.stack: self._zero_stack_val,
                                                            self.buffer_cur: self._zero_buffer_cur})
@@ -167,10 +166,10 @@ class HardStack(object):
         """Build the sequential composition / scan graph."""
 
         batch_size, max_stack_size = self.X.shape
+        batch_size = T.cast(batch_size, "int32")
+        max_stack_size = T.cast(max_stack_size, "int32")
 
         # Stack batch is a 2D tensor.
-#        stack_shape = (max_stack_size * batch_size, self.embedding_dim)
-#        stack_init = T.zeros(stack_shape)
         stack_init = self.stack[:max_stack_size * batch_size]
 
         # Maintain a stack cursor for each example. The stack cursor points to
@@ -190,7 +189,7 @@ class HardStack(object):
         # Collapse buffer to (batch_size * buffer_size) * emb_dim for fast indexing.
         buffer_t = buffer_t.reshape((-1, self.embedding_dim))
 
-        buffer_cur_init = self.buffer_cur[:batch_size]#T.zeros((batch_size,), dtype="int")
+        buffer_cur_init = self.buffer_cur[:batch_size]
 
         # TODO(jgauthier): Implement linear memory (was in previous HardStack;
         # dropped it during a refactor)
@@ -220,10 +219,13 @@ class HardStack(object):
                 mask = transitions_t
 
             # Now update the stack: first precompute merge results.
-            stack_idxs = T.repeat(stack_cur_t[:, np.newaxis], 2, axis=1) + [-1, -2]
+            elem_shift = np.array([-1, -2], dtype=np.int32)
+            stack_idxs = stack_cur_t[:, np.newaxis].repeat(2, axis=1) + elem_shift
             # Broadcast-add a per-example shift over the index set.
-            stack_idxs += (T.arange(batch_size) * max_stack_size).dimshuffle(0, "x")
+            batch_shift = T.arange(batch_size, dtype="int32") * max_stack_size
+            stack_idxs += batch_shift.dimshuffle(0, "x")
             stack_idxs = stack_idxs.flatten()
+
             merge_items = stack_t[stack_idxs]
             merge_items = merge_items.reshape((-1, self.embedding_dim * 2))
             merge_value = self._compose_network(
