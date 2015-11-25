@@ -31,7 +31,6 @@ def update_hard_stack(stack_t, stack_cur_t, push_value, merge_value, mask,
     stack_idxs = stack_cur_t + (T.arange(batch_size, dtype="int32") * stack_size)
 
     # Build mask + other helpers
-    mask = T.cast(mask.dimshuffle(0, "x"), "float32")
     not_mask = 1 - mask
     zero = np.array(0.0).astype(theano.config.floatX)
 
@@ -78,7 +77,7 @@ class HardStack(object):
 
     def __init__(self, embedding_dim, vocab_size, seq_length, compose_network,
                  embedding_projection_network, apply_dropout, vs, predict_network=None,
-                 use_predictions=False, X=None, transitions=None, initial_embeddings=None,
+                 use_predictions=False, X=None, transitions=None, transitions_f=None, initial_embeddings=None,
                  embedding_dropout_keep_rate=1.0):
         """
         Construct a HardStack.
@@ -128,13 +127,14 @@ class HardStack(object):
 
         self.X = X
         self.transitions = transitions
+        self.transitions_f = transitions_f
 
         self._make_params()
         self._make_inputs()
         self._make_scan()
 
-        self.scan_fn = theano.function([self.X, self.transitions, self.apply_dropout],
-                                       self.final_stack)
+#        self.scan_fn = theano.function([self.X, self.transitions, self.apply_dropout],
+#                                       self.final_stack)
 
         self.zero_stack = theano.function([], [], updates={self.stack: self._zero_stack_val,
                                                            self.buffer_cur: self._zero_buffer_cur})
@@ -161,6 +161,7 @@ class HardStack(object):
     def _make_inputs(self):
         self.X = self.X or T.imatrix("X")
         self.transitions = self.transitions or T.imatrix("transitions")
+        self.transitions_f = self.transitions_f or T.fmatrix("transitions_f")
 
     def _make_scan(self):
         """Build the sequential composition / scan graph."""
@@ -198,7 +199,7 @@ class HardStack(object):
         self._vs.add_param("compose_W", (self.embedding_dim * 2, self.embedding_dim))
         self._vs.add_param("compose_b", (self.embedding_dim,), initializer=util.ZeroInitializer())
 
-        def step(transitions_t, stack_t, stack_cur_t, buffer_cur_t, buffer, *args):
+        def step(transitions_t, transitions_f_t, stack_t, stack_cur_t, buffer_cur_t, buffer, *args):
             # Extract top buffer values.
             idxs = buffer_cur_t + (T.arange(batch_size, dtype="int32") * self.seq_length)
             buffer_top_t = buffer[idxs]
@@ -234,7 +235,7 @@ class HardStack(object):
 
             # Compute new stack value.
             stack_next = update_hard_stack(
-                stack_t, stack_cur_t, buffer_top_t, merge_value, mask,
+                stack_t, stack_cur_t, buffer_top_t, merge_value, transitions_f_t,
                 batch_size, max_stack_size)
 
             # Move stack cursor. (Shift -1 after merging (mask = 1); shift +1
@@ -253,6 +254,7 @@ class HardStack(object):
 
         # Dimshuffle inputs to seq_len * batch_size for scanning
         transitions = self.transitions.dimshuffle(1, 0)
+        transitions_f = self.transitions_f.dimshuffle(1, 0, "x")
 
         # If we have a prediction network, we need an extra outputs_info
         # element (the `None`) to carry along prediction values
@@ -262,7 +264,7 @@ class HardStack(object):
             outputs_info = [stack_init, stack_cur_init, buffer_cur_init]
 
         scan_ret = theano.scan(
-            step, transitions,
+            step, [transitions, transitions_f],
             non_sequences=[buffer_t] + self._vs.vars.values(),
             outputs_info=outputs_info, strict=True)[0]
 

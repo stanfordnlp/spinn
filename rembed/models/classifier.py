@@ -14,6 +14,7 @@ import pprint
 import sys
 
 import gflags
+import numpy as np
 from theano import tensor as T
 import theano
 
@@ -27,7 +28,7 @@ import rembed.stack
 FLAGS = gflags.FLAGS
 
 
-def build_hard_stack(cls, vocab_size, seq_length, tokens, transitions,
+def build_hard_stack(cls, vocab_size, seq_length, tokens, transitions, transitions_f,
                      num_classes, apply_dropout, vs, initial_embeddings=None, project_embeddings=False):
     """
     Construct a classifier which makes use of some hard-stack model.
@@ -57,7 +58,7 @@ def build_hard_stack(cls, vocab_size, seq_length, tokens, transitions,
         FLAGS.embedding_dim, vocab_size, seq_length,
         compose_network, embedding_projection_network, apply_dropout, vs,
         X=tokens,
-        transitions=transitions,
+        transitions=transitions, transitions_f=transitions_f,
         initial_embeddings=initial_embeddings,
         embedding_dropout_keep_rate=FLAGS.embedding_keep_rate)
 
@@ -184,6 +185,7 @@ def train():
     # Set up the placeholders.
     X = T.imatrix("X")
     transitions = T.imatrix("transitions")
+    transitions_f = T.fmatrix("transitions_f")
     y = T.ivector("y")
     lr = T.scalar("lr")
     apply_dropout = T.scalar("apply_dropout")  # 1: Training with dropout, 0: Eval
@@ -194,7 +196,7 @@ def train():
     model_cls = getattr(rembed.stack, FLAGS.model_type)
     stack, actions, logits = build_hard_stack(
         model_cls, len(vocabulary), FLAGS.seq_length,
-        X, transitions, len(data_manager.LABEL_MAP), apply_dropout, vs,
+        X, transitions, transitions_f, len(data_manager.LABEL_MAP), apply_dropout, vs,
         initial_embeddings=initial_embeddings, project_embeddings=(not train_embeddings))
 
     xent_cost, acc = build_cost(logits, y)
@@ -228,16 +230,18 @@ def train():
     #     util.embedding_SGD(total_cost, embedding_params, embedding_lr))
 
     update_fn = theano.function(
-        [X, transitions, y, lr, apply_dropout],
+        [X, transitions, transitions_f, y, lr, apply_dropout],
         [total_cost, xent_cost, action_cost, action_acc, l2_cost, acc],
         updates=new_values)
-    eval_fn = theano.function([X, transitions, y, apply_dropout], [acc, action_acc])
+    theano.printing.debugprint(update_fn.maker.fgraph.outputs[9])
+    #eval_fn = theano.function([X, transitions, y, apply_dropout], [acc, action_acc])
 
     # Main training loop.
     for step in range(FLAGS.training_steps):
         X_batch, transitions_batch, y_batch = training_data_iter.next()
+        transitions_f_batch = np.cast[np.float32](transitions_batch)
         stack.zero_stack()
-        ret = update_fn(X_batch, transitions_batch, y_batch,
+        ret = update_fn(X_batch, transitions_batch, transitions_f_batch, y_batch,
                         FLAGS.learning_rate, 1.0)
         total_cost_val, xent_cost_val, action_cost_val, action_acc_val, l2_cost_val, acc_val = ret
 
