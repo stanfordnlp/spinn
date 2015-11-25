@@ -28,7 +28,8 @@ FIXED_PARAMETERS = {
     "eval_seq_length":	"150",
     "clipping_max_value":  "5.0",
     "batch_size":  "128",
-    "lstm_composition": ""
+    "lstm_composition": "",
+    "ckpt_root":    "~/scr/"
 }
 
 # Tunable parameters.
