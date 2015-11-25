@@ -34,11 +34,11 @@ FIXED_PARAMETERS = {
 # Tunable parameters.
 SWEEP_PARAMETERS = {
     "learning_rate":      (EXP, 0.0001, 0.0003),
-    "l2_lambda":   		  (EXP, 5e-7, 1e-5),
+    "l2_lambda":   		  (EXP, 2e-7, 2e-5),
     "init_range":         (EXP, 0.001, 0.004),
     "double_identity_init_range": (EXP, 0.0005, 0.005),
-    "semantic_classifier_keep_rate": (LIN, 0.5, 0.9),
-    "embedding_keep_rate": (LIN, 0.5, 1.0)
+    "semantic_classifier_keep_rate": (LIN, 0.4, 0.9),
+    "embedding_keep_rate": (LIN, 0.4, 1.0)
 }
 
 sweep_name = "sweep_" + \
