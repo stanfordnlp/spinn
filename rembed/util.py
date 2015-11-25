@@ -49,6 +49,14 @@ def TreeLSTMBiasInitializer():
         return value
 
 
+def LSTMBiasInitializer():
+    def init(shape):
+        hidden_dim = shape[0] / 5
+        value = np.zeros(shape)
+        value[hidden_dim:2*hidden_dim] = 1
+        return value
+
+
 def DoubleIdentityInitializer(range):
     def init(shape):
         half_d = shape[0] / 2
@@ -194,7 +202,7 @@ def TreeLSTMLayer(lstm_prev, _, full_memory_dim, vs, name="tree_lstm", initializ
 
 
 
-def LSTM(lstm_prev, inp, inp_dim, hidden_dim, vs, name="lstm"):
+def LSTMLayer(lstm_prev, inp, inp_dim, hidden_dim, vs, name="lstm"):
     # input -> hidden mapping
     W = vs.add_param("%s/W" % name, (inp_dim, hidden_dim * 4))
     # hidden -> hidden mapping
@@ -202,7 +210,7 @@ def LSTM(lstm_prev, inp, inp_dim, hidden_dim, vs, name="lstm"):
     # gate biases
     # TODO(jgauthier): support excluding params from regularization
     b = vs.add_param("%s/b" % name, (hidden_dim * 4,),
-                     initializer=ZeroInitializer())
+                     initializer=LSTMBiasInitializer())
 
     def slice_gate(gate_data, i):
         return gate_data[:, i * hidden_dim:(i + 1) * hidden_dim]
