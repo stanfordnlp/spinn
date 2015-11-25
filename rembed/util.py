@@ -1,4 +1,5 @@
 from collections import OrderedDict
+import cPickle
 import itertools
 import math
 import random
@@ -62,7 +63,7 @@ class VariableStore(object):
     def __init__(self, prefix="vs", default_initializer=HeKaimingInitializer(), logger=None):
         self.prefix = prefix
         self.default_initializer = default_initializer
-        self.vars = {}
+        self.vars = OrderedDict()  # Order is used in saving and loading
         self.logger = logger
 
     def add_param(self, name, shape, initializer=None):
@@ -79,6 +80,32 @@ class VariableStore(object):
                                             name=full_name)
         return self.vars[name]
 
+    def save_checkpoint(self, filename="vs_ckpt", keys=None, step=None):
+        if not keys:
+            keys = self.vars
+        save_file = open(filename, 'wb')  # this will overwrite current contents
+        for key in keys:
+            if self.logger:
+                full_name = "%s/%s" % (self.prefix, key)
+                self.logger.Log(
+                    "Saving variable " + full_name, level=self.logger.DEBUG)
+            cPickle.dump(self.vars[key].get_value(borrow=True), save_file, -1)  # the -1 is for HIGHEST_PROTOCOL
+        if step:
+            cPickle.dump(step, save_file, -1)
+        save_file.close()
+
+    def load_checkpoint(self, filename="vs_ckpt", keys=None, get_step=False):
+        if not keys:
+            keys = self.vars
+        save_file = open(filename)
+        for key in keys:
+            if self.logger:
+                full_name = "%s/%s" % (self.prefix, key)
+                self.logger.Log(
+                    "Restoring variable " + full_name, level=self.logger.DEBUG)
+            self.vars[key].set_value(cPickle.load(save_file), borrow=True)
+        if get_step:
+            return cPickle.load(save_file)
 
 def ReLULayer(inp, inp_dim, outp_dim, vs, name="relu_layer", use_bias=True, initializer=None):
     pre_nl = Linear(inp, inp_dim, outp_dim, vs, name, use_bias, initializer)

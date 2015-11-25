@@ -13,9 +13,14 @@ SNLI entailment (Demo only, model needs a full GloVe embeddings file to do well)
 python -m rembed.models.classifier --data_type snli --training_data_path snli_1.0/snli_1.0_dev.jsonl \
        --eval_data_path snli_1.0/snli_1.0_dev.jsonl --embedding_data_path rembed/tests/test_embedding_matrix.5d.txt \
        --model_dim 10 --word_embedding_dim 5
+
+Note: If you get an error starting with "TypeError: ('Wrong number of dimensions..." during development, 
+    there may already be a saved checkpoint in ckpt_root that matches the name of the model you're developing. 
+    Move or delete it as appropriate.
 """
 
 from functools import partial
+import os
 import pprint
 import sys
 
@@ -345,9 +350,18 @@ def train():
 
     # Set up optimization.
     if train_embeddings:
+        trained_param_keys = vs.vars.keys()
         trained_params = vs.vars.values()
     else:
+        trained_param_keys = [key for key in vs.vars if 'embedding' not in key]
         trained_params = [vs.vars[key] for key in vs.vars if 'embedding' not in key]
+
+    checkpoint_path = os.path.join(FLAGS.ckpt_root, FLAGS.experiment_name + ".ckpt")
+    if os.path.isfile(checkpoint_path):
+        logger.Log("Found checkpoint, restoring.")
+        step = vs.load_checkpoint(checkpoint_path, trained_param_keys, get_step=True) 
+    else:
+        step = 0
 
     new_values = util.RMSprop(total_cost, trained_params, lr)
     # Training open-vocabulary embeddings is a questionable idea right now. Disabled:
@@ -369,7 +383,7 @@ def train():
     logger.Log("Training.")
 
     # Main training loop.
-    for step in range(FLAGS.training_steps):
+    for step in range(step, FLAGS.training_steps):
         X_batch, transitions_batch, y_batch, num_transitions_batch = training_data_iter.next()
         ret = update_fn(X_batch, transitions_batch, y_batch, num_transitions_batch,
                         FLAGS.learning_rate, 1.0)
@@ -397,12 +411,18 @@ def train():
                 logger.Log("Step: %i\tEval acc: %f\t %f\t%s" %
                           (step, acc_accum / eval_batches, action_acc_accum / eval_batches, eval_set[0]))
 
+        if step % FLAGS.ckpt_interval_steps == 0 and step > 0:
+            vs.save_checkpoint(checkpoint_path, trained_param_keys, step)
+
 if __name__ == '__main__':
     # Experiment naming.
     gflags.DEFINE_string("experiment_name", "experiment", "")
 
     # Data types.
     gflags.DEFINE_string("data_type", "bl", "Values: bl, sst, snli")
+
+    # Where to store checkpoints
+    gflags.DEFINE_string("ckpt_root", ".", "Where to store checkpoints.") 
 
     # Data settings.
     gflags.DEFINE_string("training_data_path", None, "")
@@ -439,6 +459,9 @@ if __name__ == '__main__':
     # Display settings.
     gflags.DEFINE_integer("statistics_interval_steps", 50, "")
     gflags.DEFINE_integer("eval_interval_steps", 50, "")
+
+    gflags.DEFINE_integer("ckpt_interval_steps", 10000, "")
+
 
     # Parse command line flags.
     FLAGS(sys.argv)
