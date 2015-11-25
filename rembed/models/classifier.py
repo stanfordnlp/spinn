@@ -65,7 +65,8 @@ def build_hard_stack(cls, vocab_size, seq_length, tokens, transitions, transitio
     # Extract top element of final stack timestep.
     final_stack = stack.final_stack
     stack_top = final_stack[:, 0]
-    sentence_vector = stack_top.reshape((-1, FLAGS.embedding_dim))
+    sentence_vector = stack_top.reshape((FLAGS.batch_size,
+                                         FLAGS.embedding_dim))
 
     sentence_vector = util.Dropout(sentence_vector, FLAGS.semantic_classifier_keep_rate, apply_dropout)
 
