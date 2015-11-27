@@ -204,12 +204,12 @@ def TreeLSTMLayer(lstm_prev, _, full_memory_dim, vs, name="tree_lstm", initializ
 
 def LSTMLayer(lstm_prev, inp, inp_dim, hidden_dim, vs, name="lstm"):
     # input -> hidden mapping
-    W = vs.add_param("%s/W" % name, (inp_dim, hidden_dim * 4))
+    W = vs.add_param("%s_W" % name, (inp_dim, hidden_dim * 4))
     # hidden -> hidden mapping
-    U = vs.add_param("%s/U" % name, (hidden_dim, hidden_dim * 4))
+    U = vs.add_param("%s_U" % name, (hidden_dim, hidden_dim * 4))
     # gate biases
     # TODO(jgauthier): support excluding params from regularization
-    b = vs.add_param("%s/b" % name, (hidden_dim * 4,),
+    b = vs.add_param("%s_b" % name, (hidden_dim * 4,),
                      initializer=LSTMBiasInitializer())
 
     def slice_gate(gate_data, i):
@@ -235,6 +235,12 @@ def LSTMLayer(lstm_prev, inp, inp_dim, hidden_dim, vs, name="lstm"):
 
     return T.concatenate([h_t, c_t], axis=1)
 
+def TrackingUnit(state_prev, inp, inp_dim, hidden_dim, vs, name="track_unit"):
+    # pass previous state and input to an LSTM 
+    state = LSTMLayer(state_prev, inp, inp_dim, hidden_dim, vs, name="%s/lstm" % name)
+    # pass lstm states through a Linear layer to predict transition
+    pred = Linear(state, 2 * hidden_dim, 2, vs, name="%s/linear" % name)
+    return state, pred
 
 def MLP(inp, inp_dim, outp_dim, vs, layer=ReLULayer, hidden_dims=None,
         name="mlp", initializer=None):
