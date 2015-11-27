@@ -27,6 +27,8 @@ import sys
 import gflags
 from theano import tensor as T
 import theano
+from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
+import numpy
 
 from rembed import afs_safe_logger
 from rembed import util
@@ -41,7 +43,7 @@ FLAGS = gflags.FLAGS
 
 
 def build_sentence_model(cls, vocab_size, seq_length, tokens, transitions,
-                     num_classes, apply_dropout, vs, initial_embeddings=None, project_embeddings=False):
+                     num_classes, apply_dropout, vs, initial_embeddings=None, project_embeddings=False, ss_mask_gen=None, ss_prob=0.0):
     """
     Construct a classifier which makes use of some hard-stack model.
 
@@ -78,7 +80,9 @@ def build_sentence_model(cls, vocab_size, seq_length, tokens, transitions,
         X=tokens, 
         transitions=transitions, 
         initial_embeddings=initial_embeddings, 
-        embedding_dropout_keep_rate=FLAGS.embedding_keep_rate)
+        embedding_dropout_keep_rate=FLAGS.embedding_keep_rate,
+        ss_mask_gen=ss_mask_gen,
+        ss_prob=ss_prob)
 
     # Extract top element of final stack timestep.
     final_stack = stack.final_stack
@@ -96,7 +100,7 @@ def build_sentence_model(cls, vocab_size, seq_length, tokens, transitions,
 
 
 def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
-                     num_classes, apply_dropout, vs, initial_embeddings=None, project_embeddings=False):
+                     num_classes, apply_dropout, vs, initial_embeddings=None, project_embeddings=False, ss_mask_gen=None, ss_prob=0.0):
     """
     Construct a classifier which makes use of some hard-stack model.
 
@@ -140,14 +144,18 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
         X=premise_tokens, 
         transitions=premise_transitions, 
         initial_embeddings=initial_embeddings, 
-        embedding_dropout_keep_rate=FLAGS.embedding_keep_rate)
+        embedding_dropout_keep_rate=FLAGS.embedding_keep_rate,
+        ss_mask_gen=ss_mask_gen,
+        ss_prob=ss_prob)
     hypothesis_model = cls(
         FLAGS.model_dim, FLAGS.word_embedding_dim, vocab_size, seq_length,
         compose_network, embedding_projection_network, apply_dropout, vs, 
         X=hypothesis_tokens, 
         transitions=hypothesis_transitions, 
         initial_embeddings=initial_embeddings, 
-        embedding_dropout_keep_rate=FLAGS.embedding_keep_rate)
+        embedding_dropout_keep_rate=FLAGS.embedding_keep_rate,
+        ss_mask_gen=ss_mask_gen,
+        ss_prob=ss_prob)
 
     # Extract top element of final stack timestep.
     premise_stack_top = premise_model.final_stack[:, 0]
@@ -305,15 +313,24 @@ def train():
     vs = util.VariableStore(
         default_initializer=util.UniformInitializer(FLAGS.init_range), logger=logger)
     model_cls = getattr(rembed.stack, FLAGS.model_type)
+    
+    # Generator of mask for scheduled sampling
+    numpy_random = numpy.random.RandomState(1234)
+    ss_mask_gen = RandomStreams(numpy_random.randint(999999))
+    # Training step number
+    ss_prob = T.dscalar("ss_prob")
+    
     if data_manager.SENTENCE_PAIR_DATA:
         X = T.itensor3("X")
-        transitions = T.itensor3("transitions")   
+        transitions = T.itensor3("transitions")
         num_transitions = T.imatrix("num_transitions")
 
         predicted_premise_transitions, predicted_hypothesis_transitions, logits = build_sentence_pair_model(
             model_cls, len(vocabulary), FLAGS.seq_length,
             X, transitions, len(data_manager.LABEL_MAP), apply_dropout, vs, 
-            initial_embeddings=initial_embeddings, project_embeddings=(not train_embeddings))
+            initial_embeddings=initial_embeddings, project_embeddings=(not train_embeddings),
+            ss_mask_gen=ss_mask_gen,
+            ss_prob=ss_prob)
     else:
         X = T.matrix("X", dtype="int32")
         transitions = T.imatrix("transitions")   
@@ -322,7 +339,9 @@ def train():
         predicted_transitions, logits = build_sentence_model(
             model_cls, len(vocabulary), FLAGS.seq_length,
             X, transitions, len(data_manager.LABEL_MAP), apply_dropout, vs, 
-            initial_embeddings=initial_embeddings, project_embeddings=(not train_embeddings))        
+            initial_embeddings=initial_embeddings, project_embeddings=(not train_embeddings),
+            ss_mask_gen=ss_mask_gen,
+            ss_prob=ss_prob)        
 
     xent_cost, acc = build_cost(logits, y)
 
@@ -371,14 +390,15 @@ def train():
     # Create training and eval functions. 
     # Unused variable warnings are supressed so that num_transitions can be passed in when training Model 0,
     # which ignores it. This yields more readable code that is very slightly slower.
+    # Added training step number 
     logger.Log("Building update function.")
     update_fn = theano.function(
-        [X, transitions, y, num_transitions, lr, apply_dropout],
+        [X, transitions, y, num_transitions, lr, apply_dropout, ss_prob],
         [total_cost, xent_cost, action_cost, action_acc, l2_cost, acc],
         updates=new_values,
         on_unused_input='warn')
     logger.Log("Building eval function.")
-    eval_fn = theano.function([X, transitions, y, num_transitions, apply_dropout], [acc, action_acc],
+    eval_fn = theano.function([X, transitions, y, num_transitions, apply_dropout, ss_prob], [acc, action_acc],
         on_unused_input='warn')
     logger.Log("Training.")
 
@@ -386,7 +406,7 @@ def train():
     for step in range(step, FLAGS.training_steps):
         X_batch, transitions_batch, y_batch, num_transitions_batch = training_data_iter.next()
         ret = update_fn(X_batch, transitions_batch, y_batch, num_transitions_batch,
-                        FLAGS.learning_rate, 1.0)
+                        FLAGS.learning_rate, 1.0, numpy.exp(step*numpy.log(0.99999)))
         total_cost_val, xent_cost_val, action_cost_val, action_acc_val, l2_cost_val, acc_val = ret
 
         if step % FLAGS.statistics_interval_steps == 0:
@@ -404,7 +424,7 @@ def train():
                 for (eval_X_batch, eval_transitions_batch, eval_y_batch, eval_num_transitions_batch) in eval_set[1]:
                     acc_value, action_acc_value = eval_fn(
                         eval_X_batch, eval_transitions_batch,
-                        eval_y_batch, eval_num_transitions_batch, 0.0)
+                        eval_y_batch, eval_num_transitions_batch, 0.0, 0.0)
                     acc_accum += acc_value
                     action_acc_accum += action_acc_value
                     eval_batches += 1.0
@@ -435,7 +455,7 @@ if __name__ == '__main__':
 
     # Model architecture settings.
     gflags.DEFINE_enum("model_type", "Model0",
-                       ["Model0", "Model1", "Model2"],
+                       ["Model0", "Model1", "Model2", "Model12SS"],
                        "")
     gflags.DEFINE_integer("model_dim", 8, "")
     gflags.DEFINE_integer("word_embedding_dim", 8, "")
