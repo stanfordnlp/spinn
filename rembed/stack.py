@@ -59,8 +59,8 @@ class HardStack(object):
     Model 2: predict_network=something, use_predictions=True
     """
 
-    def __init__(self, model_dim, word_embedding_dim, vocab_size, seq_length, compose_network,
-                 embedding_projection_network, apply_dropout, vs, predict_network=None,
+    def __init__(self, model_dim, word_embedding_dim, lstm_hidden_dim, vocab_size, seq_length, 
+                 compose_network, embedding_projection_network, apply_dropout, vs, predict_network=None,
                  use_predictions=False, X=None, transitions=None, initial_embeddings=None,
                  make_test_fn=False, embedding_dropout_keep_rate=1.0):
         """
@@ -96,6 +96,7 @@ class HardStack(object):
 
         self.model_dim = model_dim
         self.word_embedding_dim = word_embedding_dim
+        self.hidden_dim = lstm_hidden_dim
         self.vocab_size = vocab_size
         self.seq_length = seq_length
 
@@ -225,11 +226,11 @@ class Model0(HardStack):
 class Model1(HardStack):
 
     def __init__(self, *args, **kwargs):
-        kwargs["predict_network"] = kwargs.get("predict_network", util.Linear)
+        kwargs["predict_network"] = kwargs.get("predict_network", util.TrackingUnit)
         kwargs["use_predictions"] = False
         super(Model1, self).__init__(*args, **kwargs)
 
-    def _step(self, transitions_t, stack_t, buffer_cur_t, stack_pushed,
+    def _step(self, transitions_t, stack_t, buffer_cur_t, hidden_prev, stack_pushed,
              stack_merged, buffer):
         batch_size, _ = self.X.shape
         # Extract top buffer values.
@@ -238,9 +239,9 @@ class Model1(HardStack):
 
         predict_inp = T.concatenate(
                 [stack_t[:, 0], stack_t[:, 1], buffer_top_t], axis=1)
-        actions_t = self._predict_network(
-                predict_inp, self.model_dim * 3, 2, self._vs,
-                name="predict_actions")
+        hidden, actions_t = self._predict_network(
+                hidden_prev, predict_inp, self.model_dim * 3, self.hidden_dim,
+                self._vs, name="predict_actions")
 
         if self.use_predictions:
             # Use predicted actions to build a mask.
@@ -264,21 +265,25 @@ class Model1(HardStack):
         # should increment each buffer cursor by 1 - mask
         buffer_cur_next = buffer_cur_t + (1 - mask)
 
-        return stack_next, actions_t, buffer_cur_next
+        return stack_next, buffer_cur_next, hidden, actions_t
         
     def get_stack_prediction(self, transitions, stack_pushed, stack_merged,
             buffer_t, stack_init, buffer_cur_init):
-        outputs_info = [stack_init, None, buffer_cur_init]
+        batch_size, _ = self.X.shape
+        hidden_shape = (batch_size, self.hidden_dim * 2)
+        hidden_init = T.zeros(hidden_shape)
+
+        outputs_info = [stack_init, buffer_cur_init, hidden_init, None]
         
         scan_ret = theano.scan(
             self._step, transitions,
             non_sequences=[stack_pushed, stack_merged, buffer_t],
             outputs_info=outputs_info)[0]
-        return scan_ret[0][-1], scan_ret[1].dimshuffle(1, 0, 2)
+        return scan_ret[0][-1], scan_ret[3].dimshuffle(1, 0, 2)
 
 class Model2(Model1):
 
     def __init__(self, *args, **kwargs):
-        kwargs["predict_network"] = kwargs.get("predict_network", util.Linear)
+        kwargs["predict_network"] = kwargs.get("predict_network", util.TrackingUnit)
         kwargs["use_predictions"] = True
         super(Model2, self).__init__(*args, **kwargs)
