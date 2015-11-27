@@ -164,70 +164,19 @@ class HardStack(object):
 
         buffer_cur_init = T.zeros((batch_size,), dtype="int")
 
-        # TODO(jgauthier): Implement linear memory (was in previous HardStack;
-        # dropped it during a refactor)
-
-        def step(transitions_t, stack_t, buffer_cur_t, stack_pushed,
-                 stack_merged, buffer):
-            # Extract top buffer values.
-            idxs = buffer_cur_t + (T.arange(batch_size) * self.seq_length)
-            buffer_top_t = buffer[idxs]
-
-            if self._predict_network is not None:
-                # We are predicting our own stack operations.
-                predict_inp = T.concatenate(
-                    [stack_t[:, 0], stack_t[:, 1], buffer_top_t], axis=1)
-                actions_t = self._predict_network(
-                    predict_inp, self.model_dim * 3, 2, self._vs,
-                    name="predict_actions")
-
-            if self.use_predictions:
-                # Use predicted actions to build a mask.
-                mask = actions_t.argmax(axis=1)
-            else:
-                # Use transitions provided from external parser.
-                mask = transitions_t
-
-            # Now update the stack: first precompute merge results.
-            merge_items = stack_t[:, :2].reshape((-1, self.model_dim * 2))
-            merge_value = self._compose_network(
-                merge_items, self.model_dim * 2, self.model_dim,
-                self._vs, name="compose")
-
-            # Compute new stack value.
-            stack_next = update_hard_stack(
-                stack_t, stack_pushed, stack_merged, buffer_top_t,
-                merge_value, mask)
-
-            # Move buffer cursor as necessary. Since mask == 1 when merge, we
-            # should increment each buffer cursor by 1 - mask
-            buffer_cur_next = buffer_cur_t + (1 - mask)
-
-            if self._predict_network is not None:
-                return stack_next, actions_t, buffer_cur_next
-            else:
-                return stack_next, buffer_cur_next
-
         # Dimshuffle inputs to seq_len * batch_size for scanning
         transitions = self.transitions.dimshuffle(1, 0)
 
-        # If we have a prediction network, we need an extra outputs_info
-        # element (the `None`) to carry along prediction values
-        if self._predict_network is not None:
-            outputs_info = [stack_init, None, buffer_cur_init]
-        else:
-            outputs_info = [stack_init, buffer_cur_init]
+        self.final_stack, self.transitions_pred = self.get_stack_prediction(transitions,
+            stack_pushed, stack_merged, buffer_t, stack_init, buffer_cur_init)
 
-        scan_ret = theano.scan(
-            step, transitions,
-            non_sequences=[stack_pushed, stack_merged, buffer_t],
-            outputs_info=outputs_info)[0]
-
-        self.final_stack = scan_ret[0][-1]
-
-        self.transitions_pred = None
-        if self._predict_network is not None:
-            self.transitions_pred = scan_ret[1].dimshuffle(1, 0, 2)
+    def get_stack_prediction(self, transitions, stack_pushed, stack_merged, 
+            buffer_t, stack_init, buffer_cur_init):
+        '''
+        Returns (final_stack, predicted_transitions) tuple. predicted_transitions
+        is None for Model0 and the output of tracking LSTM for Model1/2.
+        '''
+        raise NotImplementedError("method not implementated")
 
 
 class Model0(HardStack):
@@ -237,6 +186,41 @@ class Model0(HardStack):
         kwargs["use_predictions"] = False
         super(Model0, self).__init__(*args, **kwargs)
 
+    def _step(self, transitions_t, stack_t, buffer_cur_t, stack_pushed,
+             stack_merged, buffer):
+        batch_size, _ = self.X.shape
+        # Extract top buffer values.
+        idxs = buffer_cur_t + (T.arange(batch_size) * self.seq_length)
+        buffer_top_t = buffer[idxs]
+        mask = transitions_t
+
+        # Now update the stack: first precompute merge results.
+        merge_items = stack_t[:, :2].reshape((-1, self.model_dim * 2))
+        merge_value = self._compose_network(
+            merge_items, self.model_dim * 2, self.model_dim,
+            self._vs, name="compose")
+
+        # Compute new stack value.
+        stack_next = update_hard_stack(
+            stack_t, stack_pushed, stack_merged, buffer_top_t,
+            merge_value, mask)
+
+        # Move buffer cursor as necessary. Since mask == 1 when merge, we
+        # should increment each buffer cursor by 1 - mask
+        buffer_cur_next = buffer_cur_t + (1 - mask)
+        return stack_next, buffer_cur_next
+
+    def get_stack_prediction(self, transitions, stack_pushed, stack_merged,
+            buffer_t, stack_init, buffer_cur_init):
+        outputs_info = [stack_init, buffer_cur_init]
+
+        scan_ret = theano.scan(
+            self._step, transitions,
+            non_sequences=[stack_pushed, stack_merged, buffer_t],
+            outputs_info=outputs_info)[0]
+
+        return scan_ret[0][-1], None
+
 
 class Model1(HardStack):
 
@@ -245,8 +229,54 @@ class Model1(HardStack):
         kwargs["use_predictions"] = False
         super(Model1, self).__init__(*args, **kwargs)
 
+    def _step(self, transitions_t, stack_t, buffer_cur_t, stack_pushed,
+             stack_merged, buffer):
+        batch_size, _ = self.X.shape
+        # Extract top buffer values.
+        idxs = buffer_cur_t + (T.arange(batch_size) * self.seq_length)
+        buffer_top_t = buffer[idxs]
 
-class Model2(HardStack):
+        predict_inp = T.concatenate(
+                [stack_t[:, 0], stack_t[:, 1], buffer_top_t], axis=1)
+        actions_t = self._predict_network(
+                predict_inp, self.model_dim * 3, 2, self._vs,
+                name="predict_actions")
+
+        if self.use_predictions:
+            # Use predicted actions to build a mask.
+            mask = actions_t.argmax(axis=1)
+        else:
+            # Use transitions provided from external parser.
+            mask = transitions_t
+
+        # Now update the stack: first precompute merge results.
+        merge_items = stack_t[:, :2].reshape((-1, self.model_dim * 2))
+        merge_value = self._compose_network(
+            merge_items, self.model_dim * 2, self.model_dim,
+            self._vs, name="compose")
+
+        # Compute new stack value.
+        stack_next = update_hard_stack(
+            stack_t, stack_pushed, stack_merged, buffer_top_t,
+            merge_value, mask)
+
+        # Move buffer cursor as necessary. Since mask == 1 when merge, we
+        # should increment each buffer cursor by 1 - mask
+        buffer_cur_next = buffer_cur_t + (1 - mask)
+
+        return stack_next, actions_t, buffer_cur_next
+        
+    def get_stack_prediction(self, transitions, stack_pushed, stack_merged,
+            buffer_t, stack_init, buffer_cur_init):
+        outputs_info = [stack_init, None, buffer_cur_init]
+        
+        scan_ret = theano.scan(
+            self._step, transitions,
+            non_sequences=[stack_pushed, stack_merged, buffer_t],
+            outputs_info=outputs_info)[0]
+        return scan_ret[0][-1], scan_ret[1].dimshuffle(1, 0, 2)
+
+class Model2(Model1):
 
     def __init__(self, *args, **kwargs):
         kwargs["predict_network"] = kwargs.get("predict_network", util.Linear)
