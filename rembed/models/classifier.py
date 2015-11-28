@@ -75,9 +75,8 @@ def build_sentence_model(cls, vocab_size, seq_length, tokens, transitions,
 
     # Build hard stack which scans over input sequence.
     stack = cls(
-        FLAGS.model_dim, FLAGS.word_embedding_dim, FLAGS.lstm_hidden_dim, 
-        vocab_size, seq_length, compose_network, embedding_projection_network, 
-        apply_dropout, vs, 
+        FLAGS.model_dim, FLAGS.word_embedding_dim, vocab_size, seq_length,
+        compose_network, embedding_projection_network, apply_dropout, vs, 
         X=tokens, 
         transitions=transitions, 
         initial_embeddings=initial_embeddings, 
@@ -140,9 +139,8 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
 
     # Build two hard stack models which scan over input sequences.
     premise_model = cls(
-        FLAGS.model_dim, FLAGS.word_embedding_dim, FLAGS.lstm_hidden_dim, 
-        vocab_size, seq_length, compose_network, embedding_projection_network, 
-        apply_dropout, vs, 
+        FLAGS.model_dim, FLAGS.word_embedding_dim, vocab_size, seq_length,
+        compose_network, embedding_projection_network, apply_dropout, vs, 
         X=premise_tokens, 
         transitions=premise_transitions, 
         initial_embeddings=initial_embeddings, 
@@ -150,9 +148,8 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
         ss_mask_gen=ss_mask_gen,
         ss_prob=ss_prob)
     hypothesis_model = cls(
-        FLAGS.model_dim, FLAGS.word_embedding_dim, FLAGS.lstm_hidden_dim,
-        vocab_size, seq_length, compose_network, embedding_projection_network, 
-        apply_dropout, vs, 
+        FLAGS.model_dim, FLAGS.word_embedding_dim, vocab_size, seq_length,
+        compose_network, embedding_projection_network, apply_dropout, vs, 
         X=hypothesis_tokens, 
         transitions=hypothesis_transitions, 
         initial_embeddings=initial_embeddings, 
@@ -462,7 +459,6 @@ if __name__ == '__main__':
                        "")
     gflags.DEFINE_integer("model_dim", 8, "")
     gflags.DEFINE_integer("word_embedding_dim", 8, "")
-    gflags.DEFINE_integer("lstm_hidden_dim", 8, "")
     gflags.DEFINE_float("semantic_classifier_keep_rate", 0.5, 
         "Used for dropout in the semantic task classifier.")
     gflags.DEFINE_float("embedding_keep_rate", 0.5, 

@@ -135,7 +135,8 @@ class HardStack(object):
             def EmbeddingInitializer(shape):
                 return self.initial_embeddings
             self.embeddings = self._vs.add_param(
-                "embeddings", (self.vocab_size, self.word_embedding_dim), initializer=EmbeddingInitializer)
+                    "embeddings", (self.vocab_size, self.word_embedding_dim), 
+                    initializer=EmbeddingInitializer)
         else:
             self.embeddings = self._vs.add_param(
                 "embeddings", (self.vocab_size, self.word_embedding_dim))
@@ -143,6 +144,59 @@ class HardStack(object):
     def _make_inputs(self):
         self.X = self.X or T.imatrix("X")
         self.transitions = self.transitions or T.imatrix("transitions")
+
+    def _step(self, transitions_t, ss_mask_gen_matrix_t, stack_t, buffer_cur_t, 
+            stack_pushed, stack_merged, buffer):
+        batch_size, _ = self.X.shape
+        # Extract top buffer values.
+        idxs = buffer_cur_t + (T.arange(batch_size) * self.seq_length)
+        buffer_top_t = buffer[idxs]
+
+        if self._predict_network is not None:
+            # We are predicting our own stack operations.
+            predict_inp = T.concatenate(
+                [stack_t[:, 0], stack_t[:, 1], buffer_top_t], axis=1)
+            actions_t = self._predict_network(
+                predict_inp, self.model_dim * 3, 2, self._vs,
+                name="predict_actions")
+
+        if self.use_predictions: 
+            # Predicting our own actions
+            if self.interpolate:
+                # Interpolate between truth and prediction using bernoulli RVs 
+                # generated prior to the step
+                mask = (transitions_t * ss_mask_gen_matrix_t + 
+                        actions_t.argmax(axis=1) * (1 - ss_mask_gen_matrix_t))
+            else:
+                # Use predicted actions to build a mask.
+                mask = actions_t.argmax(axis=1)
+        else:
+            # Use transitions provided from external parser.
+            mask = transitions_t
+
+        # Now update the stack: first precompute merge results.
+        merge_items = stack_t[:, :2].reshape((-1, self.model_dim * 2))
+        merge_value = self._compose_network(
+            merge_items, self.model_dim * 2, self.model_dim,
+            self._vs, name="compose")
+
+        # Compute new stack value.
+        stack_next = update_hard_stack(
+            stack_t, stack_pushed, stack_merged, buffer_top_t,
+            merge_value, mask)
+
+        # Move buffer cursor as necessary. Since mask == 1 when merge, we
+        # should increment each buffer cursor by 1 - mask
+        buffer_cur_next = buffer_cur_t + (1 - mask)
+
+        if self._predict_network is not None:
+            ret_val = stack_next, actions_t, buffer_cur_next
+        else:
+            ret_val = stack_next, buffer_cur_next
+        if not self.interpolate:
+            # use ss_mask as a redundant return value
+            ret_val = (ss_mask_gen_matrix_t,) + ret_val
+        return ret_val
 
     def _make_scan(self):
         """Build the sequential composition / scan graph."""
@@ -171,137 +225,46 @@ class HardStack(object):
 
         buffer_cur_init = T.zeros((batch_size,), dtype="int")
 
+        DUMMY = T.zeros((1,)) # a dummy tensor used as a place-holder
         # TODO(jgauthier): Implement linear memory (was in previous HardStack;
         # dropped it during a refactor)
-
-        # Two definitions of the step function here, one with the scheduled sampling mask thrown in (step_ss),
-        # one without (the old step). Only to avoid allocating a matrix of ones in case SS is turned off.
-        # Identical in every respect except for how you set the mask
-
-        def step_ss(transitions_t, ss_mask_gen_matrix_t, stack_t, buffer_cur_t, stack_pushed,
-                 stack_merged, buffer):
-        # Extract top buffer values.
-            idxs = buffer_cur_t + (T.arange(batch_size) * self.seq_length)
-            buffer_top_t = buffer[idxs]
-
-            if self._predict_network is not None:
-                # We are predicting our own stack operations.
-                predict_inp = T.concatenate(
-                    [stack_t[:, 0], stack_t[:, 1], buffer_top_t], axis=1)
-                actions_t = self._predict_network(
-                    predict_inp, self.model_dim * 3, 2, self._vs,
-                    name="predict_actions")
-
-            if self.use_predictions: 
-                if self.interpolate:
-                    # Interpolate between truth and prediction, using bernoulli RVs generated prior to the step
-                    mask = transitions_t * ss_mask_gen_matrix_t + actions_t.argmax(axis=1) * (1 - ss_mask_gen_matrix_t)
-                else:
-                    # Use predicted actions to build a mask.
-                    mask = actions_t.argmax(axis=1)
-            else:
-                # Use transitions provided from external parser.
-                mask = transitions_t
-
-            # Now update the stack: first precompute merge results.
-            merge_items = stack_t[:, :2].reshape((-1, self.model_dim * 2))
-            merge_value = self._compose_network(
-                merge_items, self.model_dim * 2, self.model_dim,
-                self._vs, name="compose")
-
-            # Compute new stack value.
-            stack_next = update_hard_stack(
-                stack_t, stack_pushed, stack_merged, buffer_top_t,
-                merge_value, mask)
-
-            # Move buffer cursor as necessary. Since mask == 1 when merge, we
-            # should increment each buffer cursor by 1 - mask
-            buffer_cur_next = buffer_cur_t + (1 - mask)
-
-            if self._predict_network is not None:
-                return stack_next, actions_t, buffer_cur_next
-            else:
-                return stack_next, buffer_cur_next
-
-
-
-        def step(transitions_t, stack_t, buffer_cur_t, stack_pushed,
-                 stack_merged, buffer):
-        # Extract top buffer values.
-            idxs = buffer_cur_t + (T.arange(batch_size) * self.seq_length)
-            buffer_top_t = buffer[idxs]
-
-            if self._predict_network is not None:
-                # We are predicting our own stack operations.
-                predict_inp = T.concatenate(
-                    [stack_t[:, 0], stack_t[:, 1], buffer_top_t], axis=1)
-                actions_t = self._predict_network(
-                    predict_inp, self.model_dim * 3, 2, self._vs,
-                    name="predict_actions")
-
-            if self.use_predictions: 
-                # Predicting our own actions
-                mask = actions_t.argmax(axis=1)
-            else:
-                # Use transitions provided from external parser.
-                mask = transitions_t
-
-            # Now update the stack: first precompute merge results.
-            merge_items = stack_t[:, :2].reshape((-1, self.model_dim * 2))
-            merge_value = self._compose_network(
-                merge_items, self.model_dim * 2, self.model_dim,
-                self._vs, name="compose")
-
-            # Compute new stack value.
-            stack_next = update_hard_stack(
-                stack_t, stack_pushed, stack_merged, buffer_top_t,
-                merge_value, mask)
-
-            # Move buffer cursor as necessary. Since mask == 1 when merge, we
-            # should increment each buffer cursor by 1 - mask
-            buffer_cur_next = buffer_cur_t + (1 - mask)
-
-            if self._predict_network is not None:
-                return stack_next, actions_t, buffer_cur_next
-            else:
-                return stack_next, buffer_cur_next
-
 
         # Dimshuffle inputs to seq_len * batch_size for scanning
         transitions = self.transitions.dimshuffle(1, 0)
         
-        # Generate Bernoulli RVs to simulate scheduled sampling, if the interpolate flag is on
-        if self.interpolate:
-            ss_mask_gen_matrix = self.ss_mask_gen.binomial(transitions.shape, p=self.ss_prob)
-        else:
-            ss_mask_gen_matrix = None
-
         # If we have a prediction network, we need an extra outputs_info
         # element (the `None`) to carry along prediction values
+        sequences = [transitions]
         if self._predict_network is not None:
             outputs_info = [stack_init, None, buffer_cur_init]
         else:
             outputs_info = [stack_init, buffer_cur_init]
 
-
-        if self.interpolate: 
-            scan_ret = theano.scan(
-                step_ss,
-                sequences=[transitions, ss_mask_gen_matrix],
-                non_sequences=[stack_pushed, stack_merged, buffer_t],
-                outputs_info=outputs_info)[0]
+        if self.interpolate:
+            # Generate Bernoulli RVs to simulate scheduled sampling 
+            # if the interpolate flag is on
+            ss_mask_gen_matrix = self.ss_mask_gen.binomial(
+                                transitions.shape, p=self.ss_prob)
+            # take in the RV sequence as input
+            sequences.append(ss_mask_gen_matrix)
         else:
-            scan_ret = theano.scan(
-                step,
-                sequences=[transitions],
+            # take in the RV sequqnce as a dummy output, this is
+            # done to avaid defining another step function
+            outputs_info = [DUMMY] + outputs_info
+
+        scan_ret = theano.scan(
+                self._step,
+                sequences=sequences,
                 non_sequences=[stack_pushed, stack_merged, buffer_t],
                 outputs_info=outputs_info)[0]
 
-        self.final_stack = scan_ret[0][-1]
+        stack_ind = 0 if self.interpolate else 1
+        self.final_stack = scan_ret[stack_ind][-1]
 
         self.transitions_pred = None
         if self._predict_network is not None:
-            self.transitions_pred = scan_ret[1].dimshuffle(1, 0, 2)
+            action_ind = 1 if self.interpolate else 2
+            self.transitions_pred = scan_ret[action_ind].dimshuffle(1, 0, 2)
 
 
 class Model0(HardStack):
