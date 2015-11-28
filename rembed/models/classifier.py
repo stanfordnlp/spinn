@@ -406,7 +406,7 @@ def train():
     for step in range(step, FLAGS.training_steps):
         X_batch, transitions_batch, y_batch, num_transitions_batch = training_data_iter.next()
         ret = update_fn(X_batch, transitions_batch, y_batch, num_transitions_batch,
-                        FLAGS.learning_rate, 1.0, numpy.exp(step*numpy.log(0.99999)))
+                        FLAGS.learning_rate, 1.0, numpy.exp(step*numpy.log(FLAGS.scheduled_sampling_exponent_base)))
         total_cost_val, xent_cost_val, action_cost_val, action_acc_val, l2_cost_val, acc_val = ret
 
         if step % FLAGS.statistics_interval_steps == 0:
@@ -465,6 +465,8 @@ if __name__ == '__main__':
         "Used for dropout on transformed embeddings.")
     gflags.DEFINE_boolean("lstm_composition", False, "")
     # gflags.DEFINE_integer("num_composition_layers", 1, "")
+    gflags.DEFINE_float("scheduled_sampling_exponent_base", 0.99, 
+        "Used for scheduled sampling, with probability of Model 1 over Model 2 being base^#training_steps")
 
     # Optimization settings.
     gflags.DEFINE_integer("training_steps", 1000000, "")
