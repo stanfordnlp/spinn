@@ -6,6 +6,7 @@ import numpy as np
 
 LIN = "LIN"
 EXP = "EXP"
+SS_BASE = "SS_BASE"
 
 # Instructions: Configure the variables in this block, then run
 # the following on a machine with qsub access:
@@ -39,12 +40,13 @@ SWEEP_PARAMETERS = {
     "init_range":         (EXP, 0.001, 0.004),
     "double_identity_init_range": (EXP, 0.0005, 0.005),
     "semantic_classifier_keep_rate": (LIN, 0.4, 0.9),
-    "embedding_keep_rate": (LIN, 0.4, 1.0)
+    "embedding_keep_rate": (LIN, 0.4, 1.0),
+    "scheduled_sampling_exponent_base": (SS_BASE, 2e-10, 2e-2)
 }
 
 sweep_name = "sweep_" + \
     FIXED_PARAMETERS["data_type"] + "_" + FIXED_PARAMETERS["model_type"]
-sweep_runs = 4
+sweep_runs = 6
 queue = "jag"
 
 # - #
@@ -68,6 +70,10 @@ for run_id in range(sweep_runs):
             lmn = np.log(mn)
             lmx = np.log(mx)
             sample = np.exp(lmn + (lmx - lmn) * r)
+        elif t==SS_BASE:
+            lmn = np.log(mn)
+            lmx = np.log(mx)
+            sample = 1 - np.exp(lmn + (lmx - lmn) * r)
         else:
             sample = mn + (mx - mn) * r
 
