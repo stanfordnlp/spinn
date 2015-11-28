@@ -1,9 +1,9 @@
 """Theano-based stack implementations."""
 
-
+import numpy as np
 import theano
-from theano import tensor as T
 
+from theano import tensor as T
 from rembed import util
 
 
@@ -59,10 +59,10 @@ class HardStack(object):
     Model 2: predict_network=something, use_predictions=True
     """
 
-    def __init__(self, model_dim, word_embedding_dim, lstm_hidden_dim, vocab_size, seq_length, 
-                 compose_network, embedding_projection_network, apply_dropout, vs, predict_network=None,
-                 use_predictions=False, X=None, transitions=None, initial_embeddings=None,
-                 make_test_fn=False, embedding_dropout_keep_rate=1.0):
+    def __init__(self, model_dim, word_embedding_dim, vocab_size, seq_length, compose_network,
+                 embedding_projection_network, apply_dropout, vs, predict_network=None,
+                 use_predictions=False, interpolate=False, X=None, transitions=None, initial_embeddings=None,
+                 make_test_fn=False, embedding_dropout_keep_rate=1.0, ss_mask_gen=None, ss_prob=0.0):
         """
         Construct a HardStack.
 
@@ -96,7 +96,6 @@ class HardStack(object):
 
         self.model_dim = model_dim
         self.word_embedding_dim = word_embedding_dim
-        self.hidden_dim = lstm_hidden_dim
         self.vocab_size = vocab_size
         self.seq_length = seq_length
 
@@ -114,6 +113,13 @@ class HardStack(object):
 
         self.X = X
         self.transitions = transitions
+        
+        # Mask for scheduled sampling
+        self.ss_mask_gen = ss_mask_gen
+        # Flag for scheduled sampling
+        self.interpolate = interpolate
+        # Training step number
+        self.ss_prob = ss_prob
 
         self._make_params()
         self._make_inputs()
@@ -165,19 +171,137 @@ class HardStack(object):
 
         buffer_cur_init = T.zeros((batch_size,), dtype="int")
 
+        # TODO(jgauthier): Implement linear memory (was in previous HardStack;
+        # dropped it during a refactor)
+
+        # Two definitions of the step function here, one with the scheduled sampling mask thrown in (step_ss),
+        # one without (the old step). Only to avoid allocating a matrix of ones in case SS is turned off.
+        # Identical in every respect except for how you set the mask
+
+        def step_ss(transitions_t, ss_mask_gen_matrix_t, stack_t, buffer_cur_t, stack_pushed,
+                 stack_merged, buffer):
+        # Extract top buffer values.
+            idxs = buffer_cur_t + (T.arange(batch_size) * self.seq_length)
+            buffer_top_t = buffer[idxs]
+
+            if self._predict_network is not None:
+                # We are predicting our own stack operations.
+                predict_inp = T.concatenate(
+                    [stack_t[:, 0], stack_t[:, 1], buffer_top_t], axis=1)
+                actions_t = self._predict_network(
+                    predict_inp, self.model_dim * 3, 2, self._vs,
+                    name="predict_actions")
+
+            if self.use_predictions: 
+                if self.interpolate:
+                    # Interpolate between truth and prediction, using bernoulli RVs generated prior to the step
+                    mask = transitions_t * ss_mask_gen_matrix_t + actions_t.argmax(axis=1) * (1 - ss_mask_gen_matrix_t)
+                else:
+                    # Use predicted actions to build a mask.
+                    mask = actions_t.argmax(axis=1)
+            else:
+                # Use transitions provided from external parser.
+                mask = transitions_t
+
+            # Now update the stack: first precompute merge results.
+            merge_items = stack_t[:, :2].reshape((-1, self.model_dim * 2))
+            merge_value = self._compose_network(
+                merge_items, self.model_dim * 2, self.model_dim,
+                self._vs, name="compose")
+
+            # Compute new stack value.
+            stack_next = update_hard_stack(
+                stack_t, stack_pushed, stack_merged, buffer_top_t,
+                merge_value, mask)
+
+            # Move buffer cursor as necessary. Since mask == 1 when merge, we
+            # should increment each buffer cursor by 1 - mask
+            buffer_cur_next = buffer_cur_t + (1 - mask)
+
+            if self._predict_network is not None:
+                return stack_next, actions_t, buffer_cur_next
+            else:
+                return stack_next, buffer_cur_next
+
+
+
+        def step(transitions_t, stack_t, buffer_cur_t, stack_pushed,
+                 stack_merged, buffer):
+        # Extract top buffer values.
+            idxs = buffer_cur_t + (T.arange(batch_size) * self.seq_length)
+            buffer_top_t = buffer[idxs]
+
+            if self._predict_network is not None:
+                # We are predicting our own stack operations.
+                predict_inp = T.concatenate(
+                    [stack_t[:, 0], stack_t[:, 1], buffer_top_t], axis=1)
+                actions_t = self._predict_network(
+                    predict_inp, self.model_dim * 3, 2, self._vs,
+                    name="predict_actions")
+
+            if self.use_predictions: 
+                # Predicting our own actions
+                mask = actions_t.argmax(axis=1)
+            else:
+                # Use transitions provided from external parser.
+                mask = transitions_t
+
+            # Now update the stack: first precompute merge results.
+            merge_items = stack_t[:, :2].reshape((-1, self.model_dim * 2))
+            merge_value = self._compose_network(
+                merge_items, self.model_dim * 2, self.model_dim,
+                self._vs, name="compose")
+
+            # Compute new stack value.
+            stack_next = update_hard_stack(
+                stack_t, stack_pushed, stack_merged, buffer_top_t,
+                merge_value, mask)
+
+            # Move buffer cursor as necessary. Since mask == 1 when merge, we
+            # should increment each buffer cursor by 1 - mask
+            buffer_cur_next = buffer_cur_t + (1 - mask)
+
+            if self._predict_network is not None:
+                return stack_next, actions_t, buffer_cur_next
+            else:
+                return stack_next, buffer_cur_next
+
+
         # Dimshuffle inputs to seq_len * batch_size for scanning
         transitions = self.transitions.dimshuffle(1, 0)
+        
+        # Generate Bernoulli RVs to simulate scheduled sampling, if the interpolate flag is on
+        if self.interpolate:
+            ss_mask_gen_matrix = self.ss_mask_gen.binomial(transitions.shape, p=self.ss_prob)
+        else:
+            ss_mask_gen_matrix = None
 
-        self.final_stack, self.transitions_pred = self.get_stack_prediction(transitions,
-            stack_pushed, stack_merged, buffer_t, stack_init, buffer_cur_init)
+        # If we have a prediction network, we need an extra outputs_info
+        # element (the `None`) to carry along prediction values
+        if self._predict_network is not None:
+            outputs_info = [stack_init, None, buffer_cur_init]
+        else:
+            outputs_info = [stack_init, buffer_cur_init]
 
-    def get_stack_prediction(self, transitions, stack_pushed, stack_merged, 
-            buffer_t, stack_init, buffer_cur_init):
-        '''
-        Returns (final_stack, predicted_transitions) tuple. predicted_transitions
-        is None for Model0 and the output of tracking LSTM for Model1/2.
-        '''
-        raise NotImplementedError("method not implementated")
+
+        if self.interpolate: 
+            scan_ret = theano.scan(
+                step_ss,
+                sequences=[transitions, ss_mask_gen_matrix],
+                non_sequences=[stack_pushed, stack_merged, buffer_t],
+                outputs_info=outputs_info)[0]
+        else:
+            scan_ret = theano.scan(
+                step,
+                sequences=[transitions],
+                non_sequences=[stack_pushed, stack_merged, buffer_t],
+                outputs_info=outputs_info)[0]
+
+        self.final_stack = scan_ret[0][-1]
+
+        self.transitions_pred = None
+        if self._predict_network is not None:
+            self.transitions_pred = scan_ret[1].dimshuffle(1, 0, 2)
 
 
 class Model0(HardStack):
@@ -185,105 +309,32 @@ class Model0(HardStack):
     def __init__(self, *args, **kwargs):
         kwargs["predict_network"] = None
         kwargs["use_predictions"] = False
+        kwargs["interpolate"] = False
         super(Model0, self).__init__(*args, **kwargs)
-
-    def _step(self, transitions_t, stack_t, buffer_cur_t, stack_pushed,
-             stack_merged, buffer):
-        batch_size, _ = self.X.shape
-        # Extract top buffer values.
-        idxs = buffer_cur_t + (T.arange(batch_size) * self.seq_length)
-        buffer_top_t = buffer[idxs]
-        mask = transitions_t
-
-        # Now update the stack: first precompute merge results.
-        merge_items = stack_t[:, :2].reshape((-1, self.model_dim * 2))
-        merge_value = self._compose_network(
-            merge_items, self.model_dim * 2, self.model_dim,
-            self._vs, name="compose")
-
-        # Compute new stack value.
-        stack_next = update_hard_stack(
-            stack_t, stack_pushed, stack_merged, buffer_top_t,
-            merge_value, mask)
-
-        # Move buffer cursor as necessary. Since mask == 1 when merge, we
-        # should increment each buffer cursor by 1 - mask
-        buffer_cur_next = buffer_cur_t + (1 - mask)
-        return stack_next, buffer_cur_next
-
-    def get_stack_prediction(self, transitions, stack_pushed, stack_merged,
-            buffer_t, stack_init, buffer_cur_init):
-        outputs_info = [stack_init, buffer_cur_init]
-
-        scan_ret = theano.scan(
-            self._step, transitions,
-            non_sequences=[stack_pushed, stack_merged, buffer_t],
-            outputs_info=outputs_info)[0]
-
-        return scan_ret[0][-1], None
 
 
 class Model1(HardStack):
 
     def __init__(self, *args, **kwargs):
-        kwargs["predict_network"] = kwargs.get("predict_network", util.TrackingUnit)
+        kwargs["predict_network"] = kwargs.get("predict_network", util.Linear)
         kwargs["use_predictions"] = False
+        kwargs["interpolate"] = False
         super(Model1, self).__init__(*args, **kwargs)
 
-    def _step(self, transitions_t, stack_t, buffer_cur_t, hidden_prev, stack_pushed,
-             stack_merged, buffer):
-        batch_size, _ = self.X.shape
-        # Extract top buffer values.
-        idxs = buffer_cur_t + (T.arange(batch_size) * self.seq_length)
-        buffer_top_t = buffer[idxs]
 
-        predict_inp = T.concatenate(
-                [stack_t[:, 0], stack_t[:, 1], buffer_top_t], axis=1)
-        hidden, actions_t = self._predict_network(
-                hidden_prev, predict_inp, self.model_dim * 3, self.hidden_dim,
-                self._vs, name="predict_actions")
-
-        if self.use_predictions:
-            # Use predicted actions to build a mask.
-            mask = actions_t.argmax(axis=1)
-        else:
-            # Use transitions provided from external parser.
-            mask = transitions_t
-
-        # Now update the stack: first precompute merge results.
-        merge_items = stack_t[:, :2].reshape((-1, self.model_dim * 2))
-        merge_value = self._compose_network(
-            merge_items, self.model_dim * 2, self.model_dim,
-            self._vs, name="compose")
-
-        # Compute new stack value.
-        stack_next = update_hard_stack(
-            stack_t, stack_pushed, stack_merged, buffer_top_t,
-            merge_value, mask)
-
-        # Move buffer cursor as necessary. Since mask == 1 when merge, we
-        # should increment each buffer cursor by 1 - mask
-        buffer_cur_next = buffer_cur_t + (1 - mask)
-
-        return stack_next, buffer_cur_next, hidden, actions_t
-        
-    def get_stack_prediction(self, transitions, stack_pushed, stack_merged,
-            buffer_t, stack_init, buffer_cur_init):
-        batch_size, _ = self.X.shape
-        hidden_shape = (batch_size, self.hidden_dim * 2)
-        hidden_init = T.zeros(hidden_shape)
-
-        outputs_info = [stack_init, buffer_cur_init, hidden_init, None]
-        
-        scan_ret = theano.scan(
-            self._step, transitions,
-            non_sequences=[stack_pushed, stack_merged, buffer_t],
-            outputs_info=outputs_info)[0]
-        return scan_ret[0][-1], scan_ret[3].dimshuffle(1, 0, 2)
-
-class Model2(Model1):
+class Model2(HardStack):
 
     def __init__(self, *args, **kwargs):
-        kwargs["predict_network"] = kwargs.get("predict_network", util.TrackingUnit)
+        kwargs["predict_network"] = kwargs.get("predict_network", util.Linear)
         kwargs["use_predictions"] = True
+        kwargs["interpolate"] = False
         super(Model2, self).__init__(*args, **kwargs)
+
+
+class Model12SS(HardStack):
+
+    def __init__(self, *args, **kwargs):
+        kwargs["predict_network"] = kwargs.get("predict_network", util.Linear)
+        kwargs["use_predictions"] = True
+        kwargs["interpolate"] = True
+        super(Model12SS, self).__init__(*args, **kwargs)
