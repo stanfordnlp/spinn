@@ -19,7 +19,7 @@ SS_BASE = "SS_BASE"
 
 FIXED_PARAMETERS = {
     "data_type":     "sst",
-    "model_type":     "Model12SS",
+    "model_type":     "Model0",
     "training_data_path":    "sst-data/train_expanded.txt",
     "eval_data_path":    "sst-data/dev.txt:sst-data/train_sample.txt",
     "embedding_data_path": "/scr/nlp/data/glove_vecs/glove.840B.300d.txt",
