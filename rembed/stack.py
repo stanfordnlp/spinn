@@ -59,9 +59,10 @@ class HardStack(object):
     Model 2: predict_network=something, use_predictions=True
     """
 
-    def __init__(self, model_dim, word_embedding_dim, vocab_size, seq_length, compose_network,
-                 embedding_projection_network, apply_dropout, vs, predict_network=None,
-                 use_predictions=False, interpolate=False, X=None, transitions=None, initial_embeddings=None,
+    def __init__(self, model_dim, word_embedding_dim, vocab_size, seq_length, 
+                 compose_network, embedding_projection_network, apply_dropout, vs, 
+                 tracking_lstm_hidden_dim=8, predict_network=None, use_predictions=False, 
+                 interpolate=False, X=None, transitions=None, initial_embeddings=None,
                  make_test_fn=False, embedding_dropout_keep_rate=1.0, ss_mask_gen=None, ss_prob=0.0):
         """
         Construct a HardStack.
@@ -96,6 +97,7 @@ class HardStack(object):
 
         self.model_dim = model_dim
         self.word_embedding_dim = word_embedding_dim
+        self.tracking_lstm_hidden_dim = tracking_lstm_hidden_dim
         self.vocab_size = vocab_size
         self.seq_length = seq_length
 
@@ -103,6 +105,7 @@ class HardStack(object):
         self._embedding_projection_network = embedding_projection_network
         self._predict_network = predict_network
         self.use_predictions = use_predictions
+        self.use_tracking_lstm = (tracking_lstm_hidden_dim > 0)
 
         self._vs = vs
 
@@ -146,7 +149,7 @@ class HardStack(object):
         self.transitions = self.transitions or T.imatrix("transitions")
 
     def _step(self, transitions_t, ss_mask_gen_matrix_t, stack_t, buffer_cur_t, 
-            stack_pushed, stack_merged, buffer):
+            tracking_hidden_prev, stack_pushed, stack_merged, buffer):
         batch_size, _ = self.X.shape
         # Extract top buffer values.
         idxs = buffer_cur_t + (T.arange(batch_size) * self.seq_length)
@@ -156,9 +159,21 @@ class HardStack(object):
             # We are predicting our own stack operations.
             predict_inp = T.concatenate(
                 [stack_t[:, 0], stack_t[:, 1], buffer_top_t], axis=1)
-            actions_t = self._predict_network(
-                predict_inp, self.model_dim * 3, 2, self._vs,
+            if self.use_tracking_lstm:
+                # update the hidden state and obtain predicted actions
+                tracking_hidden, actions_t = self._predict_network(
+                tracking_hidden_prev, predict_inp, self.model_dim * 3, 
+                self.tracking_lstm_hidden_dim, self._vs, name="predict_actions")
+            else:
+                # obtain predicted actions
+                actions_t = self._predict_network(
+                predict_inp, self.model_dim * 3, util.NUM_TRANSITION_TYPES, self._vs,
                 name="predict_actions")
+                # no change in hidden state because there is none
+                tracking_hidden = tracking_hidden_prev
+        else:
+            # no change in the hidden state because there is none
+            tracking_hidden = tracking_hidden_prev
 
         if self.use_predictions: 
             # Predicting our own actions
@@ -190,9 +205,9 @@ class HardStack(object):
         buffer_cur_next = buffer_cur_t + (1 - mask)
 
         if self._predict_network is not None:
-            ret_val = stack_next, actions_t, buffer_cur_next
+            ret_val = stack_next, buffer_cur_next, tracking_hidden, actions_t
         else:
-            ret_val = stack_next, buffer_cur_next
+            ret_val = stack_next, buffer_cur_next, tracking_hidden
         if not self.interpolate:
             # use ss_mask as a redundant return value
             ret_val = (ss_mask_gen_matrix_t,) + ret_val
@@ -232,14 +247,21 @@ class HardStack(object):
         # Dimshuffle inputs to seq_len * batch_size for scanning
         transitions = self.transitions.dimshuffle(1, 0)
         
-        # If we have a prediction network, we need an extra outputs_info
-        # element (the `None`) to carry along prediction values
-        sequences = [transitions]
-        if self._predict_network is not None:
-            outputs_info = [stack_init, None, buffer_cur_init]
+        # initialize the hidden state
+        if self.use_tracking_lstm:
+            #  a tensor if a tracking LSTM is used
+            hidden_shape = (batch_size, self.tracking_lstm_hidden_dim * 2)
+            hidden_init = T.zeros(hidden_shape)
         else:
-            outputs_info = [stack_init, buffer_cur_init]
+            # a dummy value otherwise
+            hidden_init = DUMMY
 
+        if self._predict_network is not None:
+            outputs_info = [stack_init, buffer_cur_init, hidden_init, None]
+        else:
+            outputs_info = [stack_init, buffer_cur_init, hidden_init]
+        # input sequences to scan
+        sequences = [transitions]
         if self.interpolate:
             # Generate Bernoulli RVs to simulate scheduled sampling 
             # if the interpolate flag is on
@@ -263,8 +285,7 @@ class HardStack(object):
 
         self.transitions_pred = None
         if self._predict_network is not None:
-            action_ind = 1 if self.interpolate else 2
-            self.transitions_pred = scan_ret[action_ind].dimshuffle(1, 0, 2)
+            self.transitions_pred = scan_ret[-1].dimshuffle(1, 0, 2)
 
 
 class Model0(HardStack):
@@ -279,7 +300,13 @@ class Model0(HardStack):
 class Model1(HardStack):
 
     def __init__(self, *args, **kwargs):
-        kwargs["predict_network"] = kwargs.get("predict_network", util.Linear)
+        # set the tracking unit based on supplied tracking_lstm_hidden_dim
+        tracking_lstm_hidden_dim = kwargs.get("tracking_lstm_hidden_dim", 0)
+        if tracking_lstm_hidden_dim > 0:
+            kwargs["predict_network"] = util.TrackingUnit
+        else:
+            kwargs["predict_network"] = util.Linear
+        # defaults to not using predictions while training and not using scheduled sampling
         kwargs["use_predictions"] = False
         kwargs["interpolate"] = False
         super(Model1, self).__init__(*args, **kwargs)
@@ -288,7 +315,13 @@ class Model1(HardStack):
 class Model2(HardStack):
 
     def __init__(self, *args, **kwargs):
-        kwargs["predict_network"] = kwargs.get("predict_network", util.Linear)
+        # set the tracking unit based on supplied tracking_lstm_hidden_dim
+        tracking_lstm_hidden_dim = kwargs.get("tracking_lstm_hidden_dim", 0)
+        if tracking_lstm_hidden_dim > 0:
+            kwargs["predict_network"] = util.TrackingUnit
+        else:
+            kwargs["predict_network"] = util.Linear
+        # defaults to using predictions while training and not using scheduled sampling
         kwargs["use_predictions"] = True
         kwargs["interpolate"] = False
         super(Model2, self).__init__(*args, **kwargs)
@@ -297,7 +330,6 @@ class Model2(HardStack):
 class Model12SS(HardStack):
 
     def __init__(self, *args, **kwargs):
-        kwargs["predict_network"] = kwargs.get("predict_network", util.Linear)
-        kwargs["use_predictions"] = True
+        # use supplied settings and use scheduled sampling
         kwargs["interpolate"] = True
         super(Model12SS, self).__init__(*args, **kwargs)

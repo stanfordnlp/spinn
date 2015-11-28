@@ -4,7 +4,7 @@ import numpy as np
 import theano
 from theano import tensor as T
 
-from rembed.stack import Model0
+from rembed.stack import HardStack
 from rembed.util import VariableStore, CropAndPad, IdentityLayer
 
 
@@ -16,8 +16,7 @@ class HardStackTestCase(unittest.TestCase):
         self.embedding_dim = embedding_dim = 3
         self.vocab_size = vocab_size = 10
         self.seq_length = seq_length
-        self.lstm_hidden_dim = lstm_hidden_dim = 0 # unused for model 0
-
+        
         def compose_network(inp, inp_dim, outp_dim, vs, name="compose"):
             # Just add the two embeddings!
             W = T.concatenate([T.eye(outp_dim), T.eye(outp_dim)], axis=0)
@@ -27,8 +26,8 @@ class HardStackTestCase(unittest.TestCase):
         transitions = T.imatrix("transitions")
         apply_dropout = T.scalar("apply_dropout")
         vs = VariableStore()
-        self.stack = Model0(
-            embedding_dim, embedding_dim, lstm_hidden_dim, vocab_size, seq_length, 
+        self.stack = HardStack(
+            embedding_dim, embedding_dim, vocab_size, seq_length, 
             compose_network, IdentityLayer, apply_dropout, vs,
             X=X, transitions=transitions, make_test_fn=True)
 

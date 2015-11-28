@@ -23,6 +23,9 @@ UNK_TOKEN = "_"
 CORE_VOCABULARY = {PADDING_TOKEN: 0,
                    UNK_TOKEN: 1}
 
+# Allowed number of transition types : currently PUSH : 0 and MERGE : 1
+NUM_TRANSITION_TYPES = 2
+
 
 def UniformInitializer(range):
     return lambda shape: np.random.uniform(-range, range, shape)
@@ -239,7 +242,7 @@ def TrackingUnit(state_prev, inp, inp_dim, hidden_dim, vs, name="track_unit"):
     # pass previous state and input to an LSTM 
     state = LSTMLayer(state_prev, inp, inp_dim, hidden_dim, vs, name="%s/lstm" % name)
     # pass lstm states through a Linear layer to predict transition
-    pred = Linear(state, 2 * hidden_dim, 2, vs, name="%s/linear" % name)
+    pred = Linear(state, 2 * hidden_dim, NUM_TRANSITION_TYPES, vs, name="%s/linear" % name)
     return state, pred
 
 def MLP(inp, inp_dim, outp_dim, vs, layer=ReLULayer, hidden_dims=None,
