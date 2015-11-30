@@ -22,7 +22,10 @@ LABEL_MAP = {
 }
 
 
-def convert_binary_bracketed_data(filename):
+def convert_unary_binary_bracketed_data(filename):
+    # Build a binary tree out of a binary parse in which every
+    # leaf node is wrapped as a unary constituent, as here:
+    #   (4 (2 (2 The ) (2 actors ) ) (3 (4 (2 are ) (3 fantastic ) ) (2 . ) ) )
     examples = []
     with open(filename, 'r') as f:
         for line in f:
@@ -35,20 +38,24 @@ def convert_binary_bracketed_data(filename):
             example["tokens"] = []
             example["transitions"] = []
 
-            for word in example["sentence"].split(' '):
+            words = example["sentence"].split(' ')
+            for index, word in enumerate(words):
                 if word[0] != "(":
-                    if word == ")":
-                        example["transitions"].append(1)
+                    if word == ")":  
+                        # Ignore unary merges
+                        if words[index - 1] == ")":
+                            example["transitions"].append(1)
                     else:
                         # Downcase all words to match GloVe.
                         example["tokens"].append(word.lower())
                         example["transitions"].append(0)
+            print example
             examples.append(example)
     return examples
 
 
 def load_data(path, vocabulary=None, seq_length=None, batch_size=32, eval_mode=False, logger=None):
-    dataset = convert_binary_bracketed_data(path)
+    dataset = convert_unary_binary_bracketed_data(path)
     return dataset, None
 
 
