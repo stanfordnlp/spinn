@@ -49,7 +49,6 @@ def convert_unary_binary_bracketed_data(filename):
                         # Downcase all words to match GloVe.
                         example["tokens"].append(word.lower())
                         example["transitions"].append(0)
-            print example
             examples.append(example)
     return examples
 
