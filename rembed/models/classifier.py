@@ -27,8 +27,7 @@ import sys
 import gflags
 from theano import tensor as T
 import theano
-from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
-import numpy
+import numpy as np
 
 from rembed import afs_safe_logger
 from rembed import util
@@ -315,8 +314,9 @@ def train():
     model_cls = getattr(rembed.stack, FLAGS.model_type)
     
     # Generator of mask for scheduled sampling
-    numpy_random = numpy.random.RandomState(1234)
-    ss_mask_gen = RandomStreams(numpy_random.randint(999999))
+    numpy_random = np.random.RandomState(1234)
+    ss_mask_gen = T.shared_randomstreams.RandomStreams(numpy_random.randint(999999))
+
     # Training step number
     ss_prob = T.dscalar("ss_prob")
     
@@ -406,7 +406,7 @@ def train():
     for step in range(step, FLAGS.training_steps):
         X_batch, transitions_batch, y_batch, num_transitions_batch = training_data_iter.next()
         ret = update_fn(X_batch, transitions_batch, y_batch, num_transitions_batch,
-                        FLAGS.learning_rate, 1.0, numpy.exp(step*numpy.log(FLAGS.scheduled_sampling_exponent_base)))
+                        FLAGS.learning_rate, 1.0, np.exp(step*np.log(FLAGS.scheduled_sampling_exponent_base)))
         total_cost_val, xent_cost_val, action_cost_val, action_acc_val, l2_cost_val, acc_val = ret
 
         if step % FLAGS.statistics_interval_steps == 0:
