@@ -62,9 +62,17 @@ class HardStack(object):
     """
 
     def __init__(self, model_dim, word_embedding_dim, vocab_size, seq_length, compose_network,
-                 embedding_projection_network, training_mode, vs, predict_network=None,
-                 train_with_predicted_transitions=False, interpolate=False, X=None, transitions=None, initial_embeddings=None,
-                 make_test_fn=False, embedding_dropout_keep_rate=1.0, ss_mask_gen=None, ss_prob=0.0):
+                 embedding_projection_network, training_mode, ground_truth_transitions_visible, vs, 
+                 predict_network=None,
+                 train_with_predicted_transitions=False, 
+                 interpolate=False, 
+                 X=None, 
+                 transitions=None, 
+                 initial_embeddings=None,
+                 make_test_fn=False, 
+                 embedding_dropout_keep_rate=1.0, 
+                 ss_mask_gen=None, 
+                 ss_prob=0.0):
         """
         Construct a HardStack.
 
@@ -80,8 +88,10 @@ class HardStack(object):
               `batch_size * outp_dim`.
             embedding_projection_network: Same form as `compose_network`.
             training_mode: A Theano scalar indicating whether to act as a training model 
-              (i.e. apply dropout and scheduled sampling) (1.0) or to act as an eval model_dim
-              (i.e. rescale instead of applying dropout, ignore ground truth parses in moddels >0).
+              with dropout (1.0) or to act as an eval model with rescaling (0.0).
+            ground_truth_transitions_visible: A Theano scalar. If set (1.0), allow the model access
+              to ground truth transitions. This can be disabled at evaluation time to force Model 1
+              (or 12SS) to evaluate in the Model 2 style with predicted transitions. Has no effect on Model 0.
             vs: VariableStore instance for parameter storage
             predict_network: Blocks-like function which maps values
               `3 * model_dim` to `action_dim`
@@ -112,6 +122,7 @@ class HardStack(object):
         self.initial_embeddings = initial_embeddings
 
         self.training_mode = training_mode
+        self.ground_truth_transitions_visible = ground_truth_transitions_visible
         self.embedding_dropout_keep_rate = embedding_dropout_keep_rate
 
         self.X = X
@@ -129,7 +140,8 @@ class HardStack(object):
         self._make_scan()
 
         if make_test_fn:
-            self.scan_fn = theano.function([self.X, self.transitions, self.training_mode],
+            self.scan_fn = theano.function([self.X, self.transitions, self.training_mode, 
+                                            self.ground_truth_transitions_visible],
                                            self.final_stack)
 
     def _make_params(self):
@@ -181,9 +193,9 @@ class HardStack(object):
         # one without (the old step). Only to avoid allocating a matrix of ones in case SS is turned off.
         # Identical in every respect except for how you set the mask
 
-        def step_ss(transitions_t, ss_mask_gen_matrix_t, stack_t, buffer_cur_t, stack_pushed,
-                 stack_merged, buffer):
-        # Extract top buffer values.
+        def step_ss(transitions_t, ground_truth_transitions_visible, stack_t,
+                    buffer_cur_t, stack_pushed, stack_merged, buffer, ss_mask_gen_matrix_t):
+            # Extract top buffer values.
             idxs = buffer_cur_t + (T.arange(batch_size) * self.seq_length)
             buffer_top_t = buffer[idxs]
 
@@ -195,16 +207,11 @@ class HardStack(object):
                     predict_inp, self.model_dim * 3, 2, self._vs,
                     name="predict_actions")
 
-            if self.train_with_predicted_transitions: 
-                if self.interpolate:
-                    # Interpolate between truth and prediction, using bernoulli RVs generated prior to the step
-                    mask = transitions_t * ss_mask_gen_matrix_t + actions_t.argmax(axis=1) * (1 - ss_mask_gen_matrix_t)
-                else:
-                    # Use predicted actions to build a mask.
-                    mask = actions_t.argmax(axis=1)
-            else:
-                # Use transitions provided from external parser.
-                mask = transitions_t
+                # Only use ground truth transitions if they are marked as visible to the model.
+                effective_ss_mask_gen_matrix_t = ss_mask_gen_matrix_t * ground_truth_transitions_visible
+
+                # Interpolate between truth and prediction, using bernoulli RVs generated prior to the step
+                mask = transitions_t * ss_mask_gen_matrix_t + actions_t.argmax(axis=1) * (1 - ss_mask_gen_matrix_t)
 
             # Now update the stack: first precompute merge results.
             merge_items = stack_t[:, :2].reshape((-1, self.model_dim * 2))
@@ -229,7 +236,7 @@ class HardStack(object):
 
 
         def step(transitions_t, stack_t, buffer_cur_t, stack_pushed,
-                 stack_merged, buffer):
+                 stack_merged, buffer, ground_truth_transitions_visible):
             # Extract top buffer values.
             idxs = buffer_cur_t + (T.arange(batch_size) * self.seq_length)
             buffer_top_t = buffer[idxs]
@@ -242,11 +249,16 @@ class HardStack(object):
                     predict_inp, self.model_dim * 3, 2, self._vs,
                     name="predict_actions")
 
-            if self.train_with_predicted_transitions: 
-                # Predicting our own actions
-                mask = actions_t.argmax(axis=1)
+                if self.train_with_predicted_transitions: 
+                    # Model 2 case
+                    mask = actions_t.argmax(axis=1)
+                else:
+                    # Use transitions provided from external parser when not masked out.
+                    # Model 1 case
+                    mask = (transitions_t * ground_truth_transitions_visible 
+                            + actions_t.argmax(axis=1) * (1 - ground_truth_transitions_visible))
             else:
-                # Use transitions provided from external parser.
+                # Model 0 case.
                 mask = transitions_t
 
             # Now update the stack: first precompute merge results.
@@ -291,13 +303,13 @@ class HardStack(object):
             scan_ret = theano.scan(
                 step_ss,
                 sequences=[transitions, ss_mask_gen_matrix],
-                non_sequences=[stack_pushed, stack_merged, buffer_t],
+                non_sequences=[stack_pushed, stack_merged, buffer_t, self.ground_truth_transitions_visible],
                 outputs_info=outputs_info)[0]
         else:
             scan_ret = theano.scan(
                 step,
                 sequences=[transitions],
-                non_sequences=[stack_pushed, stack_merged, buffer_t],
+                non_sequences=[stack_pushed, stack_merged, buffer_t, self.ground_truth_transitions_visible],
                 outputs_info=outputs_info)[0]
 
         self.final_stack = scan_ret[0][-1]
@@ -334,10 +346,10 @@ class Model2(HardStack):
         super(Model2, self).__init__(*args, **kwargs)
 
 
-class Model12SS(HardStack):
+class Model2S(HardStack):
 
     def __init__(self, *args, **kwargs):
         kwargs["predict_network"] = kwargs.get("predict_network", util.Linear)
         kwargs["train_with_predicted_transitions"] = True
         kwargs["interpolate"] = True
-        super(Model12SS, self).__init__(*args, **kwargs)
+        super(Model2S, self).__init__(*args, **kwargs)

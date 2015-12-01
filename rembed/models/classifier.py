@@ -42,7 +42,8 @@ FLAGS = gflags.FLAGS
 
 
 def build_sentence_model(cls, vocab_size, seq_length, tokens, transitions,
-                     num_classes, training_mode, vs, initial_embeddings=None, project_embeddings=False, ss_mask_gen=None, ss_prob=0.0):
+                         num_classes, training_mode, ground_truth_transitions_visible, vs, 
+                         initial_embeddings=None, project_embeddings=False, ss_mask_gen=None, ss_prob=0.0):
     """
     Construct a classifier which makes use of some hard-stack model.
 
@@ -53,7 +54,11 @@ def build_sentence_model(cls, vocab_size, seq_length, tokens, transitions,
       tokens: Theano batch (integer matrix), `batch_size * seq_length`
       transitions: Theano batch (integer matrix), `batch_size * seq_length`
       num_classes: Number of output classes
-      training_mode: 1.0 at training time, 0.0 at eval time (to avoid corrupting outputs in dropout)
+        training_mode: A Theano scalar indicating whether to act as a training model 
+          with dropout (1.0) or to act as an eval model with rescaling (0.0).
+        ground_truth_transitions_visible: A Theano scalar. If set (1.0), allow the model access
+          to ground truth transitions. This can be disabled at evaluation time to force Model 1
+          (or 2S) to evaluate in the Model 2 style with predicted transitions. Has no effect on Model 0.
       vs: Variable store.
     """
 
@@ -75,7 +80,7 @@ def build_sentence_model(cls, vocab_size, seq_length, tokens, transitions,
     # Build hard stack which scans over input sequence.
     stack = cls(
         FLAGS.model_dim, FLAGS.word_embedding_dim, vocab_size, seq_length,
-        compose_network, embedding_projection_network, training_mode, vs, 
+        compose_network, embedding_projection_network, training_mode, ground_truth_transitions_visible, vs, 
         X=tokens, 
         transitions=transitions, 
         initial_embeddings=initial_embeddings, 
@@ -307,6 +312,7 @@ def train():
     y = T.vector("y", dtype="int32")
     lr = T.scalar("lr")
     training_mode = T.scalar("training_mode")  # 1: Training with dropout, 0: Eval
+    ground_truth_transitions_visible = T.scalar("ground_truth_transitions_visible", dtype="int32")
 
     logger.Log("Building model.")
     vs = util.VariableStore(
@@ -327,7 +333,7 @@ def train():
 
         predicted_premise_transitions, predicted_hypothesis_transitions, logits = build_sentence_pair_model(
             model_cls, len(vocabulary), FLAGS.seq_length,
-            X, transitions, len(data_manager.LABEL_MAP), training_mode, vs, 
+            X, transitions, len(data_manager.LABEL_MAP), training_mode, ground_truth_transitions_visible, vs, 
             initial_embeddings=initial_embeddings, project_embeddings=(not train_embeddings),
             ss_mask_gen=ss_mask_gen,
             ss_prob=ss_prob)
@@ -338,7 +344,7 @@ def train():
 
         predicted_transitions, logits = build_sentence_model(
             model_cls, len(vocabulary), FLAGS.seq_length,
-            X, transitions, len(data_manager.LABEL_MAP), training_mode, vs, 
+            X, transitions, len(data_manager.LABEL_MAP), training_mode, ground_truth_transitions_visible, vs, 
             initial_embeddings=initial_embeddings, project_embeddings=(not train_embeddings),
             ss_mask_gen=ss_mask_gen,
             ss_prob=ss_prob)        
@@ -393,12 +399,12 @@ def train():
     # Added training step number 
     logger.Log("Building update function.")
     update_fn = theano.function(
-        [X, transitions, y, num_transitions, lr, training_mode, ss_prob],
+        [X, transitions, y, num_transitions, lr, training_mode, ground_truth_transitions_visible, ss_prob],
         [total_cost, xent_cost, action_cost, action_acc, l2_cost, acc],
         updates=new_values,
         on_unused_input='warn')
     logger.Log("Building eval function.")
-    eval_fn = theano.function([X, transitions, y, num_transitions, training_mode, ss_prob], [acc, action_acc],
+    eval_fn = theano.function([X, transitions, y, num_transitions, training_mode, ground_truth_transitions_visible, ss_prob], [acc, action_acc],
         on_unused_input='warn')
     logger.Log("Training.")
 
@@ -406,7 +412,7 @@ def train():
     for step in range(step, FLAGS.training_steps):
         X_batch, transitions_batch, y_batch, num_transitions_batch = training_data_iter.next()
         ret = update_fn(X_batch, transitions_batch, y_batch, num_transitions_batch,
-                        FLAGS.learning_rate, 1.0, np.exp(step*np.log(FLAGS.scheduled_sampling_exponent_base)))
+                        FLAGS.learning_rate, 1.0, 1.0, np.exp(step*np.log(FLAGS.scheduled_sampling_exponent_base)))
         total_cost_val, xent_cost_val, action_cost_val, action_acc_val, l2_cost_val, acc_val = ret
 
         if step % FLAGS.statistics_interval_steps == 0:
@@ -416,6 +422,7 @@ def train():
                    l2_cost_val))
 
         if step % FLAGS.eval_interval_steps == 0:
+
             for eval_set in eval_iterators:
                 # Evaluate
                 acc_accum = 0.0
@@ -424,7 +431,11 @@ def train():
                 for (eval_X_batch, eval_transitions_batch, eval_y_batch, eval_num_transitions_batch) in eval_set[1]:
                     acc_value, action_acc_value = eval_fn(
                         eval_X_batch, eval_transitions_batch,
-                        eval_y_batch, eval_num_transitions_batch, 0.0, 0.0)
+                        eval_y_batch, eval_num_transitions_batch, 0.0,  # Eval mode: Don't apply dropout. 
+                        int(FLAGS.allow_gt_transitions_in_eval),  # Allow GT transitions to be used according to flag. 
+                        float(FLAGS.allow_gt_transitions_in_eval))  # If flag not set, used scheduled sampling
+                                                                    # p(ground truth) = 0.0, 
+                                                                    # else SS p(ground truth) = 1.0
                     acc_accum += acc_value
                     action_acc_accum += action_acc_value
                     eval_batches += 1.0
@@ -455,8 +466,11 @@ if __name__ == '__main__':
 
     # Model architecture settings.
     gflags.DEFINE_enum("model_type", "Model0",
-                       ["Model0", "Model1", "Model2", "Model12SS"],
+                       ["Model0", "Model1", "Model2", "Model2S"],
                        "")
+    gflags.DEFINE_boolean("allow_gt_transitions_in_eval", False,
+                          "Whether to use ground truth transitions in evaluation when appropriate "
+                          "(i.e., in Model 1 and Model 2S.)")
     gflags.DEFINE_integer("model_dim", 8, "")
     gflags.DEFINE_integer("word_embedding_dim", 8, "")
     gflags.DEFINE_float("semantic_classifier_keep_rate", 0.5, 
