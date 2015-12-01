@@ -324,7 +324,7 @@ def train():
     ss_mask_gen = T.shared_randomstreams.RandomStreams(numpy_random.randint(999999))
 
     # Training step number
-    ss_prob = T.dscalar("ss_prob")
+    ss_prob = T.scalar("ss_prob")
     
     if data_manager.SENTENCE_PAIR_DATA:
         X = T.itensor3("X")
