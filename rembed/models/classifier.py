@@ -42,7 +42,7 @@ FLAGS = gflags.FLAGS
 
 
 def build_sentence_model(cls, vocab_size, seq_length, tokens, transitions,
-                     num_classes, apply_dropout, vs, initial_embeddings=None, project_embeddings=False, ss_mask_gen=None, ss_prob=0.0):
+                     num_classes, training_mode, vs, initial_embeddings=None, project_embeddings=False, ss_mask_gen=None, ss_prob=0.0):
     """
     Construct a classifier which makes use of some hard-stack model.
 
@@ -53,7 +53,7 @@ def build_sentence_model(cls, vocab_size, seq_length, tokens, transitions,
       tokens: Theano batch (integer matrix), `batch_size * seq_length`
       transitions: Theano batch (integer matrix), `batch_size * seq_length`
       num_classes: Number of output classes
-      apply_dropout: 1.0 at training time, 0.0 at eval time (to avoid corrupting outputs in dropout)
+      training_mode: 1.0 at training time, 0.0 at eval time (to avoid corrupting outputs in dropout)
       vs: Variable store.
     """
 
@@ -75,7 +75,7 @@ def build_sentence_model(cls, vocab_size, seq_length, tokens, transitions,
     # Build hard stack which scans over input sequence.
     stack = cls(
         FLAGS.model_dim, FLAGS.word_embedding_dim, vocab_size, seq_length,
-        compose_network, embedding_projection_network, apply_dropout, vs, 
+        compose_network, embedding_projection_network, training_mode, vs, 
         X=tokens, 
         transitions=transitions, 
         initial_embeddings=initial_embeddings, 
@@ -88,7 +88,7 @@ def build_sentence_model(cls, vocab_size, seq_length, tokens, transitions,
     stack_top = final_stack[:, 0]
     sentence_vector = stack_top.reshape((-1, FLAGS.model_dim))
 
-    sentence_vector = util.Dropout(sentence_vector, FLAGS.semantic_classifier_keep_rate, apply_dropout)
+    sentence_vector = util.Dropout(sentence_vector, FLAGS.semantic_classifier_keep_rate, training_mode)
 
     # Feed forward through a single output layer
     logits = util.Linear(
@@ -99,7 +99,7 @@ def build_sentence_model(cls, vocab_size, seq_length, tokens, transitions,
 
 
 def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
-                     num_classes, apply_dropout, vs, initial_embeddings=None, project_embeddings=False, ss_mask_gen=None, ss_prob=0.0):
+                     num_classes, training_mode, vs, initial_embeddings=None, project_embeddings=False, ss_mask_gen=None, ss_prob=0.0):
     """
     Construct a classifier which makes use of some hard-stack model.
 
@@ -110,7 +110,7 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
       tokens: Theano batch (integer matrix), `batch_size * seq_length`
       transitions: Theano batch (integer matrix), `batch_size * seq_length`
       num_classes: Number of output classes
-      apply_dropout: 1.0 at training time, 0.0 at eval time (to avoid corrupting outputs in dropout)
+      training_mode: 1.0 at training time, 0.0 at eval time (to avoid corrupting outputs in dropout)
       vs: Variable store.
     """
 
@@ -139,7 +139,7 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
     # Build two hard stack models which scan over input sequences.
     premise_model = cls(
         FLAGS.model_dim, FLAGS.word_embedding_dim, vocab_size, seq_length,
-        compose_network, embedding_projection_network, apply_dropout, vs, 
+        compose_network, embedding_projection_network, training_mode, vs, 
         X=premise_tokens, 
         transitions=premise_transitions, 
         initial_embeddings=initial_embeddings, 
@@ -148,7 +148,7 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
         ss_prob=ss_prob)
     hypothesis_model = cls(
         FLAGS.model_dim, FLAGS.word_embedding_dim, vocab_size, seq_length,
-        compose_network, embedding_projection_network, apply_dropout, vs, 
+        compose_network, embedding_projection_network, training_mode, vs, 
         X=hypothesis_tokens, 
         transitions=hypothesis_transitions, 
         initial_embeddings=initial_embeddings, 
@@ -165,7 +165,7 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
 
     # Concatenate and apply dropout
     mlp_input = T.concatenate([premise_vector, hypothesis_vector], axis=1)
-    dropout_mlp_input = util.Dropout(mlp_input, FLAGS.semantic_classifier_keep_rate, apply_dropout)
+    dropout_mlp_input = util.Dropout(mlp_input, FLAGS.semantic_classifier_keep_rate, training_mode)
 
     # Apply a combining MLP
     pair_features = util.MLP(dropout_mlp_input, 2 * FLAGS.model_dim, FLAGS.model_dim, vs, hidden_dims=[FLAGS.model_dim],
@@ -306,7 +306,7 @@ def train():
 
     y = T.vector("y", dtype="int32")
     lr = T.scalar("lr")
-    apply_dropout = T.scalar("apply_dropout")  # 1: Training with dropout, 0: Eval
+    training_mode = T.scalar("training_mode")  # 1: Training with dropout, 0: Eval
 
     logger.Log("Building model.")
     vs = util.VariableStore(
@@ -327,7 +327,7 @@ def train():
 
         predicted_premise_transitions, predicted_hypothesis_transitions, logits = build_sentence_pair_model(
             model_cls, len(vocabulary), FLAGS.seq_length,
-            X, transitions, len(data_manager.LABEL_MAP), apply_dropout, vs, 
+            X, transitions, len(data_manager.LABEL_MAP), training_mode, vs, 
             initial_embeddings=initial_embeddings, project_embeddings=(not train_embeddings),
             ss_mask_gen=ss_mask_gen,
             ss_prob=ss_prob)
@@ -338,7 +338,7 @@ def train():
 
         predicted_transitions, logits = build_sentence_model(
             model_cls, len(vocabulary), FLAGS.seq_length,
-            X, transitions, len(data_manager.LABEL_MAP), apply_dropout, vs, 
+            X, transitions, len(data_manager.LABEL_MAP), training_mode, vs, 
             initial_embeddings=initial_embeddings, project_embeddings=(not train_embeddings),
             ss_mask_gen=ss_mask_gen,
             ss_prob=ss_prob)        
@@ -393,12 +393,12 @@ def train():
     # Added training step number 
     logger.Log("Building update function.")
     update_fn = theano.function(
-        [X, transitions, y, num_transitions, lr, apply_dropout, ss_prob],
+        [X, transitions, y, num_transitions, lr, training_mode, ss_prob],
         [total_cost, xent_cost, action_cost, action_acc, l2_cost, acc],
         updates=new_values,
         on_unused_input='warn')
     logger.Log("Building eval function.")
-    eval_fn = theano.function([X, transitions, y, num_transitions, apply_dropout, ss_prob], [acc, action_acc],
+    eval_fn = theano.function([X, transitions, y, num_transitions, training_mode, ss_prob], [acc, action_acc],
         on_unused_input='warn')
     logger.Log("Training.")
 

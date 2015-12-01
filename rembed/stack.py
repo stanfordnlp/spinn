@@ -62,7 +62,7 @@ class HardStack(object):
     """
 
     def __init__(self, model_dim, word_embedding_dim, vocab_size, seq_length, compose_network,
-                 embedding_projection_network, apply_dropout, vs, predict_network=None,
+                 embedding_projection_network, training_mode, vs, predict_network=None,
                  use_predictions=False, interpolate=False, X=None, transitions=None, initial_embeddings=None,
                  make_test_fn=False, embedding_dropout_keep_rate=1.0, ss_mask_gen=None, ss_prob=0.0):
         """
@@ -79,8 +79,9 @@ class HardStack(object):
               returns a transformed Theano batch of dimension
               `batch_size * outp_dim`.
             embedding_projection_network: Same form as `compose_network`.
-            apply_dropout: A Theano scalar indicating whether to apply dropout (1.0)
-              or eval-mode rescaling (0.0).
+            training_mode: A Theano scalar indicating whether to act as a training model 
+              (i.e. apply dropout and scheduled sampling) (1.0) or to act as an eval model_dim
+              (i.e. rescale instead of applying dropout, ignore ground truth parses in moddels >0).
             vs: VariableStore instance for parameter storage
             predict_network: Blocks-like function which maps values
               `3 * model_dim` to `action_dim`
@@ -110,7 +111,7 @@ class HardStack(object):
 
         self.initial_embeddings = initial_embeddings
 
-        self.apply_dropout = apply_dropout
+        self.training_mode = training_mode
         self.embedding_dropout_keep_rate = embedding_dropout_keep_rate
 
         self.X = X
@@ -128,7 +129,7 @@ class HardStack(object):
         self._make_scan()
 
         if make_test_fn:
-            self.scan_fn = theano.function([self.X, self.transitions, self.apply_dropout],
+            self.scan_fn = theano.function([self.X, self.transitions, self.training_mode],
                                            self.final_stack)
 
     def _make_params(self):
@@ -166,7 +167,7 @@ class HardStack(object):
         # and maintain a cursor in this buffer.
         buffer_t = self._embedding_projection_network(
             raw_embeddings, self.word_embedding_dim, self.model_dim, self._vs, name="project")
-        buffer_t = util.Dropout(buffer_t, self.embedding_dropout_keep_rate, self.apply_dropout)
+        buffer_t = util.Dropout(buffer_t, self.embedding_dropout_keep_rate, self.training_mode)
 
         # Collapse buffer to (batch_size * buffer_size) * emb_dim for fast indexing.
         buffer_t = buffer_t.reshape((-1, self.model_dim))
