@@ -56,14 +56,14 @@ class HardStack(object):
     predictions from some external parser which acts as the "ground truth"
     parser.
 
-    Model 0: predict_network=None, use_predictions=False
-    Model 1: predict_network=something, use_predictions=False
-    Model 2: predict_network=something, use_predictions=True
+    Model 0: predict_network=None, train_with_predicted_transitions=False
+    Model 1: predict_network=something, train_with_predicted_transitions=False
+    Model 2: predict_network=something, train_with_predicted_transitions=True
     """
 
     def __init__(self, model_dim, word_embedding_dim, vocab_size, seq_length, compose_network,
                  embedding_projection_network, training_mode, vs, predict_network=None,
-                 use_predictions=False, interpolate=False, X=None, transitions=None, initial_embeddings=None,
+                 train_with_predicted_transitions=False, interpolate=False, X=None, transitions=None, initial_embeddings=None,
                  make_test_fn=False, embedding_dropout_keep_rate=1.0, ss_mask_gen=None, ss_prob=0.0):
         """
         Construct a HardStack.
@@ -85,7 +85,7 @@ class HardStack(object):
             vs: VariableStore instance for parameter storage
             predict_network: Blocks-like function which maps values
               `3 * model_dim` to `action_dim`
-            use_predictions: If `True`, use the predictions from the model
+            train_with_predicted_transitions: If `True`, use the predictions from the model
               (rather than the ground-truth `transitions`) to perform stack
               operations
             X: Theano batch describing input matrix, or `None` (in which case
@@ -105,7 +105,7 @@ class HardStack(object):
         self._compose_network = compose_network
         self._embedding_projection_network = embedding_projection_network
         self._predict_network = predict_network
-        self.use_predictions = use_predictions
+        self.train_with_predicted_transitions = train_with_predicted_transitions
 
         self._vs = vs
 
@@ -195,7 +195,7 @@ class HardStack(object):
                     predict_inp, self.model_dim * 3, 2, self._vs,
                     name="predict_actions")
 
-            if self.use_predictions: 
+            if self.train_with_predicted_transitions: 
                 if self.interpolate:
                     # Interpolate between truth and prediction, using bernoulli RVs generated prior to the step
                     mask = transitions_t * ss_mask_gen_matrix_t + actions_t.argmax(axis=1) * (1 - ss_mask_gen_matrix_t)
@@ -230,7 +230,7 @@ class HardStack(object):
 
         def step(transitions_t, stack_t, buffer_cur_t, stack_pushed,
                  stack_merged, buffer):
-        # Extract top buffer values.
+            # Extract top buffer values.
             idxs = buffer_cur_t + (T.arange(batch_size) * self.seq_length)
             buffer_top_t = buffer[idxs]
 
@@ -242,7 +242,7 @@ class HardStack(object):
                     predict_inp, self.model_dim * 3, 2, self._vs,
                     name="predict_actions")
 
-            if self.use_predictions: 
+            if self.train_with_predicted_transitions: 
                 # Predicting our own actions
                 mask = actions_t.argmax(axis=1)
             else:
@@ -311,7 +311,7 @@ class Model0(HardStack):
 
     def __init__(self, *args, **kwargs):
         kwargs["predict_network"] = None
-        kwargs["use_predictions"] = False
+        kwargs["train_with_predicted_transitions"] = False
         kwargs["interpolate"] = False
         super(Model0, self).__init__(*args, **kwargs)
 
@@ -320,7 +320,7 @@ class Model1(HardStack):
 
     def __init__(self, *args, **kwargs):
         kwargs["predict_network"] = kwargs.get("predict_network", util.Linear)
-        kwargs["use_predictions"] = False
+        kwargs["train_with_predicted_transitions"] = False
         kwargs["interpolate"] = False
         super(Model1, self).__init__(*args, **kwargs)
 
@@ -329,7 +329,7 @@ class Model2(HardStack):
 
     def __init__(self, *args, **kwargs):
         kwargs["predict_network"] = kwargs.get("predict_network", util.Linear)
-        kwargs["use_predictions"] = True
+        kwargs["train_with_predicted_transitions"] = True
         kwargs["interpolate"] = False
         super(Model2, self).__init__(*args, **kwargs)
 
@@ -338,6 +338,6 @@ class Model12SS(HardStack):
 
     def __init__(self, *args, **kwargs):
         kwargs["predict_network"] = kwargs.get("predict_network", util.Linear)
-        kwargs["use_predictions"] = True
+        kwargs["train_with_predicted_transitions"] = True
         kwargs["interpolate"] = True
         super(Model12SS, self).__init__(*args, **kwargs)
