@@ -54,7 +54,7 @@ def TreeLSTMBiasInitializer():
 
 def LSTMBiasInitializer():
     def init(shape):
-        hidden_dim = shape[0] / 5
+        hidden_dim = shape[0] / 4
         value = np.zeros(shape)
         value[hidden_dim:2*hidden_dim] = 1
         return value
