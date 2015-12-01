@@ -54,11 +54,11 @@ def build_sentence_model(cls, vocab_size, seq_length, tokens, transitions,
       tokens: Theano batch (integer matrix), `batch_size * seq_length`
       transitions: Theano batch (integer matrix), `batch_size * seq_length`
       num_classes: Number of output classes
-        training_mode: A Theano scalar indicating whether to act as a training model 
-          with dropout (1.0) or to act as an eval model with rescaling (0.0).
-        ground_truth_transitions_visible: A Theano scalar. If set (1.0), allow the model access
-          to ground truth transitions. This can be disabled at evaluation time to force Model 1
-          (or 2S) to evaluate in the Model 2 style with predicted transitions. Has no effect on Model 0.
+      training_mode: A Theano scalar indicating whether to act as a training model 
+        with dropout (1.0) or to act as an eval model with rescaling (0.0).
+      ground_truth_transitions_visible: A Theano scalar. If set (1.0), allow the model access
+        to ground truth transitions. This can be disabled at evaluation time to force Model 1
+        (or 2S) to evaluate in the Model 2 style with predicted transitions. Has no effect on Model 0.
       vs: Variable store.
     """
 
@@ -104,7 +104,8 @@ def build_sentence_model(cls, vocab_size, seq_length, tokens, transitions,
 
 
 def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
-                     num_classes, training_mode, vs, initial_embeddings=None, project_embeddings=False, ss_mask_gen=None, ss_prob=0.0):
+                     num_classes, training_mode, ground_truth_transitions_visible, vs, 
+                     initial_embeddings=None, project_embeddings=False, ss_mask_gen=None, ss_prob=0.0):
     """
     Construct a classifier which makes use of some hard-stack model.
 
@@ -115,7 +116,11 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
       tokens: Theano batch (integer matrix), `batch_size * seq_length`
       transitions: Theano batch (integer matrix), `batch_size * seq_length`
       num_classes: Number of output classes
-      training_mode: 1.0 at training time, 0.0 at eval time (to avoid corrupting outputs in dropout)
+      training_mode: A Theano scalar indicating whether to act as a training model 
+        with dropout (1.0) or to act as an eval model with rescaling (0.0).
+      ground_truth_transitions_visible: A Theano scalar. If set (1.0), allow the model access
+        to ground truth transitions. This can be disabled at evaluation time to force Model 1
+        (or 2S) to evaluate in the Model 2 style with predicted transitions. Has no effect on Model 0.
       vs: Variable store.
     """
 
@@ -144,7 +149,7 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
     # Build two hard stack models which scan over input sequences.
     premise_model = cls(
         FLAGS.model_dim, FLAGS.word_embedding_dim, vocab_size, seq_length,
-        compose_network, embedding_projection_network, training_mode, vs, 
+        compose_network, embedding_projection_network, training_mode, ground_truth_transitions_visible, vs, 
         X=premise_tokens, 
         transitions=premise_transitions, 
         initial_embeddings=initial_embeddings, 
@@ -153,7 +158,7 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
         ss_prob=ss_prob)
     hypothesis_model = cls(
         FLAGS.model_dim, FLAGS.word_embedding_dim, vocab_size, seq_length,
-        compose_network, embedding_projection_network, training_mode, vs, 
+        compose_network, embedding_projection_network, training_mode, ground_truth_transitions_visible, vs, 
         X=hypothesis_tokens, 
         transitions=hypothesis_transitions, 
         initial_embeddings=initial_embeddings, 
