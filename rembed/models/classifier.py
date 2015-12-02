@@ -407,10 +407,12 @@ def train():
         [X, transitions, y, num_transitions, lr, training_mode, ground_truth_transitions_visible, ss_prob],
         [total_cost, xent_cost, action_cost, action_acc, l2_cost, acc],
         updates=new_values,
-        on_unused_input='warn')
+        on_unused_input='warn',
+        allow_input_downcast=True)
     logger.Log("Building eval function.")
     eval_fn = theano.function([X, transitions, y, num_transitions, training_mode, ground_truth_transitions_visible, ss_prob], [acc, action_acc],
-        on_unused_input='warn')
+        on_unused_input='warn',
+        allow_input_downcast=True)
     logger.Log("Training.")
 
     # Main training loop.
