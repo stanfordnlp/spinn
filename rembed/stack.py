@@ -211,7 +211,8 @@ class HardStack(object):
                 effective_ss_mask_gen_matrix_t = ss_mask_gen_matrix_t * ground_truth_transitions_visible
 
                 # Interpolate between truth and prediction, using bernoulli RVs generated prior to the step
-                mask = transitions_t * ss_mask_gen_matrix_t + actions_t.argmax(axis=1) * (1 - ss_mask_gen_matrix_t)
+                mask = (transitions_t * effective_ss_mask_gen_matrix_t 
+                        + actions_t.argmax(axis=1) * (1 - effective_ss_mask_gen_matrix_t))
 
             # Now update the stack: first precompute merge results.
             merge_items = stack_t[:, :2].reshape((-1, self.model_dim * 2))
