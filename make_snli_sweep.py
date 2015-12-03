@@ -29,7 +29,7 @@ FIXED_PARAMETERS = {
     "seq_length":	"50",
     "eval_seq_length":	"100",
     "clipping_max_value":  "5.0",
-    "batch_size":  "64",
+    "batch_size":  "32",
     "lstm_composition": "",
     "ckpt_root":    os.path.join("/afs/cs.stanford.edu/u", getpass.getuser(), "scr/")  # Launching user's home scr dir
 }
