@@ -30,7 +30,6 @@ matches = total_re.findall(output)
 total_amts = [int(total) for total in matches]
 
 pct_used = [float(usage_amt)/float(total) for (usage_amt, total) in zip(usage_amts, total_amts)]
-print pct_used
 
 open_gpus = [index for index in range(len(pct_used)) if pct_used[index] < USAGE_THRESHOLD]
 
