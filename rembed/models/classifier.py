@@ -245,7 +245,8 @@ def build_action_cost(logits, targets, num_transitions):
     mask = T.gt(rng, padding)
 
     # Compute acc using the mask
-    acc = 1 - T.cast(T.sum(errors * mask), theano.config.floatX) / T.sum(num_transitions)
+    acc = 1 - (T.sum(errors * mask, dtype=theano.config.floatX) / 
+                            T.sum(num_transitions, dtype=theano.config.floatX))
 
     # Compute cost directly, since we *do* want a cost incentive to get the padding
     # transitions right.
