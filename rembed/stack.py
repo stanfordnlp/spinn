@@ -191,7 +191,7 @@ class HardStack(object):
             tracking_hidden = tracking_hidden_prev
 
         if self.train_with_predicted_transitions: 
-            # Predicting our own actions
+            # Model 2 case
             if self.interpolate:
                 # Only use ground truth transitions if they are marked as visible to the model.
                 effective_ss_mask_gen_matrix_t = ss_mask_gen_matrix_t * ground_truth_transitions_visible
@@ -202,8 +202,12 @@ class HardStack(object):
             else:
                 # Use predicted actions to build a mask.
                 mask = actions_t.argmax(axis=1)
+        elif self._predict_network is not None:
+            # Use transitions provided from external parser when not masked out
+            mask = (transitions_t * ground_truth_transitions_visible 
+                        + actions_t.argmax(axis=1) * (1 - ground_truth_transitions_visible)) 
         else:
-            # Use transitions provided from external parser.
+            # Model 0 case
             mask = transitions_t
 
         # Now update the stack: first precompute merge results.
