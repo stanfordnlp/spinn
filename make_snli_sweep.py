@@ -91,5 +91,5 @@ for run_id in range(sweep_runs):
                 val_disp = "%.2g" % value
             name += "-" + param + val_disp
     flags += " --experiment_name " + name
-    print "export REMBED_FLAGS=\"" + flags + "\"; qsub -v REMBED_FLAGS train_rembed_classifier.sh -q " + queue
+    print "export REMBED_FLAGS=\"" + flags + "\"; export DEVICE=cpu qsub -v REMBED_FLAGS,DEVICE train_rembed_classifier.sh -q " + queue
     print
