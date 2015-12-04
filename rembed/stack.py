@@ -54,16 +54,24 @@ class HardStack(object):
     predictions from some external parser which acts as the "ground truth"
     parser.
 
-    Model 0: predict_network=None, use_predictions=False
-    Model 1: predict_network=something, use_predictions=False
-    Model 2: predict_network=something, use_predictions=True
+    Model 0: predict_network=None, train_with_predicted_transitions=False
+    Model 1: predict_network=something, train_with_predicted_transitions=False
+    Model 2: predict_network=something, train_with_predicted_transitions=True
     """
 
-    def __init__(self, model_dim, word_embedding_dim, vocab_size, seq_length, 
-                 compose_network, embedding_projection_network, apply_dropout, vs, 
-                 tracking_lstm_hidden_dim=8, predict_network=None, use_predictions=False, 
-                 interpolate=False, X=None, transitions=None, initial_embeddings=None,
-                 make_test_fn=False, embedding_dropout_keep_rate=1.0, ss_mask_gen=None, ss_prob=0.0):
+    def __init__(self, model_dim, word_embedding_dim, vocab_size, seq_length, compose_network,
+                 embedding_projection_network, training_mode, ground_truth_transitions_visible, vs, 
+                 predict_network=None,
+                 train_with_predicted_transitions=False, 
+                 interpolate=False, 
+                 X=None, 
+                 transitions=None, 
+                 initial_embeddings=None,
+                 make_test_fn=False, 
+                 embedding_dropout_keep_rate=1.0, 
+                 ss_mask_gen=None, 
+                 ss_prob=0.0,
+                 tracking_lstm_hidden_dim=8):
         """
         Construct a HardStack.
 
@@ -78,12 +86,15 @@ class HardStack(object):
               returns a transformed Theano batch of dimension
               `batch_size * outp_dim`.
             embedding_projection_network: Same form as `compose_network`.
-            apply_dropout: A Theano scalar indicating whether to apply dropout (1.0)
-              or eval-mode rescaling (0.0).
+            training_mode: A Theano scalar indicating whether to act as a training model 
+              with dropout (1.0) or to act as an eval model with rescaling (0.0).
+            ground_truth_transitions_visible: A Theano scalar. If set (1.0), allow the model access
+              to ground truth transitions. This can be disabled at evaluation time to force Model 1
+              (or 12SS) to evaluate in the Model 2 style with predicted transitions. Has no effect on Model 0.
             vs: VariableStore instance for parameter storage
             predict_network: Blocks-like function which maps values
               `3 * model_dim` to `action_dim`
-            use_predictions: If `True`, use the predictions from the model
+            train_with_predicted_transitions: If `True`, use the predictions from the model
               (rather than the ground-truth `transitions`) to perform stack
               operations
             X: Theano batch describing input matrix, or `None` (in which case
@@ -104,14 +115,15 @@ class HardStack(object):
         self._compose_network = compose_network
         self._embedding_projection_network = embedding_projection_network
         self._predict_network = predict_network
-        self.use_predictions = use_predictions
         self.use_tracking_lstm = (tracking_lstm_hidden_dim > 0)
+        self.train_with_predicted_transitions = train_with_predicted_transitions
 
         self._vs = vs
 
         self.initial_embeddings = initial_embeddings
 
-        self.apply_dropout = apply_dropout
+        self.training_mode = training_mode
+        self.ground_truth_transitions_visible = ground_truth_transitions_visible
         self.embedding_dropout_keep_rate = embedding_dropout_keep_rate
 
         self.X = X
@@ -129,7 +141,8 @@ class HardStack(object):
         self._make_scan()
 
         if make_test_fn:
-            self.scan_fn = theano.function([self.X, self.transitions, self.apply_dropout],
+            self.scan_fn = theano.function([self.X, self.transitions, self.training_mode, 
+                                            self.ground_truth_transitions_visible],
                                            self.final_stack)
 
     def _make_params(self):
@@ -149,7 +162,8 @@ class HardStack(object):
         self.transitions = self.transitions or T.imatrix("transitions")
 
     def _step(self, transitions_t, ss_mask_gen_matrix_t, stack_t, buffer_cur_t, 
-            tracking_hidden_prev, stack_pushed, stack_merged, buffer):
+            tracking_hidden_prev, stack_pushed, stack_merged, buffer, 
+            ground_truth_transitions_visible):
         batch_size, _ = self.X.shape
         # Extract top buffer values.
         idxs = buffer_cur_t + (T.arange(batch_size) * self.seq_length)
@@ -175,7 +189,7 @@ class HardStack(object):
             # no change in the hidden state because there is none
             tracking_hidden = tracking_hidden_prev
 
-        if self.use_predictions: 
+        if self.train_with_predicted_transitions: 
             # Predicting our own actions
             if self.interpolate:
                 # Interpolate between truth and prediction using bernoulli RVs 
@@ -233,7 +247,7 @@ class HardStack(object):
         # and maintain a cursor in this buffer.
         buffer_t = self._embedding_projection_network(
             raw_embeddings, self.word_embedding_dim, self.model_dim, self._vs, name="project")
-        buffer_t = util.Dropout(buffer_t, self.embedding_dropout_keep_rate, self.apply_dropout)
+        buffer_t = util.Dropout(buffer_t, self.embedding_dropout_keep_rate, self.training_mode)
 
         # Collapse buffer to (batch_size * buffer_size) * emb_dim for fast indexing.
         buffer_t = buffer_t.reshape((-1, self.model_dim))
@@ -277,7 +291,8 @@ class HardStack(object):
         scan_ret = theano.scan(
                 self._step,
                 sequences=sequences,
-                non_sequences=[stack_pushed, stack_merged, buffer_t],
+                non_sequences=[stack_pushed, stack_merged, 
+                        buffer_t, self.ground_truth_transitions_visible],
                 outputs_info=outputs_info)[0]
 
         stack_ind = 0 if self.interpolate else 1
@@ -292,7 +307,7 @@ class Model0(HardStack):
 
     def __init__(self, *args, **kwargs):
         kwargs["predict_network"] = None
-        kwargs["use_predictions"] = False
+        kwargs["train_with_predicted_transitions"] = False
         kwargs["interpolate"] = False
         super(Model0, self).__init__(*args, **kwargs)
 
@@ -307,7 +322,7 @@ class Model1(HardStack):
         else:
             kwargs["predict_network"] = util.Linear
         # defaults to not using predictions while training and not using scheduled sampling
-        kwargs["use_predictions"] = False
+        kwargs["train_with_predicted_transitions"] = False
         kwargs["interpolate"] = False
         super(Model1, self).__init__(*args, **kwargs)
 
@@ -322,14 +337,20 @@ class Model2(HardStack):
         else:
             kwargs["predict_network"] = util.Linear
         # defaults to using predictions while training and not using scheduled sampling
-        kwargs["use_predictions"] = True
+        kwargs["train_with_predicted_transitions"] = True
         kwargs["interpolate"] = False
         super(Model2, self).__init__(*args, **kwargs)
 
 
-class Model12SS(HardStack):
+class Model2S(HardStack):
 
     def __init__(self, *args, **kwargs):
+        tracking_lstm_hidden_dim = kwargs.get("tracking_lstm_hidden_dim", 0)
+        if tracking_lstm_hidden_dim > 0:
+            kwargs["predict_network"] = util.TrackingUnit
+        else:
+            kwargs["predict_network"] = util.Linear
         # use supplied settings and use scheduled sampling
+        kwargs["train_with_predicted_transitions"] = True
         kwargs["interpolate"] = True
-        super(Model12SS, self).__init__(*args, **kwargs)
+        super(Model2S, self).__init__(*args, **kwargs)

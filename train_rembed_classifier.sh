@@ -7,7 +7,7 @@
 
 ### The below are not comments, but actual PBS flags:
 #PBS -l walltime=99:00:00	### Die after four-ish days
-#PBS -l mem=16000MB   ### Request 16G RAM. We don't need it, but it helps make sure we don't wind up on machines with overloaded GPUs.
+#PBS -l mem=8000MB   ### Request 8G RAM. We don't need it, but it helps make sure we don't wind up on machines with overloaded GPUs.
 #PBS -q jag   ### Run on the jagupard* queue
 
 # Change to the submission directory.

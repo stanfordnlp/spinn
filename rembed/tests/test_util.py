@@ -5,7 +5,7 @@ from nose.tools import assert_equal
 from rembed import util
 
 
-TEST_EMBEDDING_MATRIX = "rembed/tests/test_embedding_matrix.50d.txt"
+TEST_EMBEDDING_MATRIX = "rembed/tests/test_embedding_matrix.5d.txt"
 
 
 def test_build_vocabulary_for_ascii_embedding_file():
@@ -83,18 +83,22 @@ def test_crop_and_pad():
     #   wasted. The corresponding token sequence will be cropped by removing
     #   as many elements on the left side as there were zeros removed from the
     #   transition sequence.
+    # - num_transitions reports the number of transitions in the original sequence.
     expected = [
         {
             "tokens": [6, 2, 0, 0, 0],
-            "transitions": [1, 0, 1, 0, 1]
+            "transitions": [1, 0, 1, 0, 1],
+            "num_transitions": 11
         },
         {
             "tokens": [0, 0, 6, 1, 0],
-            "transitions": [0, 0, 0, 0, 1]
+            "transitions": [0, 0, 0, 0, 1],
+            "num_transitions": 3
         },
         {
             "tokens": [0, 0, 0, 0, 0],
-            "transitions": [1, 1, 1, 1, 1]
+            "transitions": [1, 1, 1, 1, 1],
+            "num_transitions": 11
         }
     ]
 

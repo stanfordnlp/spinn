@@ -24,11 +24,12 @@ class HardStackTestCase(unittest.TestCase):
 
         X = T.imatrix("X")
         transitions = T.imatrix("transitions")
-        apply_dropout = T.scalar("apply_dropout")
+        training_mode = T.scalar("training_mode")
+        ground_truth_transitions_visible = T.scalar("ground_truth_transitions_visible", dtype="int32")
         vs = VariableStore()
         self.stack = HardStack(
-            embedding_dim, embedding_dim, vocab_size, seq_length, 
-            compose_network, IdentityLayer, apply_dropout, vs,
+            embedding_dim, embedding_dim, vocab_size, seq_length, compose_network,
+            IdentityLayer, training_mode, ground_truth_transitions_visible, vs,
             X=X, transitions=transitions, make_test_fn=True)
 
         # Swap in our own dummy embeddings and weights.
@@ -61,7 +62,7 @@ class HardStackTestCase(unittest.TestCase):
                               [0, 0, 0],
                               [0, 0, 0]]])
 
-        ret = self.stack.scan_fn(X, transitions, 1.0)
+        ret = self.stack.scan_fn(X, transitions, 1.0, 1)
         np.testing.assert_almost_equal(ret, expected)
 
     def test_with_cropped_data(self):
@@ -104,7 +105,7 @@ class HardStackTestCase(unittest.TestCase):
                               [0, 0, 0],
                               [0, 0, 0]]])
 
-        ret = self.stack.scan_fn(X, transitions, 1.0)
+        ret = self.stack.scan_fn(X, transitions, 1.0, 1)
         np.testing.assert_almost_equal(ret, expected)
 
 if __name__ == '__main__':
