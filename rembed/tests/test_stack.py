@@ -16,7 +16,7 @@ class HardStackTestCase(unittest.TestCase):
         self.embedding_dim = embedding_dim = 3
         self.vocab_size = vocab_size = 10
         self.seq_length = seq_length
-
+        
         def compose_network(inp, inp_dim, outp_dim, vs, name="compose"):
             # Just add the two embeddings!
             W = T.concatenate([T.eye(outp_dim), T.eye(outp_dim)], axis=0)

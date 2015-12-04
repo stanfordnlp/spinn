@@ -81,6 +81,8 @@ def build_sentence_model(cls, vocab_size, seq_length, tokens, transitions,
     stack = cls(
         FLAGS.model_dim, FLAGS.word_embedding_dim, vocab_size, seq_length,
         compose_network, embedding_projection_network, training_mode, ground_truth_transitions_visible, vs, 
+        use_tracking_lstm=FLAGS.use_tracking_lstm,
+        tracking_lstm_hidden_dim=FLAGS.tracking_lstm_hidden_dim,
         X=tokens, 
         transitions=transitions, 
         initial_embeddings=initial_embeddings, 
@@ -150,6 +152,8 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
     premise_model = cls(
         FLAGS.model_dim, FLAGS.word_embedding_dim, vocab_size, seq_length,
         compose_network, embedding_projection_network, training_mode, ground_truth_transitions_visible, vs, 
+        use_tracking_lstm=FLAGS.use_tracking_lstm,
+        tracking_lstm_hidden_dim=FLAGS.tracking_lstm_hidden_dim,
         X=premise_tokens, 
         transitions=premise_transitions, 
         initial_embeddings=initial_embeddings, 
@@ -159,6 +163,8 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
     hypothesis_model = cls(
         FLAGS.model_dim, FLAGS.word_embedding_dim, vocab_size, seq_length,
         compose_network, embedding_projection_network, training_mode, ground_truth_transitions_visible, vs, 
+        use_tracking_lstm=FLAGS.use_tracking_lstm,
+        tracking_lstm_hidden_dim=FLAGS.tracking_lstm_hidden_dim,
         X=hypothesis_tokens, 
         transitions=hypothesis_transitions, 
         initial_embeddings=initial_embeddings, 
@@ -480,6 +486,12 @@ if __name__ == '__main__':
                           "(i.e., in Model 1 and Model 2S.)")
     gflags.DEFINE_integer("model_dim", 8, "")
     gflags.DEFINE_integer("word_embedding_dim", 8, "")
+    
+    # dimension of the hidden state of LSTM in tracking unit
+    gflags.DEFINE_integer("tracking_lstm_hidden_dim", 8, "")
+    gflags.DEFINE_boolean("use_tracking_lstm", False,
+                          "Whether to use LSTM in the tracking unit")
+    
     gflags.DEFINE_float("semantic_classifier_keep_rate", 0.5, 
         "Used for dropout in the semantic task classifier.")
     gflags.DEFINE_float("embedding_keep_rate", 0.5, 
