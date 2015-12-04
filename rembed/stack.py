@@ -71,7 +71,8 @@ class HardStack(object):
                  embedding_dropout_keep_rate=1.0, 
                  ss_mask_gen=None, 
                  ss_prob=0.0,
-                 tracking_lstm_hidden_dim=8):
+                 use_tracking_lstm=False,
+                tracking_lstm_hidden_dim=8):
         """
         Construct a HardStack.
 
@@ -108,6 +109,7 @@ class HardStack(object):
 
         self.model_dim = model_dim
         self.word_embedding_dim = word_embedding_dim
+        self.use_tracking_lstm = use_tracking_lstm
         self.tracking_lstm_hidden_dim = tracking_lstm_hidden_dim
         self.vocab_size = vocab_size
         self.seq_length = seq_length
@@ -115,7 +117,6 @@ class HardStack(object):
         self._compose_network = compose_network
         self._embedding_projection_network = embedding_projection_network
         self._predict_network = predict_network
-        self.use_tracking_lstm = (tracking_lstm_hidden_dim > 0)
         self.train_with_predicted_transitions = train_with_predicted_transitions
 
         self._vs = vs
@@ -316,8 +317,8 @@ class Model1(HardStack):
 
     def __init__(self, *args, **kwargs):
         # set the tracking unit based on supplied tracking_lstm_hidden_dim
-        tracking_lstm_hidden_dim = kwargs.get("tracking_lstm_hidden_dim", 0)
-        if tracking_lstm_hidden_dim > 0:
+        use_tracking_lstm = kwargs.get("use_tracking_lstm", False)
+        if use_tracking_lstm:
             kwargs["predict_network"] = util.TrackingUnit
         else:
             kwargs["predict_network"] = util.Linear
@@ -331,8 +332,8 @@ class Model2(HardStack):
 
     def __init__(self, *args, **kwargs):
         # set the tracking unit based on supplied tracking_lstm_hidden_dim
-        tracking_lstm_hidden_dim = kwargs.get("tracking_lstm_hidden_dim", 0)
-        if tracking_lstm_hidden_dim > 0:
+        use_tracking_lstm = kwargs.get("use_tracking_lstm", False)
+        if use_tracking_lstm:
             kwargs["predict_network"] = util.TrackingUnit
         else:
             kwargs["predict_network"] = util.Linear
@@ -345,8 +346,8 @@ class Model2(HardStack):
 class Model2S(HardStack):
 
     def __init__(self, *args, **kwargs):
-        tracking_lstm_hidden_dim = kwargs.get("tracking_lstm_hidden_dim", 0)
-        if tracking_lstm_hidden_dim > 0:
+        use_tracking_lstm = kwargs.get("use_tracking_lstm", False)
+        if use_tracking_lstm:
             kwargs["predict_network"] = util.TrackingUnit
         else:
             kwargs["predict_network"] = util.Linear
