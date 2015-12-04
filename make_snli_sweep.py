@@ -8,6 +8,7 @@ import numpy as np
 
 LIN = "LIN"
 EXP = "EXP"
+SS_BASE = "SS_BASE"
 
 # Instructions: Configure the variables in this block, then run
 # the following on a machine with qsub access:
@@ -25,7 +26,7 @@ FIXED_PARAMETERS = {
     "eval_data_path":    "/scr/nlp/data/snli_1.0/snli_1.0_dev.jsonl",
     "embedding_data_path": "/scr/nlp/data/glove_vecs/glove.840B.300d.txt",
     "word_embedding_dim":	"300",
-    "model_dim":   "200",
+    "model_dim":   "100",
     "seq_length":	"50",
     "eval_seq_length":	"100",
     "clipping_max_value":  "5.0",
@@ -41,12 +42,13 @@ SWEEP_PARAMETERS = {
     "init_range":         (EXP, 0.001, 0.005),
     "double_identity_init_range": (EXP, 0.0005, 0.005),
     "semantic_classifier_keep_rate": (LIN, 0.75, 1.0),
-    "embedding_keep_rate": (LIN, 0.75, 1.0)
+    "embedding_keep_rate": (LIN, 0.75, 1.0),
+    "scheduled_sampling_exponent_base": (SS_BASE, 2e-10, 2e-2)
 }
 
 sweep_name = "sweep_" + \
     FIXED_PARAMETERS["data_type"] + "_" + FIXED_PARAMETERS["model_type"]
-sweep_runs = 6
+sweep_runs = 3
 queue = "jag"
 
 # - #
@@ -70,6 +72,10 @@ for run_id in range(sweep_runs):
             lmn = np.log(mn)
             lmx = np.log(mx)
             sample = np.exp(lmn + (lmx - lmn) * r)
+        elif t==SS_BASE:
+            lmn = np.log(mn)
+            lmx = np.log(mx)
+            sample = 1 - np.exp(lmn + (lmx - lmn) * r)
         else:
             sample = mn + (mx - mn) * r
 
