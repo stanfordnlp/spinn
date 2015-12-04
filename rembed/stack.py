@@ -193,10 +193,12 @@ class HardStack(object):
         if self.train_with_predicted_transitions: 
             # Predicting our own actions
             if self.interpolate:
+                # Only use ground truth transitions if they are marked as visible to the model.
+                effective_ss_mask_gen_matrix_t = ss_mask_gen_matrix_t * ground_truth_transitions_visible
                 # Interpolate between truth and prediction using bernoulli RVs 
                 # generated prior to the step
-                mask = (transitions_t * ss_mask_gen_matrix_t + 
-                        actions_t.argmax(axis=1) * (1 - ss_mask_gen_matrix_t))
+                mask = (transitions_t * effective_ss_mask_gen_matrix_t 
+                        + actions_t.argmax(axis=1) * (1 - effective_ss_mask_gen_matrix_t))
             else:
                 # Use predicted actions to build a mask.
                 mask = actions_t.argmax(axis=1)
