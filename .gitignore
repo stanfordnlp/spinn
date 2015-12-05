@@ -11,3 +11,4 @@
 *.synctex.gz
 *.zip
 *.ckpt
+./snli-data
