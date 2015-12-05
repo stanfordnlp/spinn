@@ -525,3 +525,17 @@ def LoadEmbeddingsFromASCII(vocabulary, embedding_dim, path):
             if word in vocabulary:
                 emb[vocabulary[word], :] = [float(e) for e in spl[1:]]
     return emb
+
+
+def TransitionsToParse(transitions, words):
+    stack = ["*ZEROS*"] * len(transitions)
+    buffer_ptr = 0
+    for transition in transitions:
+        if transition == 0:
+            stack.append(words[buffer_ptr])
+            buffer_ptr += 1
+        elif transition == 1:
+            r = stack.pop()
+            l = stack.pop()
+            stack.append("( " + l + " " + r + " )")
+    return stack.pop()
