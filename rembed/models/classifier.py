@@ -273,6 +273,77 @@ def evaluate(eval_fn, eval_set, logger, step):
     logger.Log("Step: %i\tEval acc: %f\t %f\t%s" %
               (step, acc_accum / eval_batches, action_acc_accum / eval_batches, eval_set[0]))
 
+
+def evaluate_expanded(eval_fn, eval_set, eval_out_path, logger, step, sentence_pair_data, ind_to_word):
+    acc_accum = 0.0
+    action_acc_accum = 0.0
+    eval_batches = 0.0
+
+    with open(eval_out_path, "w") as eval_out:
+        if sentence_pair_data:
+            for (eval_X_batch, eval_transitions_batch, eval_y_batch, 
+                    eval_num_transitions_batch) in eval_set[1]:
+                acc_value, action_acc_value, sem_logit_values, logits_pred_hyp, logits_pred_prem = eval_fn(
+                    eval_X_batch, eval_transitions_batch, eval_y_batch, eval_num_transitions_batch,
+                    0.0,  # Eval mode: Don't apply dropout. 
+                    int(FLAGS.allow_gt_transitions_in_eval),  # Allow GT transitions to be used according to flag. 
+                    float(FLAGS.allow_gt_transitions_in_eval)) # adjust visibility of GT
+
+                acc_accum += acc_value
+                action_acc_accum += action_acc_value
+                eval_batches += 1.0
+
+                # write each predicted transition to file
+                for orig_transitions, pred_logit_hyp, pred_logit_prem, tokens, true_class, example_sem_logits \
+                        in zip(eval_transitions_batch, logits_pred_hyp, 
+                               logits_pred_prem, eval_X_batch, eval_y_batch, sem_logit_values):
+                    orig_hyp_transitions, orig_prem_transitions = orig_transitions.T
+                    hyp_tokens, prem_tokens = tokens.T
+                    hyp_words = [ind_to_word[t] for t in hyp_tokens]
+                    prem_words = [ind_to_word[t] for t in prem_tokens]
+                    eval_out.write(util.TransitionsToParse(orig_hyp_transitions, hyp_words) + '\n')
+                    eval_out.write(util.TransitionsToParse(pred_logit_hyp.argmax(axis=1), hyp_words) + '\n')
+                    eval_out.write(util.TransitionsToParse(orig_prem_transitions, prem_words) + '\n')
+                    eval_out.write(util.TransitionsToParse(pred_logit_prem.argmax(axis=1), prem_words) + '\n')
+
+                    predicted_class = np.argmax(example_sem_logits)    
+                    exp_logit_values = np.exp(example_sem_logits)
+                    class_probs = exp_logit_values / np.sum(exp_logit_values)
+
+                    eval_out.write(str(true_class == predicted_class) + "\t" + str(true_class)
+                                    + "\t" + str(predicted_class) + "\t" + str(class_probs) + '\n\n')
+        else:
+            for (eval_X_batch, eval_transitions_batch, eval_y_batch, 
+                 eval_num_transitions_batch) in eval_set[1]:
+                acc_value, action_acc_value, sem_logit_values, logits_pred = eval_fn(
+                    eval_X_batch, eval_transitions_batch, eval_y_batch, eval_num_transitions_batch,
+                    0.0,  # Eval mode: Don't apply dropout. 
+                    int(FLAGS.allow_gt_transitions_in_eval),  # Allow GT transitions to be used according to flag. 
+                    float(FLAGS.allow_gt_transitions_in_eval)) # adjust visibility of GT
+
+                acc_accum += acc_value
+                action_acc_accum += action_acc_value
+                eval_batches += 1.0
+
+                # write each predicted transition to file
+                for orig_transitions, pred_logit, tokens, true_class, example_sem_logits \
+                    in zip(eval_transitions_batch, logits_pred, eval_X_batch, eval_y_batch, sem_logit_values):
+                    words = [ind_to_word[t] for t in tokens]
+                    eval_out.write(util.TransitionsToParse(orig_transitions, words) + '\n')
+                    eval_out.write(util.TransitionsToParse(pred_logit.argmax(axis=1), words) + '\n')
+
+                    predicted_class = np.argmax(example_sem_logits)    
+                    exp_logit_values = np.exp(example_sem_logits)
+                    class_probs = exp_logit_values / np.sum(exp_logit_values)
+
+                    eval_out.write(str(true_class == predicted_class) + "\t" + str(true_class)
+                                    + "\t" + str(predicted_class) + "\t" + str(class_probs) + '\n\n')
+
+    logger.Log("Written predicted parses in %s" % (eval_out_path))
+    logger.Log("Step: %i\tEval acc: %f\t %f\t%s" %
+               (step, acc_accum / eval_batches, action_acc_accum / eval_batches, eval_set[0]))
+
+
 def run(only_forward=False):
     logger = afs_safe_logger.Logger(FLAGS.experiment_name + ".log")
 
@@ -437,13 +508,13 @@ def run(only_forward=False):
         # Generate function for forward pass
         logger.Log("Building forward pass.")
         if data_manager.SENTENCE_PAIR_DATA:
-            forward_fn = theano.function(
+            eval_fn = theano.function(
                 [X, transitions, y, num_transitions, training_mode, ground_truth_transitions_visible, ss_prob],
                 [acc, action_acc, logits, predicted_hypothesis_transitions, predicted_premise_transitions],
                 on_unused_input='warn',
                 allow_input_downcast=True)
         else:
-            forward_fn = theano.function(
+            eval_fn = theano.function(
                 [X, transitions, y, num_transitions, training_mode, ground_truth_transitions_visible, ss_prob],
                 [acc, action_acc, logits, predicted_transitions],
                 on_unused_input='warn',
@@ -455,74 +526,8 @@ def run(only_forward=False):
         # do a forward pass and write log the output
         logger.Log("Writing predicted parses.")
         for eval_set, eval_out_path in zip(eval_iterators, eval_output_paths):
-            acc_accum = 0.0
-            action_acc_accum = 0.0
-            eval_batches = 0.0
-
-            with open(eval_out_path, "w") as eval_out:
-                if data_manager.SENTENCE_PAIR_DATA:
-                    for (eval_X_batch, eval_transitions_batch, eval_y_batch, 
-                            eval_num_transitions_batch) in eval_set[1]:
-                        acc_value, action_acc_value, sem_logit_values, logits_pred_hyp, logits_pred_prem = forward_fn(
-                            eval_X_batch, eval_transitions_batch, eval_y_batch, eval_num_transitions_batch,
-                            0.0,  # Eval mode: Don't apply dropout. 
-                            int(FLAGS.allow_gt_transitions_in_eval),  # Allow GT transitions to be used according to flag. 
-                            float(FLAGS.allow_gt_transitions_in_eval)) # adjust visibility of GT
-
-                        acc_accum += acc_value
-                        action_acc_accum += action_acc_value
-                        eval_batches += 1.0
-
-                        # write each predicted transition to file
-                        for orig_transitions, pred_logit_hyp, pred_logit_prem, tokens, true_class, example_sem_logits \
-                                in zip(eval_transitions_batch, logits_pred_hyp, 
-                                       logits_pred_prem, eval_X_batch, eval_y_batch, sem_logit_values):
-                            orig_hyp_transitions, orig_prem_transitions = orig_transitions.T
-                            hyp_tokens, prem_tokens = tokens.T
-                            hyp_words = [ind_to_word[t] for t in hyp_tokens]
-                            prem_words = [ind_to_word[t] for t in prem_tokens]
-                            eval_out.write(util.TransitionsToParse(orig_hyp_transitions, hyp_words) + '\n')
-                            eval_out.write(util.TransitionsToParse(pred_logit_hyp.argmax(axis=1), hyp_words) + '\n')
-                            eval_out.write(util.TransitionsToParse(orig_prem_transitions, prem_words) + '\n')
-                            eval_out.write(util.TransitionsToParse(pred_logit_prem.argmax(axis=1), prem_words) + '\n')
-
-                            predicted_class = np.argmax(example_sem_logits)    
-                            exp_logit_values = np.exp(example_sem_logits)
-                            class_probs = exp_logit_values / np.sum(exp_logit_values)
-
-                            eval_out.write(str(true_class == predicted_class) + "\t" + str(true_class)
-                                            + "\t" + str(predicted_class) + "\t" + str(class_probs) + '\n\n')
-                else:
-                    for (eval_X_batch, eval_transitions_batch, eval_y_batch, 
-                         eval_num_transitions_batch) in eval_set[1]:
-                        acc_value, action_acc_value, sem_logit_values, logits_pred = forward_fn(
-                            eval_X_batch, eval_transitions_batch, eval_y_batch, eval_num_transitions_batch,
-                            0.0,  # Eval mode: Don't apply dropout. 
-                            int(FLAGS.allow_gt_transitions_in_eval),  # Allow GT transitions to be used according to flag. 
-                            float(FLAGS.allow_gt_transitions_in_eval)) # adjust visibility of GT
-
-                        acc_accum += acc_value
-                        action_acc_accum += action_acc_value
-                        eval_batches += 1.0
-
-                        # write each predicted transition to file
-                        for orig_transitions, pred_logit, tokens, true_class, example_sem_logits \
-                            in zip(eval_transitions_batch, logits_pred, eval_X_batch, eval_y_batch, sem_logit_values):
-                            words = [ind_to_word[t] for t in tokens]
-                            eval_out.write(util.TransitionsToParse(orig_transitions, words) + '\n')
-                            eval_out.write(util.TransitionsToParse(pred_logit.argmax(axis=1), words) + '\n')
-
-                            predicted_class = np.argmax(example_sem_logits)    
-                            exp_logit_values = np.exp(example_sem_logits)
-                            class_probs = exp_logit_values / np.sum(exp_logit_values)
-
-                            eval_out.write(str(true_class == predicted_class) + "\t" + str(true_class)
-                                            + "\t" + str(predicted_class) + "\t" + str(class_probs) + '\n\n')
-
-            logger.Log("Written predicted parses in %s" % (eval_out_path))
-            logger.Log("Step: %i\tEval acc: %f\t %f\t%s" %
-                       (step, acc_accum / eval_batches, action_acc_accum / eval_batches, eval_set[0]))
-
+            evaluate_expanded(eval_fn, eval_set, eval_out_path, logger, step, 
+                              data_manager.SENTENCE_PAIR_DATA, ind_to_word)
     else:
          # Train
 
