@@ -253,8 +253,7 @@ def build_action_cost(logits, targets, num_transitions):
     cost = T.mean(costs)
     return cost, acc
 
-
-def train():
+def train(only_forward=False):
     logger = afs_safe_logger.Logger(FLAGS.experiment_name + ".log")
 
     if FLAGS.data_type == "bl":
@@ -398,7 +397,44 @@ def train():
         logger.Log("Found checkpoint, restoring.")
         step = vs.load_checkpoint(checkpoint_path, trained_param_keys, get_step=True) 
     else:
-        step = 0
+        step = 0 
+
+    # only do forward pass if specified
+    if only_forward:
+        assert os.path.isfile(checkpoint_path), "checkpoint doesn't exist."
+        parse_output_paths = FLAGS.parse_output_path.strip().split(":")
+        assert all(parse_output_paths), "must provide valid output paths."
+        assert len(parse_output_paths) == len(eval_iterators), "invalid no. of output paths"
+        # load model from checkpoint
+        logger.Log("Checkpointed model was trained for %d steps." % (step,)) 
+        # generate function for forward pass
+        logger.Log("Building forward pass.")
+        forward_fn = theano.function(
+            [X, transitions, training_mode, ground_truth_transitions_visible, ss_prob],
+            [predicted_transitions],
+            on_unused_input='warn',
+            allow_input_downcast=True)
+        # generate the inverse vocabulary lookup table
+        ind_to_word = {v : k for k, v in vocabulary.iteritems()}
+        # do a forward pass and write log the output
+        logger.Log("Writing predicted parses.")
+        for eval_set, parse_out_path in zip(eval_iterators, parse_output_paths):
+            with open(parse_out_path, "w") as parse_out:
+                for (eval_X_batch, eval_transitions_batch, eval_y_batch, eval_num_transitions_batch) in eval_set[1]:
+                    logits_pred = forward_fn(
+                        eval_X_batch, eval_transitions_batch,
+                        0.0,  # Eval mode: Don't apply dropout. 
+                        int(FLAGS.allow_gt_transitions_in_eval),  # Allow GT transitions to be used according to flag. 
+                        float(FLAGS.allow_gt_transitions_in_eval))[0] # If flag not set, used scheduled sampling
+                                                                      # p(ground truth) = 0.0, 
+                                                                      # else SS p(ground truth) = 1.0
+                    # write each predicted transition to file
+                    for orig_transitions, pred_logit, tokens in zip(eval_transitions_batch, logits_pred, eval_X_batch):
+                        words = [ind_to_word[t] for t in tokens]
+                        parse_out.write(util.TransitionsToParse(orig_transitions, words) + '\n')
+                        parse_out.write(util.TransitionsToParse(pred_logit.argmax(axis=1), words) + '\n\n')
+            logger.Log("Written predicted parses in %s" % (parse_out_path))
+        return
 
     new_values = util.RMSprop(total_cost, trained_params, lr)
     # Training open-vocabulary embeddings is a questionable idea right now. Disabled:
@@ -518,9 +554,18 @@ if __name__ == '__main__':
 
     gflags.DEFINE_integer("ckpt_interval_steps", 10000, "")
 
+    # Evaluation settings
+    gflags.DEFINE_boolean("write_predicted_parse", False, 
+        "If set, a checkpoint is loaded and a forward pass is done to get the predicted"
+        "transitions. The inferred parse is written to the supplied file(s). Requirements: "
+        "(i) must supply a checkpoint path (ii) the number of files provided is the same as "
+        "the number of eval sets.")
+    gflags.DEFINE_string("parse_output_path", "", 
+        "Used when write_predicted_parse is set. The number of supplied paths should be same"
+        "as the number of eval sets.")
 
     # Parse command line flags.
     FLAGS(sys.argv)
 
     # Run.
-    train()
+    train(only_forward=FLAGS.write_predicted_parse)
