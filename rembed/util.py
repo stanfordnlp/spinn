@@ -94,7 +94,7 @@ class VariableStore(object):
     def save_checkpoint(self, filename="vs_ckpt", keys=None, step=None):
         if not keys:
             keys = self.vars
-        save_file = open(filename, 'wb')  # this will overwrite current contents
+        save_file = open(filename, 'w')  # this will overwrite current contents
         for key in keys:
             if self.logger:
                 full_name = "%s/%s" % (self.prefix, key)

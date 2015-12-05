@@ -253,7 +253,27 @@ def build_action_cost(logits, targets, num_transitions):
     cost = T.mean(costs)
     return cost, acc
 
-def train(only_forward=False):
+
+def evaluate(eval_fn, eval_set, logger, step):
+    # Evaluate
+    acc_accum = 0.0
+    action_acc_accum = 0.0
+    eval_batches = 0.0
+    for (eval_X_batch, eval_transitions_batch, eval_y_batch, eval_num_transitions_batch) in eval_set[1]:
+        acc_value, action_acc_value = eval_fn(
+            eval_X_batch, eval_transitions_batch,
+            eval_y_batch, eval_num_transitions_batch, 0.0,  # Eval mode: Don't apply dropout. 
+            int(FLAGS.allow_gt_transitions_in_eval),  # Allow GT transitions to be used according to flag. 
+            float(FLAGS.allow_gt_transitions_in_eval))  # If flag not set, used scheduled sampling
+                                                        # p(ground truth) = 0.0, 
+                                                        # else SS p(ground truth) = 1.0
+        acc_accum += acc_value
+        action_acc_accum += action_acc_value
+        eval_batches += 1.0
+    logger.Log("Step: %i\tEval acc: %f\t %f\t%s" %
+              (step, acc_accum / eval_batches, action_acc_accum / eval_batches, eval_set[0]))
+
+def run(only_forward=False):
     logger = afs_safe_logger.Logger(FLAGS.experiment_name + ".log")
 
     if FLAGS.data_type == "bl":
@@ -397,74 +417,115 @@ def train(only_forward=False):
         logger.Log("Found checkpoint, restoring.")
         step = vs.load_checkpoint(checkpoint_path, trained_param_keys, get_step=True) 
     else:
+        assert not only_forward, "Can't run an eval-only run without a checkpoint. Supply a checkpoint."
         step = 0 
 
-    # only do forward pass if specified
+    # Do an evaluation-only run.
     if only_forward:
-        assert os.path.isfile(checkpoint_path), "checkpoint doesn't exist."
-        parse_output_paths = FLAGS.parse_output_path.strip().split(":")
-        assert all(parse_output_paths), "must provide valid output paths."
-        assert len(parse_output_paths) == len(eval_iterators), "invalid no. of output paths"
-        # load model from checkpoint
-        logger.Log("Checkpointed model was trained for %d steps." % (step,)) 
-        # generate function for forward pass
+        # TODO: Prune out redundant code, make usable on Model0 as well.
+
+        if FLAGS.eval_output_paths:
+            eval_output_paths = FLAGS.eval_output_path.strip().split(":")
+            assert len(eval_output_paths) == len(eval_iterators), "Invalid no. of output paths."
+        else:
+            eval_output_paths = [FLAGS.experiment_name + "-" + os.path.split(eval_set[0])[1] + ".parse_log" 
+                                  for eval_set in eval_iterators]
+
+        # Load model from checkpoint
+        logger.Log("Checkpointed model was trained for %d steps." % (step,))
+
+        # Generate function for forward pass
         logger.Log("Building forward pass.")
         if data_manager.SENTENCE_PAIR_DATA:
             forward_fn = theano.function(
-                [X, transitions, training_mode, ground_truth_transitions_visible, ss_prob],
-                [predicted_hypothesis_transitions, predicted_premise_transitions],
+                [X, transitions, y, num_transitions, training_mode, ground_truth_transitions_visible, ss_prob],
+                [acc, action_acc, logits, predicted_hypothesis_transitions, predicted_premise_transitions],
                 on_unused_input='warn',
                 allow_input_downcast=True)
         else:
             forward_fn = theano.function(
-                [X, transitions, training_mode, ground_truth_transitions_visible, ss_prob],
-                [predicted_transitions],
+                [X, transitions, y, num_transitions, training_mode, ground_truth_transitions_visible, ss_prob],
+                [acc, action_acc, logits, predicted_transitions],
                 on_unused_input='warn',
                 allow_input_downcast=True)
+
         # generate the inverse vocabulary lookup table
         ind_to_word = {v : k for k, v in vocabulary.iteritems()}
+
         # do a forward pass and write log the output
         logger.Log("Writing predicted parses.")
-        for eval_set, parse_out_path in zip(eval_iterators, parse_output_paths):
-            with open(parse_out_path, "w") as parse_out:
+        for eval_set, eval_out_path in zip(eval_iterators, eval_output_paths):
+            acc_accum = 0.0
+            action_acc_accum = 0.0
+            eval_batches = 0.0
+
+            with open(eval_out_path, "w") as eval_out:
                 if data_manager.SENTENCE_PAIR_DATA:
                     for (eval_X_batch, eval_transitions_batch, eval_y_batch, 
                             eval_num_transitions_batch) in eval_set[1]:
-                        logits_pred_hyp, logits_pred_prem = forward_fn(
-                            eval_X_batch, eval_transitions_batch,
+                        acc_value, action_acc_value, sem_logit_values, logits_pred_hyp, logits_pred_prem = forward_fn(
+                            eval_X_batch, eval_transitions_batch, eval_y_batch, eval_num_transitions_batch,
                             0.0,  # Eval mode: Don't apply dropout. 
                             int(FLAGS.allow_gt_transitions_in_eval),  # Allow GT transitions to be used according to flag. 
                             float(FLAGS.allow_gt_transitions_in_eval)) # adjust visibility of GT
+
+                        acc_accum += acc_value
+                        action_acc_accum += action_acc_value
+                        eval_batches += 1.0
+
                         # write each predicted transition to file
-                        for orig_transitions, pred_logit_hyp, pred_logit_prem, tokens \
+                        for orig_transitions, pred_logit_hyp, pred_logit_prem, tokens, true_class, example_sem_logits \
                                 in zip(eval_transitions_batch, logits_pred_hyp, 
-                                        logits_pred_prem, eval_X_batch):
+                                       logits_pred_prem, eval_X_batch, eval_y_batch, sem_logit_values):
                             orig_hyp_transitions, orig_prem_transitions = orig_transitions.T
                             hyp_tokens, prem_tokens = tokens.T
                             hyp_words = [ind_to_word[t] for t in hyp_tokens]
                             prem_words = [ind_to_word[t] for t in prem_tokens]
-                            parse_out.write(util.TransitionsToParse(orig_hyp_transitions, hyp_words) + '\n')
-                            parse_out.write(util.TransitionsToParse(pred_logit_hyp.argmax(axis=1), hyp_words) + '\n')
-                            parse_out.write(util.TransitionsToParse(orig_prem_transitions, prem_words) + '\n')
-                            parse_out.write(util.TransitionsToParse(pred_logit_prem.argmax(axis=1), prem_words) + '\n\n')
+                            eval_out.write(util.TransitionsToParse(orig_hyp_transitions, hyp_words) + '\n')
+                            eval_out.write(util.TransitionsToParse(pred_logit_hyp.argmax(axis=1), hyp_words) + '\n')
+                            eval_out.write(util.TransitionsToParse(orig_prem_transitions, prem_words) + '\n')
+                            eval_out.write(util.TransitionsToParse(pred_logit_prem.argmax(axis=1), prem_words) + '\n')
+
+                            predicted_class = np.argmax(example_sem_logits)    
+                            exp_logit_values = np.exp(example_sem_logits)
+                            class_probs = exp_logit_values / np.sum(exp_logit_values)
+
+                            eval_out.write(str(true_class == predicted_class) + "\t" + str(true_class)
+                                            + "\t" + str(predicted_class) + "\t" + str(class_probs) + '\n\n')
                 else:
                     for (eval_X_batch, eval_transitions_batch, eval_y_batch, 
-                            eval_num_transitions_batch) in eval_set[1]:
-                        logits_pred = forward_fn(
-                            eval_X_batch, eval_transitions_batch,
+                         eval_num_transitions_batch) in eval_set[1]:
+                        acc_value, action_acc_value, sem_logit_values, logits_pred = forward_fn(
+                            eval_X_batch, eval_transitions_batch, eval_y_batch, eval_num_transitions_batch,
                             0.0,  # Eval mode: Don't apply dropout. 
                             int(FLAGS.allow_gt_transitions_in_eval),  # Allow GT transitions to be used according to flag. 
-                            float(FLAGS.allow_gt_transitions_in_eval))[0] # adjust visibility of GT
-                        # write each predicted transition to file
-                        for orig_transitions, pred_logit, tokens in zip(eval_transitions_batch, 
-                                                                            logits_pred, eval_X_batch):
-                            words = [ind_to_word[t] for t in tokens]
-                            parse_out.write(util.TransitionsToParse(orig_transitions, words) + '\n')
-                            parse_out.write(util.TransitionsToParse(pred_logit.argmax(axis=1), words) + '\n\n')
-            logger.Log("Written predicted parses in %s" % (parse_out_path))
-        return
+                            float(FLAGS.allow_gt_transitions_in_eval)) # adjust visibility of GT
 
-    if FLAGS.mode == "train":
+                        acc_accum += acc_value
+                        action_acc_accum += action_acc_value
+                        eval_batches += 1.0
+
+                        # write each predicted transition to file
+                        for orig_transitions, pred_logit, tokens, true_class, example_sem_logits \
+                            in zip(eval_transitions_batch, logits_pred, eval_X_batch, eval_y_batch, sem_logit_values):
+                            words = [ind_to_word[t] for t in tokens]
+                            eval_out.write(util.TransitionsToParse(orig_transitions, words) + '\n')
+                            eval_out.write(util.TransitionsToParse(pred_logit.argmax(axis=1), words) + '\n')
+
+                            predicted_class = np.argmax(example_sem_logits)    
+                            exp_logit_values = np.exp(example_sem_logits)
+                            class_probs = exp_logit_values / np.sum(exp_logit_values)
+
+                            eval_out.write(str(true_class == predicted_class) + "\t" + str(true_class)
+                                            + "\t" + str(predicted_class) + "\t" + str(class_probs) + '\n\n')
+
+            logger.Log("Written predicted parses in %s" % (eval_out_path))
+            logger.Log("Step: %i\tEval acc: %f\t %f\t%s" %
+                       (step, acc_accum / eval_batches, action_acc_accum / eval_batches, eval_set[0]))
+
+    else:
+         # Train
+
         new_values = util.RMSprop(total_cost, trained_params, lr)
         # Training open-vocabulary embeddings is a questionable idea right now. Disabled:
         # new_values.append(
@@ -473,7 +534,6 @@ def train(only_forward=False):
         # Create training and eval functions. 
         # Unused variable warnings are supressed so that num_transitions can be passed in when training Model 0,
         # which ignores it. This yields more readable code that is very slightly slower.
-        # Added training step number 
         logger.Log("Building update function.")
         update_fn = theano.function(
             [X, transitions, y, num_transitions, lr, training_mode, ground_truth_transitions_visible, ss_prob],
@@ -506,52 +566,7 @@ def train(only_forward=False):
 
             if step % FLAGS.ckpt_interval_steps == 0 and step > 0:
                 vs.save_checkpoint(checkpoint_path, trained_param_keys, step)
-    elif FLAGS.mode == "expanded_eval":
-        logger.Log("Building eval function.")
-        eval_fn = theano.function([X, transitions, y, num_transitions, training_mode, ground_truth_transitions_visible, ss_prob],
-                                  [acc, action_acc, logits, predicted_transitions],
-                                  on_unused_input='warn',
-                                  allow_input_downcast=True)
-
-        reverse_vocab = {v: k for k, v in vocabulary.items()}
-
-        for eval_set in eval_iterators:
-            acc_accum = 0.0
-            action_acc_accum = 0.0
-            eval_batches = 0.0
-            for (eval_X_batch, eval_transitions_batch, eval_y_batch, eval_num_transitions_batch) in eval_set[1]:
-                acc_value, action_acc_value, logit_values, pred_trans_values = eval_fn(
-                    eval_X_batch, eval_transitions_batch,
-                    eval_y_batch, eval_num_transitions_batch, 0.0,  # Eval mode: Don't apply dropout. 
-                    int(FLAGS.allow_gt_transitions_in_eval),  # Allow GT transitions to be used according to flag. 
-                    float(FLAGS.allow_gt_transitions_in_eval))  # If flag not set, used scheduled sampling
-                                                                # p(ground truth) = 0.0, 
-                                                                # else SS p(ground truth) = 1.0
-                acc_accum += acc_value
-                action_acc_accum += action_acc_value
-                eval_batches += 1.0
-                for example_index in range(len(eval_y_batch)):
-                    # TODO: Set up a multiline option for Logger
-                    predicted_transitions = np.argmax(pred_trans_values[example_index], axis=1)
-                    true_transitions = eval_transitions_batch[example_index]
-                    words = [reverse_vocab[index] for index in eval_X_batch[example_index]]
-                    predicted_class = np.argmax(logit_values[example_index])
-                    true_class = eval_y_batch[example_index]
-                    exp_logit_values = np.exp(logit_values[example_index])
-                    class_probs = exp_logit_values / np.sum(exp_logit_values)
-
-                    print true_class,
-                    print "\t", predicted_class,
-                    print "\t", class_probs,
-                    print "\t", util.TransitionsToParse(true_transitions, words),
-                    print "\t", util.TransitionsToParse(predicted_transitions, words)
-    
-                    acc_accum += acc_value
-
-            logger.Log("Step: %i\tEval acc: %f\t %f\t%s" %
-                       (step, acc_accum / eval_batches, action_acc_accum / eval_batches, eval_set[0]))
-
-
+  
 
 if __name__ == '__main__':
     # Experiment naming.
@@ -573,9 +588,6 @@ if __name__ == '__main__':
                          "If set, load GloVe formatted embeddings from here.")
 
     # Model architecture settings.
-    gflags.DEFINE_enum("mode", "train",
-                       ["train", "expanded_eval"],
-                       "")
     gflags.DEFINE_enum("model_type", "Model0",
                        ["Model0", "Model1", "Model2", "Model2S"],
                        "")
@@ -616,17 +628,15 @@ if __name__ == '__main__':
     gflags.DEFINE_integer("ckpt_interval_steps", 10000, "")
 
     # Evaluation settings
-    gflags.DEFINE_boolean("write_predicted_parse", False, 
-        "If set, a checkpoint is loaded and a forward pass is done to get the predicted"
-        "transitions. The inferred parse is written to the supplied file(s). Requirements: "
-        "(i) must supply a checkpoint path (ii) the number of files provided is the same as "
-        "the number of eval sets.")
-    gflags.DEFINE_string("parse_output_path", "", 
+    gflags.DEFINE_boolean("expanded_eval_only_mode", False, 
+        "If set, a checkpoint is loaded and a forward pass is done to get the predicted "
+        "transitions. The inferred parses are written to the supplied file(s) along with example-"
+        "by-example accuracy information. Requirements: Must specify checkpoint path.")
+    gflags.DEFINE_string("eval_output_paths", None, 
         "Used when write_predicted_parse is set. The number of supplied paths should be same"
         "as the number of eval sets.")
 
     # Parse command line flags.
     FLAGS(sys.argv)
 
-    # Run.
-    train(only_forward=FLAGS.write_predicted_parse)
+    run(only_forward=FLAGS.expanded_eval_only_mode)

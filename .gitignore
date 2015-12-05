@@ -12,3 +12,4 @@
 *.zip
 *.ckpt
 ./snli-data
+*.parse_log
