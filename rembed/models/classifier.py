@@ -436,64 +436,94 @@ def train(only_forward=False):
             logger.Log("Written predicted parses in %s" % (parse_out_path))
         return
 
-    new_values = util.RMSprop(total_cost, trained_params, lr)
-    # Training open-vocabulary embeddings is a questionable idea right now. Disabled:
-    # new_values.append(
-    #     util.embedding_SGD(total_cost, embedding_params, embedding_lr))
+    if FLAGS.mode == "train":
+        new_values = util.RMSprop(total_cost, trained_params, lr)
+        # Training open-vocabulary embeddings is a questionable idea right now. Disabled:
+        # new_values.append(
+        #     util.embedding_SGD(total_cost, embedding_params, embedding_lr))
 
-    # Create training and eval functions. 
-    # Unused variable warnings are supressed so that num_transitions can be passed in when training Model 0,
-    # which ignores it. This yields more readable code that is very slightly slower.
-    # Added training step number 
-    logger.Log("Building update function.")
-    update_fn = theano.function(
-        [X, transitions, y, num_transitions, lr, training_mode, ground_truth_transitions_visible, ss_prob],
-        [total_cost, xent_cost, action_cost, action_acc, l2_cost, acc],
-        updates=new_values,
-        on_unused_input='warn',
-        allow_input_downcast=True)
-    logger.Log("Building eval function.")
-    eval_fn = theano.function([X, transitions, y, num_transitions, training_mode, ground_truth_transitions_visible, ss_prob], [acc, action_acc],
-        on_unused_input='warn',
-        allow_input_downcast=True)
-    logger.Log("Training.")
+        # Create training and eval functions. 
+        # Unused variable warnings are supressed so that num_transitions can be passed in when training Model 0,
+        # which ignores it. This yields more readable code that is very slightly slower.
+        # Added training step number 
+        logger.Log("Building update function.")
+        update_fn = theano.function(
+            [X, transitions, y, num_transitions, lr, training_mode, ground_truth_transitions_visible, ss_prob],
+            [total_cost, xent_cost, action_cost, action_acc, l2_cost, acc],
+            updates=new_values,
+            on_unused_input='warn',
+            allow_input_downcast=True)
+        logger.Log("Building eval function.")
+        eval_fn = theano.function([X, transitions, y, num_transitions, training_mode, ground_truth_transitions_visible, ss_prob], [acc, action_acc],
+            on_unused_input='warn',
+            allow_input_downcast=True)
+        logger.Log("Training.")
 
-    # Main training loop.
-    for step in range(step, FLAGS.training_steps):
-        X_batch, transitions_batch, y_batch, num_transitions_batch = training_data_iter.next()
-        ret = update_fn(X_batch, transitions_batch, y_batch, num_transitions_batch,
-                        FLAGS.learning_rate, 1.0, 1.0, np.exp(step*np.log(FLAGS.scheduled_sampling_exponent_base)))
-        total_cost_val, xent_cost_val, action_cost_val, action_acc_val, l2_cost_val, acc_val = ret
+        # Main training loop.
+        for step in range(step, FLAGS.training_steps):
+            X_batch, transitions_batch, y_batch, num_transitions_batch = training_data_iter.next()
+            ret = update_fn(X_batch, transitions_batch, y_batch, num_transitions_batch,
+                            FLAGS.learning_rate, 1.0, 1.0, np.exp(step*np.log(FLAGS.scheduled_sampling_exponent_base)))
+            total_cost_val, xent_cost_val, action_cost_val, action_acc_val, l2_cost_val, acc_val = ret
 
-        if step % FLAGS.statistics_interval_steps == 0:
-            logger.Log(
-                "Step: %i\tAcc: %f\t%f\tCost: %5f %5f %5f %5f"
-                % (step, acc_val, action_acc_val, total_cost_val, xent_cost_val, action_cost_val,
-                   l2_cost_val))
+            if step % FLAGS.statistics_interval_steps == 0:
+                logger.Log(
+                    "Step: %i\tAcc: %f\t%f\tCost: %5f %5f %5f %5f"
+                    % (step, acc_val, action_acc_val, total_cost_val, xent_cost_val, action_cost_val,
+                       l2_cost_val))
 
-        if step % FLAGS.eval_interval_steps == 0:
+            if step % FLAGS.eval_interval_steps == 0:
+                for eval_set in eval_iterators:
+                    evaluate(eval_fn, eval_set, logger, step)
 
-            for eval_set in eval_iterators:
-                # Evaluate
-                acc_accum = 0.0
-                action_acc_accum = 0.0
-                eval_batches = 0.0
-                for (eval_X_batch, eval_transitions_batch, eval_y_batch, eval_num_transitions_batch) in eval_set[1]:
-                    acc_value, action_acc_value = eval_fn(
-                        eval_X_batch, eval_transitions_batch,
-                        eval_y_batch, eval_num_transitions_batch, 0.0,  # Eval mode: Don't apply dropout. 
-                        int(FLAGS.allow_gt_transitions_in_eval),  # Allow GT transitions to be used according to flag. 
-                        float(FLAGS.allow_gt_transitions_in_eval))  # If flag not set, used scheduled sampling
-                                                                    # p(ground truth) = 0.0, 
-                                                                    # else SS p(ground truth) = 1.0
+            if step % FLAGS.ckpt_interval_steps == 0 and step > 0:
+                vs.save_checkpoint(checkpoint_path, trained_param_keys, step)
+    elif FLAGS.mode == "expanded_eval":
+        logger.Log("Building eval function.")
+        eval_fn = theano.function([X, transitions, y, num_transitions, training_mode, ground_truth_transitions_visible, ss_prob],
+                                  [acc, action_acc, logits, predicted_transitions],
+                                  on_unused_input='warn',
+                                  allow_input_downcast=True)
+
+        reverse_vocab = {v: k for k, v in vocabulary.items()}
+
+        for eval_set in eval_iterators:
+            acc_accum = 0.0
+            action_acc_accum = 0.0
+            eval_batches = 0.0
+            for (eval_X_batch, eval_transitions_batch, eval_y_batch, eval_num_transitions_batch) in eval_set[1]:
+                acc_value, action_acc_value, logit_values, pred_trans_values = eval_fn(
+                    eval_X_batch, eval_transitions_batch,
+                    eval_y_batch, eval_num_transitions_batch, 0.0,  # Eval mode: Don't apply dropout. 
+                    int(FLAGS.allow_gt_transitions_in_eval),  # Allow GT transitions to be used according to flag. 
+                    float(FLAGS.allow_gt_transitions_in_eval))  # If flag not set, used scheduled sampling
+                                                                # p(ground truth) = 0.0, 
+                                                                # else SS p(ground truth) = 1.0
+                acc_accum += acc_value
+                action_acc_accum += action_acc_value
+                eval_batches += 1.0
+                for example_index in range(len(eval_y_batch)):
+                    # TODO: Set up a multiline option for Logger
+                    predicted_transitions = np.argmax(pred_trans_values[example_index], axis=1)
+                    true_transitions = eval_transitions_batch[example_index]
+                    words = [reverse_vocab[index] for index in eval_X_batch[example_index]]
+                    predicted_class = np.argmax(logit_values[example_index])
+                    true_class = eval_y_batch[example_index]
+                    exp_logit_values = np.exp(logit_values[example_index])
+                    class_probs = exp_logit_values / np.sum(exp_logit_values)
+
+                    print true_class,
+                    print "\t", predicted_class,
+                    print "\t", class_probs,
+                    print "\t", util.TransitionsToParse(true_transitions, words),
+                    print "\t", util.TransitionsToParse(predicted_transitions, words)
+    
                     acc_accum += acc_value
-                    action_acc_accum += action_acc_value
-                    eval_batches += 1.0
-                logger.Log("Step: %i\tEval acc: %f\t %f\t%s" %
-                          (step, acc_accum / eval_batches, action_acc_accum / eval_batches, eval_set[0]))
 
-        if step % FLAGS.ckpt_interval_steps == 0 and step > 0:
-            vs.save_checkpoint(checkpoint_path, trained_param_keys, step)
+            logger.Log("Step: %i\tEval acc: %f\t %f\t%s" %
+                       (step, acc_accum / eval_batches, action_acc_accum / eval_batches, eval_set[0]))
+
+
 
 if __name__ == '__main__':
     # Experiment naming.
@@ -515,6 +545,9 @@ if __name__ == '__main__':
                          "If set, load GloVe formatted embeddings from here.")
 
     # Model architecture settings.
+    gflags.DEFINE_enum("mode", "train",
+                       ["train", "expanded_eval"],
+                       "")
     gflags.DEFINE_enum("model_type", "Model0",
                        ["Model0", "Model1", "Model2", "Model2S"],
                        "")
