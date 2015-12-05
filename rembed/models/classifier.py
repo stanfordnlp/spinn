@@ -409,30 +409,58 @@ def train(only_forward=False):
         logger.Log("Checkpointed model was trained for %d steps." % (step,)) 
         # generate function for forward pass
         logger.Log("Building forward pass.")
-        forward_fn = theano.function(
-            [X, transitions, training_mode, ground_truth_transitions_visible, ss_prob],
-            [predicted_transitions],
-            on_unused_input='warn',
-            allow_input_downcast=True)
+        if data_manager.SENTENCE_PAIR_DATA:
+            forward_fn = theano.function(
+                [X, transitions, training_mode, ground_truth_transitions_visible, ss_prob],
+                [predicted_hypothesis_transitions, predicted_premise_transitions],
+                on_unused_input='warn',
+                allow_input_downcast=True)
+        else:
+            forward_fn = theano.function(
+                [X, transitions, training_mode, ground_truth_transitions_visible, ss_prob],
+                [predicted_transitions],
+                on_unused_input='warn',
+                allow_input_downcast=True)
         # generate the inverse vocabulary lookup table
         ind_to_word = {v : k for k, v in vocabulary.iteritems()}
         # do a forward pass and write log the output
         logger.Log("Writing predicted parses.")
         for eval_set, parse_out_path in zip(eval_iterators, parse_output_paths):
             with open(parse_out_path, "w") as parse_out:
-                for (eval_X_batch, eval_transitions_batch, eval_y_batch, eval_num_transitions_batch) in eval_set[1]:
-                    logits_pred = forward_fn(
-                        eval_X_batch, eval_transitions_batch,
-                        0.0,  # Eval mode: Don't apply dropout. 
-                        int(FLAGS.allow_gt_transitions_in_eval),  # Allow GT transitions to be used according to flag. 
-                        float(FLAGS.allow_gt_transitions_in_eval))[0] # If flag not set, used scheduled sampling
-                                                                      # p(ground truth) = 0.0, 
-                                                                      # else SS p(ground truth) = 1.0
-                    # write each predicted transition to file
-                    for orig_transitions, pred_logit, tokens in zip(eval_transitions_batch, logits_pred, eval_X_batch):
-                        words = [ind_to_word[t] for t in tokens]
-                        parse_out.write(util.TransitionsToParse(orig_transitions, words) + '\n')
-                        parse_out.write(util.TransitionsToParse(pred_logit.argmax(axis=1), words) + '\n\n')
+                if data_manager.SENTENCE_PAIR_DATA:
+                    for (eval_X_batch, eval_transitions_batch, eval_y_batch, 
+                            eval_num_transitions_batch) in eval_set[1]:
+                        logits_pred_hyp, logits_pred_prem = forward_fn(
+                            eval_X_batch, eval_transitions_batch,
+                            0.0,  # Eval mode: Don't apply dropout. 
+                            int(FLAGS.allow_gt_transitions_in_eval),  # Allow GT transitions to be used according to flag. 
+                            float(FLAGS.allow_gt_transitions_in_eval)) # adjust visibility of GT
+                        # write each predicted transition to file
+                        for orig_transitions, pred_logit_hyp, pred_logit_prem, tokens \
+                                in zip(eval_transitions_batch, logits_pred_hyp, 
+                                        logits_pred_prem, eval_X_batch):
+                            orig_hyp_transitions, orig_prem_transitions = orig_transitions.T
+                            hyp_tokens, prem_tokens = tokens.T
+                            hyp_words = [ind_to_word[t] for t in hyp_tokens]
+                            prem_words = [ind_to_word[t] for t in prem_tokens]
+                            parse_out.write(util.TransitionsToParse(orig_hyp_transitions, hyp_words) + '\n')
+                            parse_out.write(util.TransitionsToParse(pred_logit_hyp.argmax(axis=1), hyp_words) + '\n')
+                            parse_out.write(util.TransitionsToParse(orig_prem_transitions, prem_words) + '\n')
+                            parse_out.write(util.TransitionsToParse(pred_logit_prem.argmax(axis=1), prem_words) + '\n\n')
+                else:
+                    for (eval_X_batch, eval_transitions_batch, eval_y_batch, 
+                            eval_num_transitions_batch) in eval_set[1]:
+                        logits_pred = forward_fn(
+                            eval_X_batch, eval_transitions_batch,
+                            0.0,  # Eval mode: Don't apply dropout. 
+                            int(FLAGS.allow_gt_transitions_in_eval),  # Allow GT transitions to be used according to flag. 
+                            float(FLAGS.allow_gt_transitions_in_eval))[0] # adjust visibility of GT
+                        # write each predicted transition to file
+                        for orig_transitions, pred_logit, tokens in zip(eval_transitions_batch, 
+                                                                            logits_pred, eval_X_batch):
+                            words = [ind_to_word[t] for t in tokens]
+                            parse_out.write(util.TransitionsToParse(orig_transitions, words) + '\n')
+                            parse_out.write(util.TransitionsToParse(pred_logit.argmax(axis=1), words) + '\n\n')
             logger.Log("Written predicted parses in %s" % (parse_out_path))
         return
 
