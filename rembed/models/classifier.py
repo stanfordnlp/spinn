@@ -275,6 +275,7 @@ def evaluate(eval_fn, eval_set, logger, step):
 
 
 def evaluate_expanded(eval_fn, eval_set, eval_out_path, logger, step, sentence_pair_data, ind_to_word):
+    # TODO: Prune out redundant code, make usable on Model0 as well.
     acc_accum = 0.0
     action_acc_accum = 0.0
     eval_batches = 0.0
@@ -493,8 +494,6 @@ def run(only_forward=False):
 
     # Do an evaluation-only run.
     if only_forward:
-        # TODO: Prune out redundant code, make usable on Model0 as well.
-
         if FLAGS.eval_output_paths:
             eval_output_paths = FLAGS.eval_output_path.strip().split(":")
             assert len(eval_output_paths) == len(eval_iterators), "Invalid no. of output paths."
@@ -502,10 +501,10 @@ def run(only_forward=False):
             eval_output_paths = [FLAGS.experiment_name + "-" + os.path.split(eval_set[0])[1] + ".parse_log" 
                                   for eval_set in eval_iterators]
 
-        # Load model from checkpoint
+        # Load model from checkpoint.
         logger.Log("Checkpointed model was trained for %d steps." % (step,))
 
-        # Generate function for forward pass
+        # Generate function for forward pass.
         logger.Log("Building forward pass.")
         if data_manager.SENTENCE_PAIR_DATA:
             eval_fn = theano.function(
@@ -520,10 +519,10 @@ def run(only_forward=False):
                 on_unused_input='warn',
                 allow_input_downcast=True)
 
-        # generate the inverse vocabulary lookup table
+        # Generate the inverse vocabulary lookup table.
         ind_to_word = {v : k for k, v in vocabulary.iteritems()}
 
-        # do a forward pass and write log the output
+        # Do a forward pass and write the output to disk.
         logger.Log("Writing predicted parses.")
         for eval_set, eval_out_path in zip(eval_iterators, eval_output_paths):
             evaluate_expanded(eval_fn, eval_set, eval_out_path, logger, step, 
