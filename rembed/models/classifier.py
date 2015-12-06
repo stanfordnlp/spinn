@@ -276,12 +276,18 @@ def evaluate(eval_fn, eval_set, logger, step):
 
 
 def evaluate_expanded(eval_fn, eval_set, eval_out_path, logger, step, sentence_pair_data, ind_to_word):
+    """
+    Write the  gold parses and predicted parses in the files <eval_out_path>.gld and <eval_out_path>.tst
+    respectively. These files can be given as inputs to Evalb to evaluate parsing performance -
+
+        evalb -p evalb_rembed.prm <eval_out_path>.gld  <eval_out_path>.tst
+    """
     # TODO: Prune out redundant code, make usable on Model0 as well.
     acc_accum = 0.0
     action_acc_accum = 0.0
     eval_batches = 0.0
 
-    with open(eval_out_path, "w") as eval_out:
+    with open("%s.gld" % (eval_out_path,), "w") as eval_gold, open("%s.tst" % (eval_out_path,), "w") as eval_out:
         if sentence_pair_data:
             for (eval_X_batch, eval_transitions_batch, eval_y_batch, 
                     eval_num_transitions_batch) in eval_set[1]:
@@ -303,17 +309,17 @@ def evaluate_expanded(eval_fn, eval_set, eval_out_path, logger, step, sentence_p
                     hyp_tokens, prem_tokens = tokens.T
                     hyp_words = [ind_to_word[t] for t in hyp_tokens]
                     prem_words = [ind_to_word[t] for t in prem_tokens]
-                    eval_out.write(util.TransitionsToParse(orig_hyp_transitions, hyp_words) + '\n')
+                    eval_gold.write(util.TransitionsToParse(orig_hyp_transitions, hyp_words) + '\n')
                     eval_out.write(util.TransitionsToParse(pred_logit_hyp.argmax(axis=1), hyp_words) + '\n')
-                    eval_out.write(util.TransitionsToParse(orig_prem_transitions, prem_words) + '\n')
+                    eval_gold.write(util.TransitionsToParse(orig_prem_transitions, prem_words) + '\n')
                     eval_out.write(util.TransitionsToParse(pred_logit_prem.argmax(axis=1), prem_words) + '\n')
 
                     predicted_class = np.argmax(example_sem_logits)    
                     exp_logit_values = np.exp(example_sem_logits)
                     class_probs = exp_logit_values / np.sum(exp_logit_values)
 
-                    eval_out.write(str(true_class == predicted_class) + "\t" + str(true_class)
-                                    + "\t" + str(predicted_class) + "\t" + str(class_probs) + '\n\n')
+                    # eval_out.write(str(true_class == predicted_class) + "\t" + str(true_class)
+                    #                 + "\t" + str(predicted_class) + "\t" + str(class_probs) + '\n\n')
         else:
             for (eval_X_batch, eval_transitions_batch, eval_y_batch, 
                  eval_num_transitions_batch) in eval_set[1]:
@@ -331,15 +337,15 @@ def evaluate_expanded(eval_fn, eval_set, eval_out_path, logger, step, sentence_p
                 for orig_transitions, pred_logit, tokens, true_class, example_sem_logits \
                     in zip(eval_transitions_batch, logits_pred, eval_X_batch, eval_y_batch, sem_logit_values):
                     words = [ind_to_word[t] for t in tokens]
-                    eval_out.write(util.TransitionsToParse(orig_transitions, words) + '\n')
+                    eval_gold.write(util.TransitionsToParse(orig_transitions, words) + '\n')
                     eval_out.write(util.TransitionsToParse(pred_logit.argmax(axis=1), words) + '\n')
 
                     predicted_class = np.argmax(example_sem_logits)    
                     exp_logit_values = np.exp(example_sem_logits)
                     class_probs = exp_logit_values / np.sum(exp_logit_values)
 
-                    eval_out.write(str(true_class == predicted_class) + "\t" + str(true_class)
-                                    + "\t" + str(predicted_class) + "\t" + str(class_probs) + '\n\n')
+                    # eval_out.write(str(true_class == predicted_class) + "\t" + str(true_class)
+                    #                 + "\t" + str(predicted_class) + "\t" + str(class_probs) + '\n\n')
 
     logger.Log("Written predicted parses in %s" % (eval_out_path))
     logger.Log("Step: %i\tEval acc: %f\t %f\t%s" %
@@ -496,10 +502,10 @@ def run(only_forward=False):
     # Do an evaluation-only run.
     if only_forward:
         if FLAGS.eval_output_paths:
-            eval_output_paths = FLAGS.eval_output_path.strip().split(":")
+            eval_output_paths = FLAGS.eval_output_paths.strip().split(":")
             assert len(eval_output_paths) == len(eval_iterators), "Invalid no. of output paths."
         else:
-            eval_output_paths = [FLAGS.experiment_name + "-" + os.path.split(eval_set[0])[1] + ".parse_log" 
+            eval_output_paths = [FLAGS.experiment_name + "-" + os.path.split(eval_set[0])[1] + "-parse" 
                                   for eval_set in eval_iterators]
 
         # Load model from checkpoint.

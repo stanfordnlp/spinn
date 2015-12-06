@@ -532,10 +532,10 @@ def TransitionsToParse(transitions, words):
     buffer_ptr = 0
     for transition in transitions:
         if transition == 0:
-            stack.append(words[buffer_ptr])
+            stack.append("(P " + words[buffer_ptr] +")")
             buffer_ptr += 1
         elif transition == 1:
             r = stack.pop()
             l = stack.pop()
-            stack.append("( " + l + " " + r + " )")
+            stack.append("(M " + l + " " + r + ")")
     return stack.pop()
