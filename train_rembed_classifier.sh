@@ -7,9 +7,10 @@
 
 
 ### The below are not comments, but actual PBS flags:
-#PBS -l walltime=99:00:00	### Die after four-ish days
-#PBS -l mem=3000MB   ### Request 3G RAM.
-#PBS -q jag   ### Run on the jagupard* queue
+# Correction: Now they're comments. Debugging.
+## #PBS -l walltime=99:00:00	### Die after four-ish days
+## #PBS -l mem=3000MB   ### Request 3G RAM.
+## #PBS -q jag   ### Run on the jagupard* queue
 
 # Change to the submission directory.
 cd $PBS_O_WORKDIR
