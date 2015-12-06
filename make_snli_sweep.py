@@ -43,7 +43,7 @@ SWEEP_PARAMETERS = {
     "double_identity_init_range": (EXP, 0.0005, 0.005),
     "semantic_classifier_keep_rate": (LIN, 0.75, 1.0),
     "embedding_keep_rate": (LIN, 0.75, 1.0),
-    "scheduled_sampling_exponent_base": (SS_BASE, 2e-10, 2e-2)
+    "scheduled_sampling_exponent_base": (SS_BASE, 2e-6, 2e-4)
 }
 
 sweep_name = "sweep_" + \
