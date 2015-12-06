@@ -272,6 +272,7 @@ def evaluate(eval_fn, eval_set, logger, step):
         eval_batches += 1.0
     logger.Log("Step: %i\tEval acc: %f\t %f\t%s" %
               (step, acc_accum / eval_batches, action_acc_accum / eval_batches, eval_set[0]))
+    return acc_accum / eval_batches
 
 
 def evaluate_expanded(eval_fn, eval_set, eval_out_path, logger, step, sentence_pair_data, ind_to_word):
@@ -551,6 +552,8 @@ def run(only_forward=False):
             allow_input_downcast=True)
         logger.Log("Training.")
 
+        best_dev_error = 1.0
+
         # Main training loop.
         for step in range(step, FLAGS.training_steps):
             X_batch, transitions_batch, y_batch, num_transitions_batch = training_data_iter.next()
@@ -565,8 +568,11 @@ def run(only_forward=False):
                        l2_cost_val))
 
             if step % FLAGS.eval_interval_steps == 0:
-                for eval_set in eval_iterators:
-                    evaluate(eval_fn, eval_set, logger, step)
+                for index, eval_set in enumerate(eval_iterators):
+                    acc = evaluate(eval_fn, eval_set, logger, step)
+                    if FLAGS.ckpt_on_best_dev_error and index == 0 and (1 - acc) < 0.95 * best_dev_error:
+                        vs.save_checkpoint(checkpoint_path + "_best", trained_param_keys, step)
+                        best_dev_error = 1 - acc
 
             if step % FLAGS.ckpt_interval_steps == 0 and step > 0:
                 vs.save_checkpoint(checkpoint_path, trained_param_keys, step)
@@ -630,6 +636,9 @@ if __name__ == '__main__':
     gflags.DEFINE_integer("eval_interval_steps", 50, "")
 
     gflags.DEFINE_integer("ckpt_interval_steps", 10000, "")
+    gflags.DEFINE_boolean("ckpt_on_best_dev_error", True, "If error on the first eval set (the dev set) is "
+                          "at most 0.95 of error at the previous checkpoint, save a special 'best' checkpoint.")
+
 
     # Evaluation settings
     gflags.DEFINE_boolean("expanded_eval_only_mode", False, 

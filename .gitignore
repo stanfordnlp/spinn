@@ -13,3 +13,4 @@
 *.ckpt
 ./snli-data
 *.parse_log
+*.ckpt_best
