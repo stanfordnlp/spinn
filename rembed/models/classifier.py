@@ -275,7 +275,7 @@ def evaluate(eval_fn, eval_set, logger, step):
     return acc_accum / eval_batches
 
 
-def evaluate_expanded(eval_fn, eval_set, eval_out_path, logger, step, sentence_pair_data, ind_to_word):
+def evaluate_expanded(eval_fn, eval_set, eval_path, logger, step, sentence_pair_data, ind_to_word):
     """
     Write the  gold parses and predicted parses in the files <eval_out_path>.gld and <eval_out_path>.tst
     respectively. These files can be given as inputs to Evalb to evaluate parsing performance -
@@ -286,8 +286,12 @@ def evaluate_expanded(eval_fn, eval_set, eval_out_path, logger, step, sentence_p
     acc_accum = 0.0
     action_acc_accum = 0.0
     eval_batches = 0.0
-
-    with open("%s.gld" % (eval_out_path,), "w") as eval_gold, open("%s.tst" % (eval_out_path,), "w") as eval_out:
+    eval_gold_path = eval_path + ".gld"
+    eval_out_path = eval_path + ".tst"
+    eval_lbl_path = eval_path + ".lbl"
+    with open(eval_gold_path, "w") as eval_gold, open(eval_out_path, "w") as eval_out:
+        if FLAGS.write_predicted_label:
+            label_out = open(eval_lbl_path, "w")
         if sentence_pair_data:
             for (eval_X_batch, eval_transitions_batch, eval_y_batch, 
                     eval_num_transitions_batch) in eval_set[1]:
@@ -309,17 +313,18 @@ def evaluate_expanded(eval_fn, eval_set, eval_out_path, logger, step, sentence_p
                     hyp_tokens, prem_tokens = tokens.T
                     hyp_words = [ind_to_word[t] for t in hyp_tokens]
                     prem_words = [ind_to_word[t] for t in prem_tokens]
-                    eval_gold.write(util.TransitionsToParse(orig_hyp_transitions, hyp_words) + '\n')
-                    eval_out.write(util.TransitionsToParse(pred_logit_hyp.argmax(axis=1), hyp_words) + '\n')
-                    eval_gold.write(util.TransitionsToParse(orig_prem_transitions, prem_words) + '\n')
-                    eval_out.write(util.TransitionsToParse(pred_logit_prem.argmax(axis=1), prem_words) + '\n')
+                    eval_gold.write(util.TransitionsToParse(orig_hyp_transitions, hyp_words) + "\n")
+                    eval_out.write(util.TransitionsToParse(pred_logit_hyp.argmax(axis=1), hyp_words) + "\n")
+                    eval_gold.write(util.TransitionsToParse(orig_prem_transitions, prem_words) + "\n")
+                    eval_out.write(util.TransitionsToParse(pred_logit_prem.argmax(axis=1), prem_words) + "\n")
 
                     predicted_class = np.argmax(example_sem_logits)    
                     exp_logit_values = np.exp(example_sem_logits)
                     class_probs = exp_logit_values / np.sum(exp_logit_values)
-
-                    # eval_out.write(str(true_class == predicted_class) + "\t" + str(true_class)
-                    #                 + "\t" + str(predicted_class) + "\t" + str(class_probs) + '\n\n')
+                    class_probs_repr = "\t".join(map(lambda p : "%.3f" % (p,), class_probs))
+                    if FLAGS.write_predicted_label:
+                        label_out.write(str(true_class == predicted_class) + "\t" + str(true_class)
+                                  + "\t" + str(predicted_class) + "\t" + class_probs_repr + "\n")
         else:
             for (eval_X_batch, eval_transitions_batch, eval_y_batch, 
                  eval_num_transitions_batch) in eval_set[1]:
@@ -337,17 +342,22 @@ def evaluate_expanded(eval_fn, eval_set, eval_out_path, logger, step, sentence_p
                 for orig_transitions, pred_logit, tokens, true_class, example_sem_logits \
                     in zip(eval_transitions_batch, logits_pred, eval_X_batch, eval_y_batch, sem_logit_values):
                     words = [ind_to_word[t] for t in tokens]
-                    eval_gold.write(util.TransitionsToParse(orig_transitions, words) + '\n')
-                    eval_out.write(util.TransitionsToParse(pred_logit.argmax(axis=1), words) + '\n')
+                    eval_gold.write(util.TransitionsToParse(orig_transitions, words) + "\n")
+                    eval_out.write(util.TransitionsToParse(pred_logit.argmax(axis=1), words) + "\n")
 
                     predicted_class = np.argmax(example_sem_logits)    
                     exp_logit_values = np.exp(example_sem_logits)
                     class_probs = exp_logit_values / np.sum(exp_logit_values)
+                    class_probs_repr = "\t".join(map(lambda p : "%.3f" % (p,), class_probs))
+                    if FLAGS.write_predicted_label:
+                        label_out.write(str(true_class == predicted_class) + "\t" + str(true_class)
+                                    + "\t" + str(predicted_class) + "\t" + class_probs_repr + "\n")
 
-                    # eval_out.write(str(true_class == predicted_class) + "\t" + str(true_class)
-                    #                 + "\t" + str(predicted_class) + "\t" + str(class_probs) + '\n\n')
-
+    logger.Log("Written gold parses in %s" % (eval_gold_path))
     logger.Log("Written predicted parses in %s" % (eval_out_path))
+    if FLAGS.write_predicted_label:
+        logger.Log("Written predicted labels in %s" % (eval_lbl_path))
+        label_out.close()
     logger.Log("Step: %i\tEval acc: %f\t %f\t%s" %
                (step, acc_accum / eval_batches, action_acc_accum / eval_batches, eval_set[0]))
 
@@ -530,8 +540,8 @@ def run(only_forward=False):
         ind_to_word = {v : k for k, v in vocabulary.iteritems()}
 
         # Do a forward pass and write the output to disk.
-        logger.Log("Writing predicted parses.")
         for eval_set, eval_out_path in zip(eval_iterators, eval_output_paths):
+            logger.Log("Writing eval output for %s." % (eval_set[0],))
             evaluate_expanded(eval_fn, eval_set, eval_out_path, logger, step, 
                               data_manager.SENTENCE_PAIR_DATA, ind_to_word)
     else:
@@ -652,8 +662,10 @@ if __name__ == '__main__':
         "transitions. The inferred parses are written to the supplied file(s) along with example-"
         "by-example accuracy information. Requirements: Must specify checkpoint path.")
     gflags.DEFINE_string("eval_output_paths", None, 
-        "Used when write_predicted_parse is set. The number of supplied paths should be same"
+        "Used when expanded_eval_only_mode is set. The number of supplied paths should be same"
         "as the number of eval sets.")
+    gflags.DEFINE_boolean("write_predicted_label", False,
+        "Write the predicted labels in a <eval_output_name>.lbl file.")
 
     # Parse command line flags.
     FLAGS(sys.argv)
