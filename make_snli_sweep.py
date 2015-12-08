@@ -39,8 +39,7 @@ FIXED_PARAMETERS = {
 SWEEP_PARAMETERS = {
     "learning_rate":      (EXP, 0.00005, 0.001),
     "l2_lambda":   		  (EXP, 5e-7, 1e-4),
-    "init_range":         (EXP, 0.001, 0.005),
-    "double_identity_init_range": (EXP, 0.0005, 0.005),
+    "init_range":         (EXP, 0.002, 0.008),
     "semantic_classifier_keep_rate": (LIN, 0.75, 1.0),
     "embedding_keep_rate": (LIN, 0.75, 1.0),
     "scheduled_sampling_exponent_base": (SS_BASE, 2e-6, 2e-4)
