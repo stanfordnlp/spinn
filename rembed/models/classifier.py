@@ -482,9 +482,9 @@ def run(only_forward=False):
         action_cost, action_acc = build_action_cost(predicted_transitions, transitions, num_transitions)
     elif data_manager.SENTENCE_PAIR_DATA and predicted_hypothesis_transitions is not None:
         p_action_cost, p_action_acc = build_action_cost(predicted_premise_transitions, transitions[:, :, 0], num_transitions[:, 0])
-        h_action_cost, h_action_acc = build_action_cost(predicted_premise_transitions, transitions[:, :, 1], num_transitions[:, 1])
+        h_action_cost, h_action_acc = build_action_cost(predicted_hypothesis_transitions, transitions[:, :, 1], num_transitions[:, 1])
         action_cost = p_action_cost + h_action_cost
-        action_acc = (p_action_acc + h_action_acc) / 2  # TODO(SB): Average over transitions, not words.
+        action_acc = (p_action_acc + h_action_acc) / 2.0  # TODO(SB): Average over transitions, not words.
     else:
         action_cost = T.constant(0.0)
         action_acc = T.constant(0.0)
