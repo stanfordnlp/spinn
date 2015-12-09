@@ -163,7 +163,7 @@ class HardStack(object):
         self.transitions = self.transitions or T.imatrix("transitions")
 
     def _step(self, transitions_t, ss_mask_gen_matrix_t, stack_t, buffer_cur_t, 
-            tracking_hidden_prev, stack_pushed, stack_merged, buffer, 
+            tracking_hidden, stack_pushed, stack_merged, buffer, 
             ground_truth_transitions_visible):
         batch_size, _ = self.X.shape
         # Extract top buffer values.
@@ -174,24 +174,21 @@ class HardStack(object):
             # We are predicting our own stack operations.
             predict_inp = T.concatenate(
                 [stack_t[:, 0], stack_t[:, 1], buffer_top_t], axis=1)
+
             if self.use_tracking_lstm:
-                # update the hidden state and obtain predicted actions
+                # Update the hidden state and obtain predicted actions.
                 tracking_hidden, actions_t = self._predict_network(
-                tracking_hidden_prev, predict_inp, self.model_dim * 3, 
-                self.tracking_lstm_hidden_dim, self._vs, name="predict_actions")
+                    tracking_hidden, predict_inp, self.model_dim * 3, 
+                    self.tracking_lstm_hidden_dim, self._vs, 
+                    name="predict_actions")
             else:
-                # obtain predicted actions
+                # Obtain predicted actions directly.
                 actions_t = self._predict_network(
-                predict_inp, self.model_dim * 3, util.NUM_TRANSITION_TYPES, self._vs,
-                name="predict_actions")
-                # no change in hidden state because there is none
-                tracking_hidden = tracking_hidden_prev
-        else:
-            # no change in the hidden state because there is none
-            tracking_hidden = tracking_hidden_prev
+                    predict_inp, self.model_dim * 3, util.NUM_TRANSITION_TYPES, self._vs,
+                    name="predict_actions")
 
         if self.train_with_predicted_transitions: 
-            # Model 2 case
+            # Model 2 case.
             if self.interpolate:
                 # Only use ground truth transitions if they are marked as visible to the model.
                 effective_ss_mask_gen_matrix_t = ss_mask_gen_matrix_t * ground_truth_transitions_visible
@@ -207,7 +204,7 @@ class HardStack(object):
             mask = (transitions_t * ground_truth_transitions_visible 
                         + actions_t.argmax(axis=1) * (1 - ground_truth_transitions_visible)) 
         else:
-            # Model 0 case
+            # Model 0 case.
             mask = transitions_t
 
         # Now update the stack: first precompute merge results.
@@ -230,7 +227,7 @@ class HardStack(object):
         else:
             ret_val = stack_next, buffer_cur_next, tracking_hidden
         if not self.interpolate:
-            # use ss_mask as a redundant return value
+            # Use ss_mask as a redundant return value.
             ret_val = (ss_mask_gen_matrix_t,) + ret_val
         return ret_val
 
@@ -262,37 +259,37 @@ class HardStack(object):
         buffer_cur_init = T.zeros((batch_size,), dtype="int")
 
         DUMMY = T.zeros((1,)) # a dummy tensor used as a place-holder
-        # TODO(jgauthier): Implement linear memory (was in previous HardStack;
-        # dropped it during a refactor)
 
         # Dimshuffle inputs to seq_len * batch_size for scanning
         transitions = self.transitions.dimshuffle(1, 0)
         
-        # initialize the hidden state
-        if self.use_tracking_lstm:
-            #  a tensor if a tracking LSTM is used
-            hidden_shape = (batch_size, self.tracking_lstm_hidden_dim * 2)
-            hidden_init = T.zeros(hidden_shape)
+        # Initialize the hidden state for the tracking LSTM, if needed.
+        if self.use_tracking_lstm:            
+            # TODO: Unify what 'dim' means with LSTM. Here, it's the dim of 
+            # each of h and c. For 'model_dim', it's the combined dimension
+            # of the full hidden state (so h and c are each model_dim/2).
+            hidden_init = T.zeros((batch_size, self.tracking_lstm_hidden_dim * 2))
         else:
-            # a dummy value otherwise
             hidden_init = DUMMY
 
+        # Set up the output list for scanning over _step().
         if self._predict_network is not None:
             outputs_info = [stack_init, buffer_cur_init, hidden_init, None]
         else:
             outputs_info = [stack_init, buffer_cur_init, hidden_init]
-        # input sequences to scan
+
+        # Prepare data to scan over.
         sequences = [transitions]
         if self.interpolate:
             # Generate Bernoulli RVs to simulate scheduled sampling 
-            # if the interpolate flag is on
+            # if the interpolate flag is on.
             ss_mask_gen_matrix = self.ss_mask_gen.binomial(
                                 transitions.shape, p=self.ss_prob)
-            # take in the RV sequence as input
+            # Take in the RV sequence as input.
             sequences.append(ss_mask_gen_matrix)
         else:
-            # take in the RV sequqnce as a dummy output, this is
-            # done to avaid defining another step function
+            # Take in the RV sequqnce as a dummy output. This is
+            # done to avaid defining another step function.
             outputs_info = [DUMMY] + outputs_info
 
         scan_ret = theano.scan(

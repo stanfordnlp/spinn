@@ -239,10 +239,12 @@ def LSTMLayer(lstm_prev, inp, inp_dim, hidden_dim, vs, name="lstm"):
     return T.concatenate([h_t, c_t], axis=1)
 
 def TrackingUnit(state_prev, inp, inp_dim, hidden_dim, vs, name="track_unit"):
-    # pass previous state and input to an LSTM 
+    # Pass previous state and input to an LSTM layer.
     state = LSTMLayer(state_prev, inp, inp_dim, hidden_dim, vs, name="%s/lstm" % name)
-    # pass lstm states through a Linear layer to predict transition
+
+    # Pass LSTM states through a Linear layer to predict the next transition.
     pred = Linear(state, 2 * hidden_dim, NUM_TRANSITION_TYPES, vs, name="%s/linear" % name)
+
     return state, pred
 
 def MLP(inp, inp_dim, outp_dim, vs, layer=ReLULayer, hidden_dims=None,
@@ -405,8 +407,7 @@ def MakeTrainingIterator(sources, batch_size):
         while True:
             start += batch_size
             if start > dataset_size:
-                print "Epoch."
-                # Start another epoch
+                # Start another epoch.
                 start = 0
                 random.shuffle(order)
             batch_indices = order[start:start + batch_size]
