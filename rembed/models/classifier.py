@@ -180,11 +180,16 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
     hypothesis_vector = hypothesis_stack_top.reshape((-1, FLAGS.model_dim))
 
     # Concatenate and apply dropout
-    mlp_input = T.concatenate([premise_vector, hypothesis_vector], axis=1)
+    if FLAGS.use_difference_feature:
+        mlp_input = T.concatenate([premise_vector, hypothesis_vector, premise_vector - hypothesis_vector], axis=1)
+        mlp_input_dim = 3 * FLAGS.model_dim
+    else:
+        mlp_input = T.concatenate([premise_vector, hypothesis_vector], axis=1)
+        mlp_input_dim = 2 * FLAGS.model_dim
     dropout_mlp_input = util.Dropout(mlp_input, FLAGS.semantic_classifier_keep_rate, training_mode)
 
     # Apply a combining MLP
-    pair_features = util.MLP(dropout_mlp_input, 2 * FLAGS.model_dim, FLAGS.model_dim, vs, hidden_dims=[FLAGS.model_dim],
+    pair_features = util.MLP(dropout_mlp_input, mlp_input_dim, FLAGS.model_dim, vs, hidden_dims=[FLAGS.model_dim],
         name="combining_mlp",
         initializer=util.HeKaimingInitializer())
 
@@ -636,6 +641,8 @@ if __name__ == '__main__':
     # gflags.DEFINE_integer("num_composition_layers", 1, "")
     gflags.DEFINE_float("scheduled_sampling_exponent_base", 0.99, 
         "Used for scheduled sampling, with probability of Model 1 over Model 2 being base^#training_steps")
+    gflags.DEFINE_boolean("use_difference_feature", False, 
+        "Supply the sentence pair classifier with sentence difference features.")
 
     # Optimization settings.
     gflags.DEFINE_integer("training_steps", 1000000, "")
