@@ -219,7 +219,7 @@ def build_cost(logits, targets):
     return cost, acc
 
 
-def build_transition_cost(logits, targets, num_transitions):
+def build_transition_cost(logits, targets, num_transitions, min_transitions):
     """
     Build a parse action prediction cost function.
     """
@@ -228,17 +228,20 @@ def build_transition_cost(logits, targets, num_transitions):
     logits = T.swapaxes(logits, 0, 1)
     targets = targets.T
 
-    def cost_t(logits, tgt):
+    def cost_t(logits, tgt, num_transitions):
         # TODO(jongauthier): Taper down xent cost as we proceed through
         # sequence?
         predicted_dist = T.nnet.softmax(logits)
         cost = T.nnet.categorical_crossentropy(predicted_dist, tgt)
 
+        mask = T.gt(num_transitions, min_transitions)
+        cost = cost * mask
+
         pred = T.argmax(logits, axis=1)
         error = T.neq(pred, tgt)
         return cost, error
 
-    results, _ = theano.scan(cost_t, [logits, targets])
+    results, _ = theano.scan(cost_t, [logits, targets], non_sequences=[num_transitions])
     costs, errors = results
 
     # Create a mask that selects only transitions that involve real data.
@@ -483,11 +486,15 @@ def run(only_forward=False):
             l2_cost += FLAGS.l2_lambda * T.sum(T.sqr(vs.vars[var]))
 
     # Compute cross-entropy cost on action predictions.
+    min_transitions = FLAGS.min_transitions_for_transition_model_backprop
     if (not data_manager.SENTENCE_PAIR_DATA) and predicted_transitions is not None:
-        transition_cost, action_acc = build_transition_cost(predicted_transitions, transitions, num_transitions)
+        transition_cost, action_acc = build_transition_cost(predicted_transitions, transitions, num_transitions, 
+            min_transitions)
     elif data_manager.SENTENCE_PAIR_DATA and predicted_hypothesis_transitions is not None:
-        p_transition_cost, p_action_acc = build_transition_cost(predicted_premise_transitions, transitions[:, :, 0], num_transitions[:, 0])
-        h_transition_cost, h_action_acc = build_transition_cost(predicted_hypothesis_transitions, transitions[:, :, 1], num_transitions[:, 1])
+        p_transition_cost, p_action_acc = build_transition_cost(predicted_premise_transitions, transitions[:, :, 0], 
+            num_transitions[:, 0], min_transitions)
+        h_transition_cost, h_action_acc = build_transition_cost(predicted_hypothesis_transitions, transitions[:, :, 1], 
+            num_transitions[:, 1], min_transitions)
         transition_cost = p_transition_cost + h_transition_cost
         action_acc = (p_action_acc + h_action_acc) / 2.0  # TODO(SB): Average over transitions, not words.
     else:
@@ -632,7 +639,7 @@ if __name__ == '__main__':
     gflags.DEFINE_integer("tracking_lstm_hidden_dim", 8, "")
     gflags.DEFINE_boolean("use_tracking_lstm", False,
                           "Whether to use LSTM in the tracking unit")
-    
+
     gflags.DEFINE_float("semantic_classifier_keep_rate", 0.5, 
         "Used for dropout in the semantic task classifier.")
     gflags.DEFINE_float("embedding_keep_rate", 0.5, 
@@ -643,6 +650,12 @@ if __name__ == '__main__':
         "Used for scheduled sampling, with probability of Model 1 over Model 2 being base^#training_steps")
     gflags.DEFINE_boolean("use_difference_feature", False, 
         "Supply the sentence pair classifier with sentence difference features.")
+    gflags.DEFINE_integer("min_transitions_for_transition_model_backprop", 0, 
+        "Don't backprop into the transition prediction model when training on sequences shorter than this "
+        "or of the same length.")
+
+
+
 
     # Optimization settings.
     gflags.DEFINE_integer("training_steps", 1000000, "")
