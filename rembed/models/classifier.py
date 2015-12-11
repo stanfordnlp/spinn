@@ -219,7 +219,7 @@ def build_cost(logits, targets):
     return cost, acc
 
 
-def build_action_cost(logits, targets, num_transitions):
+def build_transition_cost(logits, targets, num_transitions):
     """
     Build a parse action prediction cost function.
     """
@@ -484,19 +484,19 @@ def run(only_forward=False):
 
     # Compute cross-entropy cost on action predictions.
     if (not data_manager.SENTENCE_PAIR_DATA) and predicted_transitions is not None:
-        action_cost, action_acc = build_action_cost(predicted_transitions, transitions, num_transitions)
+        transition_cost, action_acc = build_transition_cost(predicted_transitions, transitions, num_transitions)
     elif data_manager.SENTENCE_PAIR_DATA and predicted_hypothesis_transitions is not None:
-        p_action_cost, p_action_acc = build_action_cost(predicted_premise_transitions, transitions[:, :, 0], num_transitions[:, 0])
-        h_action_cost, h_action_acc = build_action_cost(predicted_hypothesis_transitions, transitions[:, :, 1], num_transitions[:, 1])
-        action_cost = p_action_cost + h_action_cost
+        p_transition_cost, p_action_acc = build_transition_cost(predicted_premise_transitions, transitions[:, :, 0], num_transitions[:, 0])
+        h_transition_cost, h_action_acc = build_transition_cost(predicted_hypothesis_transitions, transitions[:, :, 1], num_transitions[:, 1])
+        transition_cost = p_transition_cost + h_transition_cost
         action_acc = (p_action_acc + h_action_acc) / 2.0  # TODO(SB): Average over transitions, not words.
     else:
-        action_cost = T.constant(0.0)
+        transition_cost = T.constant(0.0)
         action_acc = T.constant(0.0)
 
     # TODO(jongauthier): Add hyperparameter for trading off action cost vs xent
     # cost
-    total_cost = xent_cost + l2_cost + action_cost
+    total_cost = xent_cost + l2_cost + transition_cost
 
     # Set up optimization.
     if train_embeddings:
@@ -563,7 +563,7 @@ def run(only_forward=False):
         logger.Log("Building update function.")
         update_fn = theano.function(
             [X, transitions, y, num_transitions, lr, training_mode, ground_truth_transitions_visible, ss_prob],
-            [total_cost, xent_cost, action_cost, action_acc, l2_cost, acc],
+            [total_cost, xent_cost, transition_cost, action_acc, l2_cost, acc],
             updates=new_values,
             on_unused_input='warn',
             allow_input_downcast=True)
@@ -580,12 +580,12 @@ def run(only_forward=False):
             X_batch, transitions_batch, y_batch, num_transitions_batch = training_data_iter.next()
             ret = update_fn(X_batch, transitions_batch, y_batch, num_transitions_batch,
                             FLAGS.learning_rate, 1.0, 1.0, np.exp(step*np.log(FLAGS.scheduled_sampling_exponent_base)))
-            total_cost_val, xent_cost_val, action_cost_val, action_acc_val, l2_cost_val, acc_val = ret
+            total_cost_val, xent_cost_val, transition_cost_val, action_acc_val, l2_cost_val, acc_val = ret
 
             if step % FLAGS.statistics_interval_steps == 0:
                 logger.Log(
                     "Step: %i\tAcc: %f\t%f\tCost: %5f %5f %5f %5f"
-                    % (step, acc_val, action_acc_val, total_cost_val, xent_cost_val, action_cost_val,
+                    % (step, acc_val, action_acc_val, total_cost_val, xent_cost_val, transition_cost_val,
                        l2_cost_val))
 
             if step % FLAGS.eval_interval_steps == 0:
