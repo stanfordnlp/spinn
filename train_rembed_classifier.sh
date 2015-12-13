@@ -5,13 +5,6 @@
 # Usage example:
 # export REMBED_FLAGS="--learning_rate 0.01 --batch_size 256"; export DEVICE=gpu2; qsub -v REMBED_FLAGS,DEVICE train_rembed_classifier.sh -l host=jagupard10
 
-
-### The below are not comments, but actual PBS flags:
-# Correction: Now they're comments. Debugging.
-## #PBS -l walltime=99:00:00	### Die after four-ish days
-## #PBS -l mem=3000MB   ### Request 3G RAM.
-## #PBS -q jag   ### Run on the jagupard* queue
-
 # Change to the submission directory.
 cd $PBS_O_WORKDIR
 echo Lauching from working directory: $PBS_O_WORKDIR
