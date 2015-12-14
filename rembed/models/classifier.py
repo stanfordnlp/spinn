@@ -500,6 +500,7 @@ def run(only_forward=False):
     else:
         transition_cost = T.constant(0.0)
         action_acc = T.constant(0.0)
+    transition_cost = transition_cost * FLAGS.transition_cost_scale
 
     # TODO(jongauthier): Add hyperparameter for trading off action cost vs xent
     # cost
@@ -658,20 +659,21 @@ if __name__ == '__main__':
 
 
     # Optimization settings.
-    gflags.DEFINE_integer("training_steps", 1000000, "")
-    gflags.DEFINE_integer("batch_size", 32, "")
+    gflags.DEFINE_integer("training_steps", 1000000, "Stop training after this point.")
+    gflags.DEFINE_integer("batch_size", 32, "SGD minibatch size.")
     gflags.DEFINE_float("learning_rate", 0.001, "Used in RMSProp.")
     # gflags.DEFINE_float("momentum", 0.9, "")
     gflags.DEFINE_float("clipping_max_value", 1.0, "")
     gflags.DEFINE_float("l2_lambda", 1e-5, "")
-    gflags.DEFINE_float("init_range", 0.01, "")
-    gflags.DEFINE_float("double_identity_init_range", 0.001, "")
+    gflags.DEFINE_float("init_range", 0.01, "Mainly used for softmax parameters. Range for uniform random init.")
+    gflags.DEFINE_float("double_identity_init_range", 0.001, "Deprecated.")
+    gflags.DEFINE_float("transition_cost_scale", 1.0, "Multiplied by the transition cost.")
 
     # Display settings.
-    gflags.DEFINE_integer("statistics_interval_steps", 50, "")
-    gflags.DEFINE_integer("eval_interval_steps", 50, "")
+    gflags.DEFINE_integer("statistics_interval_steps", 50, "Print training set results at this interval.")
+    gflags.DEFINE_integer("eval_interval_steps", 50, "Evaluate at this interval.")
 
-    gflags.DEFINE_integer("ckpt_interval_steps", 10000, "")
+    gflags.DEFINE_integer("ckpt_interval_steps", 10000, "Update the checkpoint on disk at this interval.")
     gflags.DEFINE_boolean("ckpt_on_best_dev_error", True, "If error on the first eval set (the dev set) is "
                           "at most 0.95 of error at the previous checkpoint, save a special 'best' checkpoint.")
 
