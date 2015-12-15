@@ -489,8 +489,7 @@ def run(only_forward=False):
     # Set up L2 regularization.
     l2_cost = 0.0
     for var in vs.trainable_vars:
-        if var is not "embeddings":
-            l2_cost += FLAGS.l2_lambda * T.sum(T.sqr(vs.vars[var]))
+        l2_cost += FLAGS.l2_lambda * T.sum(T.sqr(vs.vars[var]))
 
     # Compute cross-entropy cost on action predictions.
     min_transitions = FLAGS.min_transitions_for_transition_model_backprop
