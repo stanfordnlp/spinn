@@ -226,7 +226,7 @@ def build_cost(logits, targets):
     return cost, acc
 
 
-def build_transition_cost(logits, targets, num_transitions, min_transitions):
+def build_transition_cost(logits, targets, num_transitions):
     """
     Build a parse action prediction cost function.
     """
@@ -240,9 +240,6 @@ def build_transition_cost(logits, targets, num_transitions, min_transitions):
         # sequence?
         predicted_dist = T.nnet.softmax(logits)
         cost = T.nnet.categorical_crossentropy(predicted_dist, tgt)
-
-        mask = T.gt(num_transitions, min_transitions)
-        cost = cost * mask
 
         pred = T.argmax(logits, axis=1)
         error = T.neq(pred, tgt)
@@ -492,15 +489,13 @@ def run(only_forward=False):
         l2_cost += FLAGS.l2_lambda * T.sum(T.sqr(vs.vars[var]))
 
     # Compute cross-entropy cost on action predictions.
-    min_transitions = FLAGS.min_transitions_for_transition_model_backprop
     if (not data_manager.SENTENCE_PAIR_DATA) and predicted_transitions is not None:
-        transition_cost, action_acc = build_transition_cost(predicted_transitions, transitions, num_transitions, 
-            min_transitions)
+        transition_cost, action_acc = build_transition_cost(predicted_transitions, transitions, num_transitions)
     elif data_manager.SENTENCE_PAIR_DATA and predicted_hypothesis_transitions is not None:
         p_transition_cost, p_action_acc = build_transition_cost(predicted_premise_transitions, transitions[:, :, 0], 
-            num_transitions[:, 0], min_transitions)
+            num_transitions[:, 0])
         h_transition_cost, h_action_acc = build_transition_cost(predicted_hypothesis_transitions, transitions[:, :, 1], 
-            num_transitions[:, 1], min_transitions)
+            num_transitions[:, 1])
         transition_cost = p_transition_cost + h_transition_cost
         action_acc = (p_action_acc + h_action_acc) / 2.0  # TODO(SB): Average over transitions, not words.
     else:
