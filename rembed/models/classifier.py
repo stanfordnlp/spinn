@@ -660,7 +660,7 @@ if __name__ == '__main__':
         "Supply the sentence pair classifier with sentence difference features.")
     gflags.DEFINE_integer("min_transitions_for_transition_model_backprop", 0, 
         "Don't backprop into the transition prediction model when training on sequences shorter than this "
-        "or of the same length.")
+        "or of the same length. (DEPRECATED)")
 
 
 
