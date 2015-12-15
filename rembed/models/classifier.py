@@ -635,7 +635,6 @@ if __name__ == '__main__':
     gflags.DEFINE_integer("model_dim", 8, "")
     gflags.DEFINE_integer("word_embedding_dim", 8, "")
     
-    # dimension of the hidden state of LSTM in tracking unit
     gflags.DEFINE_integer("tracking_lstm_hidden_dim", 8, "")
     gflags.DEFINE_boolean("use_tracking_lstm", False,
                           "Whether to use LSTM in the tracking unit")
@@ -651,12 +650,6 @@ if __name__ == '__main__':
         "Used for scheduled sampling, with probability of Model 1 over Model 2 being base^#training_steps")
     gflags.DEFINE_boolean("use_difference_feature", True, 
         "Supply the sentence pair classifier with sentence difference features.")
-    gflags.DEFINE_integer("min_transitions_for_transition_model_backprop", 0, 
-        "Don't backprop into the transition prediction model when training on sequences shorter than this "
-        "or of the same length. (DEPRECATED)")
-
-
-
 
     # Optimization settings.
     gflags.DEFINE_integer("training_steps", 1000000, "Stop training after this point.")
@@ -666,7 +659,6 @@ if __name__ == '__main__':
     gflags.DEFINE_float("clipping_max_value", 1.0, "")
     gflags.DEFINE_float("l2_lambda", 1e-5, "")
     gflags.DEFINE_float("init_range", 0.01, "Mainly used for softmax parameters. Range for uniform random init.")
-    gflags.DEFINE_float("double_identity_init_range", 0.001, "Deprecated.")
     gflags.DEFINE_float("transition_cost_scale", 1.0, "Multiplied by the transition cost.")
 
     # Display settings.
