@@ -192,7 +192,7 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
     mlp_input = util.Dropout(mlp_input, FLAGS.semantic_classifier_keep_rate, training_mode)
 
     # Apply a combining MLP
-    for layer in range(2):  # TODO(SB): Tune
+    for layer in range(FLAGS.num_sentence_pair_combination_layers):
         pair_features = util.ReLULayer(mlp_input, mlp_input_dim, FLAGS.model_dim, vs,
             name="combining_mlp/" + str(layer),
             initializer=util.HeKaimingInitializer())
@@ -646,6 +646,7 @@ if __name__ == '__main__':
         "Used for dropout on transformed embeddings.")
     gflags.DEFINE_boolean("lstm_composition", False, "")
     # gflags.DEFINE_integer("num_composition_layers", 1, "")
+    gflags.DEFINE_integer("num_sentence_pair_combination_layers", 2, "")
     gflags.DEFINE_float("scheduled_sampling_exponent_base", 0.99, 
         "Used for scheduled sampling, with probability of Model 1 over Model 2 being base^#training_steps")
     gflags.DEFINE_boolean("use_difference_feature", False, 
