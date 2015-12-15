@@ -44,6 +44,10 @@ def ZeroInitializer():
     return lambda shape: np.zeros(shape)
 
 
+def OneInitializer():
+    return lambda shape: np.ones(shape)
+
+
 def TreeLSTMBiasInitializer():
     def init(shape):
         hidden_dim = shape[0] / 5
@@ -76,14 +80,14 @@ def BatchNorm(x, input_dim, vs, name, axes=[0]):
     these parameters.
     """
     g = vs.add_param("%s_bn_g" %
-                 name, (input_dim))
+                 name, (input_dim), initializer=OneInitializer())
     b = vs.add_param("%s_bn_b" %
                      name, (input_dim), initializer=ZeroInitializer())
 
     centered_x = x - x.mean(axis=axes, keepdims=True)
     scale = g / T.sqrt(x.var(axis=axes, keepdims=True) + 1e-12)
     rval = centered_x * scale + b
-    
+
     return rval
 
 
