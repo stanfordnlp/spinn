@@ -153,7 +153,8 @@ class HardStack(object):
                 return self.initial_embeddings
             self.embeddings = self._vs.add_param(
                     "embeddings", (self.vocab_size, self.word_embedding_dim), 
-                    initializer=EmbeddingInitializer)
+                    initializer=EmbeddingInitializer,
+                    trainable=False)
         else:
             self.embeddings = self._vs.add_param(
                 "embeddings", (self.vocab_size, self.word_embedding_dim))
@@ -252,7 +253,7 @@ class HardStack(object):
         buffer_t = self._embedding_projection_network(
             raw_embeddings, self.word_embedding_dim, self.model_dim, self._vs, name="project")
 
-        buffer_t = util.BatchNorm(buffer_t, self.model_dim, self._vs, "buffer", 
+        buffer_t = util.BatchNorm(buffer_t, self.model_dim, self._vs, "buffer", self.training_mode,
             axes=[0, 1])
         buffer_t = util.Dropout(buffer_t, self.embedding_dropout_keep_rate, self.training_mode)
 

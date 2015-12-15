@@ -95,7 +95,7 @@ def build_sentence_model(cls, vocab_size, seq_length, tokens, transitions,
     stack_top = final_stack[:, 0]
     sentence_vector = stack_top.reshape((-1, FLAGS.model_dim))
 
-    sentence_vector = util.BatchNorm(sentence_vector, FLAGS.model_dim, vs, "sentence_vector")
+    sentence_vector = util.BatchNorm(sentence_vector, FLAGS.model_dim, vs, "sentence_vector", training_mode)
     sentence_vector = util.Dropout(sentence_vector, FLAGS.semantic_classifier_keep_rate, training_mode)
 
     # Feed forward through a single output layer
@@ -188,7 +188,7 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
         mlp_input = T.concatenate([premise_vector, hypothesis_vector], axis=1)
         mlp_input_dim = 2 * FLAGS.model_dim
 
-    mlp_input = util.BatchNorm(mlp_input, mlp_input_dim, vs, "sentence_vectors")
+    mlp_input = util.BatchNorm(mlp_input, mlp_input_dim, vs, "sentence_vectors", training_mode)
     mlp_input = util.Dropout(mlp_input, FLAGS.semantic_classifier_keep_rate, training_mode)
 
     # Apply a combining MLP
@@ -197,7 +197,7 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
             name="combining_mlp/" + str(layer),
             initializer=util.HeKaimingInitializer())
 
-        pair_features = util.BatchNorm(pair_features, FLAGS.model_dim, vs, "combining_mlp/" + str(layer))
+        pair_features = util.BatchNorm(pair_features, FLAGS.model_dim, vs, "combining_mlp/" + str(layer), training_mode)
         pair_features = util.Dropout(pair_features, FLAGS.semantic_classifier_keep_rate, training_mode)
 
     # Feed forward through a single output layer
@@ -488,7 +488,7 @@ def run(only_forward=False):
 
     # Set up L2 regularization.
     l2_cost = 0.0
-    for var in vs.vars:
+    for var in vs.trainable_vars:
         if var is not "embeddings":
             l2_cost += FLAGS.l2_lambda * T.sum(T.sqr(vs.vars[var]))
 
@@ -513,18 +513,10 @@ def run(only_forward=False):
     # cost
     total_cost = xent_cost + l2_cost + transition_cost
 
-    # Set up optimization.
-    if train_embeddings:
-        trained_param_keys = vs.vars.keys()
-        trained_params = vs.vars.values()
-    else:
-        trained_param_keys = [key for key in vs.vars if key is not "embeddings"]
-        trained_params = [vs.vars[key] for key in vs.vars if key is not "embeddings"]
-
     checkpoint_path = os.path.join(FLAGS.ckpt_root, FLAGS.experiment_name + ".ckpt")
     if os.path.isfile(checkpoint_path):
         logger.Log("Found checkpoint, restoring.")
-        step = vs.load_checkpoint(checkpoint_path, trained_param_keys, get_step=True) 
+        step = vs.load_checkpoint(checkpoint_path, vs.trainable_vars.keys(), get_step=True) 
     else:
         assert not only_forward, "Can't run an eval-only run without a checkpoint. Supply a checkpoint."
         step = 0 
@@ -567,7 +559,8 @@ def run(only_forward=False):
     else:
          # Train
 
-        new_values = util.RMSprop(total_cost, trained_params, lr)
+        new_values = util.RMSprop(total_cost, vs.trainable_vars.values(), lr)
+        new_values += [(key, vs.nongradient_updates[key]) for key in vs.nongradient_updates]
         # Training open-vocabulary embeddings is a questionable idea right now. Disabled:
         # new_values.append(
         #     util.embedding_SGD(total_cost, embedding_params, embedding_lr))
@@ -607,11 +600,11 @@ def run(only_forward=False):
                 for index, eval_set in enumerate(eval_iterators):
                     acc = evaluate(eval_fn, eval_set, logger, step)
                     if FLAGS.ckpt_on_best_dev_error and index == 0 and (1 - acc) < 0.95 * best_dev_error:
-                        vs.save_checkpoint(checkpoint_path + "_best", trained_param_keys, step)
+                        vs.save_checkpoint(checkpoint_path + "_best", vs.trainable_vars, step)
                         best_dev_error = 1 - acc
 
             if step % FLAGS.ckpt_interval_steps == 0 and step > 0:
-                vs.save_checkpoint(checkpoint_path, trained_param_keys, step)
+                vs.save_checkpoint(checkpoint_path, vs.trainable_vars, step)
   
 
 if __name__ == '__main__':
