@@ -32,7 +32,7 @@ FIXED_PARAMETERS = {
     "clipping_max_value":  "5.0",
     "batch_size":  "32",
     "lstm_composition": "",
-    "use_tracking_lstm": "True",
+    "use_tracking_lstm": "",
     "ckpt_root":    os.path.join("/afs/cs.stanford.edu/u", getpass.getuser(), "scr/")  # Launching user's home scr dir
 }
 
