@@ -649,7 +649,7 @@ if __name__ == '__main__':
     gflags.DEFINE_integer("num_sentence_pair_combination_layers", 2, "")
     gflags.DEFINE_float("scheduled_sampling_exponent_base", 0.99, 
         "Used for scheduled sampling, with probability of Model 1 over Model 2 being base^#training_steps")
-    gflags.DEFINE_boolean("use_difference_feature", False, 
+    gflags.DEFINE_boolean("use_difference_feature", True, 
         "Supply the sentence pair classifier with sentence difference features.")
     gflags.DEFINE_integer("min_transitions_for_transition_model_backprop", 0, 
         "Don't backprop into the transition prediction model when training on sequences shorter than this "
