@@ -260,7 +260,11 @@ class HardStack(object):
         # and maintain a cursor in this buffer.
         buffer_t = self._embedding_projection_network(
             raw_embeddings, self.word_embedding_dim, self.model_dim, self._vs, name="project")
+
+        buffer_t = util.BatchNorm(buffer_t, self.model_dim, self._vs, "buffer", 
+            axes=[0, 1])
         buffer_t = util.Dropout(buffer_t, self.embedding_dropout_keep_rate, self.training_mode)
+
 
         # Collapse buffer to (batch_size * buffer_size) * emb_dim for fast indexing.
         buffer_t = buffer_t.reshape((-1, self.model_dim))

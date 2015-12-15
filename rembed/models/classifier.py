@@ -97,6 +97,7 @@ def build_sentence_model(cls, vocab_size, seq_length, tokens, transitions,
     stack_top = final_stack[:, 0]
     sentence_vector = stack_top.reshape((-1, FLAGS.model_dim))
 
+    sentence_vector = util.BatchNorm(sentence_vector, FLAGS.model_dim, vs, "sentence_vector")
     sentence_vector = util.Dropout(sentence_vector, FLAGS.semantic_classifier_keep_rate, training_mode)
 
     # Feed forward through a single output layer
@@ -191,12 +192,18 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
     else:
         mlp_input = T.concatenate([premise_vector, hypothesis_vector], axis=1)
         mlp_input_dim = 2 * FLAGS.model_dim
-    dropout_mlp_input = util.Dropout(mlp_input, FLAGS.semantic_classifier_keep_rate, training_mode)
+
+    mlp_input = util.BatchNorm(mlp_input, mlp_input_dim, vs, "sentence_vectors")
+    mlp_input = util.Dropout(mlp_input, FLAGS.semantic_classifier_keep_rate, training_mode)
 
     # Apply a combining MLP
-    pair_features = util.MLP(dropout_mlp_input, mlp_input_dim, FLAGS.model_dim, vs, hidden_dims=[FLAGS.model_dim],
-        name="combining_mlp",
-        initializer=util.HeKaimingInitializer())
+    for layer in range(2):  # TODO(SB): Tune
+        pair_features = util.ReLULayer(mlp_input, mlp_input_dim, FLAGS.model_dim, vs,
+            name="combining_mlp/" + str(layer),
+            initializer=util.HeKaimingInitializer())
+
+        pair_features = util.BatchNorm(pair_features, FLAGS.model_dim, vs, "combining_mlp/" + str(layer))
+        pair_features = util.Dropout(pair_features, FLAGS.semantic_classifier_keep_rate, training_mode)
 
     # Feed forward through a single output layer
     logits = util.Linear(
@@ -487,7 +494,7 @@ def run(only_forward=False):
     # Set up L2 regularization.
     l2_cost = 0.0
     for var in vs.vars:
-        if "embedding" not in var:
+        if var is not "embeddings":
             l2_cost += FLAGS.l2_lambda * T.sum(T.sqr(vs.vars[var]))
 
     # Compute cross-entropy cost on action predictions.
@@ -505,6 +512,7 @@ def run(only_forward=False):
     else:
         transition_cost = T.constant(0.0)
         action_acc = T.constant(0.0)
+    transition_cost = transition_cost * FLAGS.transition_cost_scale
 
     # TODO(jongauthier): Add hyperparameter for trading off action cost vs xent
     # cost
@@ -515,8 +523,8 @@ def run(only_forward=False):
         trained_param_keys = vs.vars.keys()
         trained_params = vs.vars.values()
     else:
-        trained_param_keys = [key for key in vs.vars if 'embedding' not in key]
-        trained_params = [vs.vars[key] for key in vs.vars if 'embedding' not in key]
+        trained_param_keys = [key for key in vs.vars if key is not "embeddings"]
+        trained_params = [vs.vars[key] for key in vs.vars if key is not "embeddings"]
 
     checkpoint_path = os.path.join(FLAGS.ckpt_root, FLAGS.experiment_name + ".ckpt")
     if os.path.isfile(checkpoint_path):
@@ -663,22 +671,22 @@ if __name__ == '__main__':
 
 
 
-
     # Optimization settings.
-    gflags.DEFINE_integer("training_steps", 1000000, "")
-    gflags.DEFINE_integer("batch_size", 32, "")
+    gflags.DEFINE_integer("training_steps", 1000000, "Stop training after this point.")
+    gflags.DEFINE_integer("batch_size", 32, "SGD minibatch size.")
     gflags.DEFINE_float("learning_rate", 0.001, "Used in RMSProp.")
     # gflags.DEFINE_float("momentum", 0.9, "")
     gflags.DEFINE_float("clipping_max_value", 1.0, "")
     gflags.DEFINE_float("l2_lambda", 1e-5, "")
-    gflags.DEFINE_float("init_range", 0.01, "")
-    gflags.DEFINE_float("double_identity_init_range", 0.001, "")
+    gflags.DEFINE_float("init_range", 0.01, "Mainly used for softmax parameters. Range for uniform random init.")
+    gflags.DEFINE_float("double_identity_init_range", 0.001, "Deprecated.")
+    gflags.DEFINE_float("transition_cost_scale", 1.0, "Multiplied by the transition cost.")
 
     # Display settings.
-    gflags.DEFINE_integer("statistics_interval_steps", 50, "")
-    gflags.DEFINE_integer("eval_interval_steps", 50, "")
+    gflags.DEFINE_integer("statistics_interval_steps", 50, "Print training set results at this interval.")
+    gflags.DEFINE_integer("eval_interval_steps", 50, "Evaluate at this interval.")
 
-    gflags.DEFINE_integer("ckpt_interval_steps", 10000, "")
+    gflags.DEFINE_integer("ckpt_interval_steps", 10000, "Update the checkpoint on disk at this interval.")
     gflags.DEFINE_boolean("ckpt_on_best_dev_error", True, "If error on the first eval set (the dev set) is "
                           "at most 0.95 of error at the previous checkpoint, save a special 'best' checkpoint.")
 

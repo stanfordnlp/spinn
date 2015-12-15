@@ -69,6 +69,24 @@ def DoubleIdentityInitializer(range):
     return init
 
 
+def BatchNorm(x, input_dim, vs, name, axes=[0]):
+    """Apply simple batch normalization.
+    This requires introducing new learned scale parameters, so it's 
+    important to use unique names unless you're sure you want to share 
+    these parameters.
+    """
+    g = vs.add_param("%s_bn_g" %
+                 name, (input_dim))
+    b = vs.add_param("%s_bn_b" %
+                     name, (input_dim), initializer=ZeroInitializer())
+
+    centered_x = x - x.mean(axis=axes, keepdims=True)
+    scale = g / T.sqrt(x.var(axis=axes, keepdims=True) + 1e-12)
+    rval = centered_x * scale + b
+    
+    return rval
+
+
 class VariableStore(object):
 
     def __init__(self, prefix="vs", default_initializer=HeKaimingInitializer(), logger=None):
