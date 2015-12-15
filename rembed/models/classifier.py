@@ -95,6 +95,7 @@ def build_sentence_model(cls, vocab_size, seq_length, tokens, transitions,
     stack_top = final_stack[:, 0]
     sentence_vector = stack_top.reshape((-1, FLAGS.model_dim))
 
+    sentence_vector = util.BatchNorm(sentence_vector, FLAGS.model_dim, vs, "sentence_vector")
     sentence_vector = util.Dropout(sentence_vector, FLAGS.semantic_classifier_keep_rate, training_mode)
 
     # Feed forward through a single output layer
@@ -186,12 +187,18 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
     else:
         mlp_input = T.concatenate([premise_vector, hypothesis_vector], axis=1)
         mlp_input_dim = 2 * FLAGS.model_dim
-    dropout_mlp_input = util.Dropout(mlp_input, FLAGS.semantic_classifier_keep_rate, training_mode)
+
+    mlp_input = util.BatchNorm(mlp_input, mlp_input_dim, vs, "sentence_vectors")
+    mlp_input = util.Dropout(mlp_input, FLAGS.semantic_classifier_keep_rate, training_mode)
 
     # Apply a combining MLP
-    pair_features = util.MLP(dropout_mlp_input, mlp_input_dim, FLAGS.model_dim, vs, hidden_dims=[FLAGS.model_dim],
-        name="combining_mlp",
-        initializer=util.HeKaimingInitializer())
+    for layer in range(2):  # TODO(SB): Tune
+        pair_features = util.ReLULayer(mlp_input, mlp_input_dim, FLAGS.model_dim, vs,
+            name="combining_mlp/" + str(layer),
+            initializer=util.HeKaimingInitializer())
+
+        pair_features = util.BatchNorm(pair_features, FLAGS.model_dim, vs, "combining_mlp/" + str(layer))
+        pair_features = util.Dropout(pair_features, FLAGS.semantic_classifier_keep_rate, training_mode)
 
     # Feed forward through a single output layer
     logits = util.Linear(
@@ -482,7 +489,7 @@ def run(only_forward=False):
     # Set up L2 regularization.
     l2_cost = 0.0
     for var in vs.vars:
-        if "embedding" not in var:
+        if var is not "embeddings":
             l2_cost += FLAGS.l2_lambda * T.sum(T.sqr(vs.vars[var]))
 
     # Compute cross-entropy cost on action predictions.
@@ -511,8 +518,8 @@ def run(only_forward=False):
         trained_param_keys = vs.vars.keys()
         trained_params = vs.vars.values()
     else:
-        trained_param_keys = [key for key in vs.vars if 'embedding' not in key]
-        trained_params = [vs.vars[key] for key in vs.vars if 'embedding' not in key]
+        trained_param_keys = [key for key in vs.vars if key is not "embeddings"]
+        trained_params = [vs.vars[key] for key in vs.vars if key is not "embeddings"]
 
     checkpoint_path = os.path.join(FLAGS.ckpt_root, FLAGS.experiment_name + ".ckpt")
     if os.path.isfile(checkpoint_path):
