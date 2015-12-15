@@ -516,7 +516,7 @@ def run(only_forward=False):
     checkpoint_path = os.path.join(FLAGS.ckpt_root, FLAGS.experiment_name + ".ckpt")
     if os.path.isfile(checkpoint_path):
         logger.Log("Found checkpoint, restoring.")
-        step = vs.load_checkpoint(checkpoint_path, vs.trainable_vars.keys(), get_step=True) 
+        step = vs.load_checkpoint(checkpoint_path, get_step=True) 
     else:
         assert not only_forward, "Can't run an eval-only run without a checkpoint. Supply a checkpoint."
         step = 0 
@@ -600,11 +600,11 @@ def run(only_forward=False):
                 for index, eval_set in enumerate(eval_iterators):
                     acc = evaluate(eval_fn, eval_set, logger, step)
                     if FLAGS.ckpt_on_best_dev_error and index == 0 and (1 - acc) < 0.95 * best_dev_error:
-                        vs.save_checkpoint(checkpoint_path + "_best", vs.trainable_vars, step)
+                        vs.save_checkpoint(checkpoint_path + "_best", step=step)
                         best_dev_error = 1 - acc
 
             if step % FLAGS.ckpt_interval_steps == 0 and step > 0:
-                vs.save_checkpoint(checkpoint_path, vs.trainable_vars, step)
+                vs.save_checkpoint(checkpoint_path, step=step)
   
 
 if __name__ == '__main__':

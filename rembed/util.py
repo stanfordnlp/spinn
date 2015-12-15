@@ -116,11 +116,12 @@ class VariableStore(object):
         self.prefix = prefix
         self.default_initializer = default_initializer
         self.vars = OrderedDict()  # Order is used in saving and loading
+        self.savable_vars = OrderedDict()
         self.trainable_vars = OrderedDict()
         self.logger = logger
         self.nongradient_updates = OrderedDict()
 
-    def add_param(self, name, shape, initializer=None, trainable=True):
+    def add_param(self, name, shape, initializer=None, savable=True, trainable=True):
         if not initializer:
             initializer = self.default_initializer
 
@@ -132,6 +133,8 @@ class VariableStore(object):
             init_value = initializer(shape).astype(theano.config.floatX)
             self.vars[name] = theano.shared(init_value,
                                             name=full_name)
+            if savable:
+                self.savable_vars[name] = self.vars[name]
             if trainable:
                 self.trainable_vars[name] = self.vars[name]
 
@@ -139,7 +142,7 @@ class VariableStore(object):
 
     def save_checkpoint(self, filename="vs_ckpt", keys=None, step=None):
         if not keys:
-            keys = self.vars
+            keys = self.savable_vars
         save_file = open(filename, 'w')  # this will overwrite current contents
         for key in keys:
             if self.logger:
@@ -153,7 +156,7 @@ class VariableStore(object):
 
     def load_checkpoint(self, filename="vs_ckpt", keys=None, get_step=False):
         if not keys:
-            keys = self.vars
+            keys = self.savable_vars
         save_file = open(filename)
         for key in keys:
             if self.logger:
