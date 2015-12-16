@@ -3,11 +3,10 @@ import itertools
 import random
 
 import numpy as np
-import theano
-from theano import tensor as T
+import tensorflow as tf
 
 numpy_random = np.random.RandomState(1234)
-theano_random = T.shared_randomstreams.RandomStreams(numpy_random.randint(999999))
+tf.set_random_seed(numpy_random.randint(999999))
 
 # With loaded embedding matrix, the padding vector will be initialized to zero
 # and will not be trained. Hopefully this isn't a problem. It seems better than
@@ -68,16 +67,15 @@ class VariableStore(object):
             if self.logger:
                 self.logger.Log(
                     "Created variable " + full_name, level=self.logger.DEBUG)
-            init_value = initializer(shape).astype(theano.config.floatX)
-            self.vars[name] = theano.shared(init_value,
-                                            name=full_name)
+            init_value = initializer(shape).astype(np.float32)
+            self.vars[name] = tf.Variable(init_value, name=full_name)
         return self.vars[name]
 
 
 def ReLULayer(inp, inp_dim, outp_dim, vs, name="relu_layer", use_bias=True, initializer=None):
     pre_nl = Linear(inp, inp_dim, outp_dim, vs, name, use_bias, initializer)
     # ReLU isn't present in this version of Theano.
-    outp = T.maximum(pre_nl, 0)
+    outp = tf.nn.relu(pre_nl)
 
     return outp
 
@@ -85,7 +83,7 @@ def ReLULayer(inp, inp_dim, outp_dim, vs, name="relu_layer", use_bias=True, init
 def Linear(inp, inp_dim, outp_dim, vs, name="linear_layer", use_bias=True, initializer=None):
     W = vs.add_param("%s_W" %
                      name, (inp_dim, outp_dim), initializer=initializer)
-    outp = inp.dot(W)
+    outp = tf.matmul(inp, W)
 
     if use_bias:
         b = vs.add_param("%s_b" % name, (outp_dim,),
@@ -106,9 +104,7 @@ def Dropout(inp, keep_rate, apply_dropout):
     """
     # TODO(SB): Investigate whether a Theano conditional would be faster than the linear combination below.
 
-    dropout_mask = theano_random.binomial(n=1, p=keep_rate, size=inp.shape, dtype=theano.config.floatX)
-
-    dropout_candidate = dropout_mask * inp 
+    dropout_candidate = tf.nn.dropout(inp, keep_rate)
     rescaling_candidate = keep_rate * inp
     result = apply_dropout * dropout_candidate + (1 - apply_dropout) * rescaling_candidate
 
@@ -149,7 +145,7 @@ def TreeLSTMLayer(lstm_prev, _, full_memory_dim, vs, name="tree_lstm", initializ
     # Apply nonlinearities
     i_gate = T.nnet.sigmoid(i_gate)
     fl_gate = T.nnet.sigmoid(fl_gate)
-    fr_gate = T.nnet.sigmoid(fr_gate) 
+    fr_gate = T.nnet.sigmoid(fr_gate)
     o_gate = T.nnet.sigmoid(o_gate)
     cell_inp = T.tanh(cell_inp)
 
@@ -271,11 +267,11 @@ def TrimDataset(dataset, seq_length, eval_mode=False, sentence_pair_data=False):
     else:
         if sentence_pair_data:
             new_dataset = [example for example in dataset if
-                len(example["premise_transitions"]) <= seq_length and 
-                len(example["hypothesis_transitions"]) <= seq_length]   
+                len(example["premise_transitions"]) <= seq_length and
+                len(example["hypothesis_transitions"]) <= seq_length]
         else:
             new_dataset = [example for example in dataset if len(
-                example["transitions"]) <= seq_length]         
+                example["transitions"]) <= seq_length]
         return new_dataset
 
 
@@ -321,7 +317,7 @@ def CropAndPad(dataset, length, logger=None, sentence_pair_data=False):
     # the final stack top is the root of the tree. If cropping is used, it should
     # just introduce empty nodes into the tree.
     if sentence_pair_data:
-        keys = [("premise_transitions", "num_premise_transitions", "premise_tokens"), 
+        keys = [("premise_transitions", "num_premise_transitions", "premise_tokens"),
                 ("hypothesis_transitions", "num_hypothesis_transitions", "hypothesis_tokens")]
     else:
         keys = [("transitions", "num_transitions", "tokens")]
@@ -379,7 +375,7 @@ def MakeEvalIterator(sources, batch_size):
     return data_iter
 
 
-def PreprocessDataset(dataset, vocabulary, seq_length, data_manager, eval_mode=False, logger=None, 
+def PreprocessDataset(dataset, vocabulary, seq_length, data_manager, eval_mode=False, logger=None,
                       sentence_pair_data=False):
     dataset = TrimDataset(dataset, seq_length, eval_mode=eval_mode, sentence_pair_data=sentence_pair_data)
     dataset = TokensToIDs(vocabulary, dataset, sentence_pair_data=sentence_pair_data)
@@ -473,3 +469,23 @@ def LoadEmbeddingsFromASCII(vocabulary, embedding_dim, path):
             if word in vocabulary:
                 emb[vocabulary[word], :] = [float(e) for e in spl[1:]]
     return emb
+
+
+def convert_labels_to_onehot(labels, batch_size, num_classes):
+    """
+    Convert a vector of integer class labels to a matrix of one-hot target vectors.
+    """
+    with tf.name_scope("onehot"):
+        labels = tf.expand_dims(labels, 1)
+        indices = tf.expand_dims(tf.range(0, batch_size, 1), 1)
+        sparse_ptrs = tf.concat(1, [indices, labels], name="ptrs")
+        onehots = tf.sparse_to_dense(sparse_ptrs, [batch_size, num_classes],
+                                     1.0, 0.0)
+        return onehots
+
+
+@tf.RegisterGradient("ScatterUpdate")
+def _ScatterUpdateGrad(op, grad):
+    assert len(op.inputs) == 3
+    _, _, updates = op.inputs
+    return [None, None, tf.ones_like(updates)]

@@ -20,8 +20,8 @@ import pprint
 import sys
 
 import gflags
-from theano import tensor as T
-import theano
+import numpy as np
+import tensorflow as tf
 
 from rembed import afs_safe_logger
 from rembed import util
@@ -36,7 +36,7 @@ FLAGS = gflags.FLAGS
 
 
 def build_sentence_model(cls, vocab_size, seq_length, tokens, transitions,
-                     num_classes, apply_dropout, vs, initial_embeddings=None, project_embeddings=False):
+                         num_classes, apply_dropout, vs, initial_embeddings=None, project_embeddings=False):
     """
     Construct a classifier which makes use of some hard-stack model.
 
@@ -68,17 +68,17 @@ def build_sentence_model(cls, vocab_size, seq_length, tokens, transitions,
 
     # Build hard stack which scans over input sequence.
     stack = cls(
-        FLAGS.model_dim, FLAGS.word_embedding_dim, vocab_size, seq_length,
-        compose_network, embedding_projection_network, apply_dropout, vs, 
-        X=tokens, 
-        transitions=transitions, 
-        initial_embeddings=initial_embeddings, 
+        FLAGS.model_dim, FLAGS.word_embedding_dim, vocab_size, FLAGS.batch_size, seq_length,
+        compose_network, embedding_projection_network, apply_dropout, vs,
+        X=tokens,
+        transitions=transitions,
+        initial_embeddings=initial_embeddings,
         embedding_dropout_keep_rate=FLAGS.embedding_keep_rate)
 
     # Extract top element of final stack timestep.
     final_stack = stack.final_stack
-    stack_top = final_stack[:, 0]
-    sentence_vector = stack_top.reshape((-1, FLAGS.model_dim))
+    stack_top = tf.slice(final_stack, [FLAGS.batch_size * (FLAGS.seq_length - 1), 0], [-1, -1])
+    sentence_vector = stack_top  # DEV works?
 
     sentence_vector = util.Dropout(sentence_vector, FLAGS.semantic_classifier_keep_rate, apply_dropout)
 
@@ -86,7 +86,7 @@ def build_sentence_model(cls, vocab_size, seq_length, tokens, transitions,
     logits = util.Linear(
         sentence_vector, FLAGS.model_dim, num_classes, vs, use_bias=True)
 
-    return stack.transitions_pred, logits
+    return stack, stack.transitions_pred, logits
 
 
 
@@ -127,23 +127,23 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
     # Build two hard stack models which scan over input sequences.
     premise_model = cls(
         FLAGS.model_dim, FLAGS.word_embedding_dim, vocab_size, seq_length,
-        compose_network, embedding_projection_network, apply_dropout, vs, 
-        X=premise_tokens, 
-        transitions=premise_transitions, 
-        initial_embeddings=initial_embeddings, 
+        compose_network, embedding_projection_network, apply_dropout, vs,
+        X=premise_tokens,
+        transitions=premise_transitions,
+        initial_embeddings=initial_embeddings,
         embedding_dropout_keep_rate=FLAGS.embedding_keep_rate)
     hypothesis_model = cls(
         FLAGS.model_dim, FLAGS.word_embedding_dim, vocab_size, seq_length,
-        compose_network, embedding_projection_network, apply_dropout, vs, 
-        X=hypothesis_tokens, 
-        transitions=hypothesis_transitions, 
-        initial_embeddings=initial_embeddings, 
+        compose_network, embedding_projection_network, apply_dropout, vs,
+        X=hypothesis_tokens,
+        transitions=hypothesis_transitions,
+        initial_embeddings=initial_embeddings,
         embedding_dropout_keep_rate=FLAGS.embedding_keep_rate)
 
     # Extract top element of final stack timestep.
     premise_stack_top = premise_model.final_stack[:, 0]
     hypothesis_stack_top = hypothesis_model.final_stack[:, 0]
-    
+
     premise_vector = premise_stack_top.reshape((-1, FLAGS.model_dim))
     hypothesis_vector = hypothesis_stack_top.reshape((-1, FLAGS.model_dim))
 
@@ -162,21 +162,23 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
     return premise_model.transitions_pred, hypothesis_model.transitions_pred, logits
 
 
-def build_cost(logits, targets):
+def build_cost(logits, targets, batch_size, num_classes):
     """
     Build a classification cost function.
     """
-    # Clip gradients coming from the cost function.
-    logits = theano.gradient.grad_clip(
-        logits, -1. * FLAGS.clipping_max_norm, FLAGS.clipping_max_norm)
 
-    predicted_dist = T.nnet.softmax(logits)
+    # densify the sparse targets (turn into one-hot matrix)
+    targets_dense = util.convert_labels_to_onehot(targets, batch_size, num_classes)
 
-    costs = T.nnet.categorical_crossentropy(predicted_dist, targets)
-    cost = costs.mean()
+    # # Clip gradients coming from the cost function.
+    # logits = theano.gradient.grad_clip(
+    #     logits, -1. * FLAGS.clipping_max_norm, FLAGS.clipping_max_norm)
 
-    pred = T.argmax(logits, axis=1)
-    acc = 1. - T.mean(T.cast(T.neq(pred, targets), theano.config.floatX))
+    costs = tf.nn.softmax_cross_entropy_with_logits(logits, targets_dense)
+    cost = tf.reduce_mean(costs)
+
+    pred = tf.to_int32(tf.argmax(logits, 1))
+    acc = 1. - tf.reduce_mean(tf.to_float(tf.not_equal(pred, targets)))
 
     return cost, acc
 
@@ -286,10 +288,8 @@ def train():
             util.MakeEvalIterator((e_X, e_transitions, e_y, e_num_transitions), FLAGS.batch_size)))
 
     # Set up the placeholders.
-
-    y = T.vector("y", dtype="int32")
-    lr = T.scalar("lr")
-    apply_dropout = T.scalar("apply_dropout")  # 1: Training with dropout, 0: Eval
+    y = tf.placeholder(tf.int32, shape=(None,), name="y")
+    apply_dropout = tf.placeholder(tf.float32, name="apply_dropout") # 1: Training with dropout, 0: Eval
 
     logger.Log("Building model.")
     vs = util.VariableStore(
@@ -297,30 +297,30 @@ def train():
     model_cls = getattr(rembed.stack, FLAGS.model_type)
     if data_manager.SENTENCE_PAIR_DATA:
         X = T.itensor3("X")
-        transitions = T.itensor3("transitions")   
+        transitions = T.itensor3("transitions")
         num_transitions = T.imatrix("num_transitions")
 
         predicted_premise_transitions, predicted_hypothesis_transitions, logits = build_sentence_pair_model(
             model_cls, len(vocabulary), FLAGS.seq_length,
-            X, transitions, len(data_manager.LABEL_MAP), apply_dropout, vs, 
+            X, transitions, len(data_manager.LABEL_MAP), apply_dropout, vs,
             initial_embeddings=initial_embeddings, project_embeddings=(not train_embeddings))
     else:
-        X = T.matrix("X", dtype="int32")
-        transitions = T.imatrix("transitions")   
-        num_transitions = T.vector("num_transitions", dtype="int32")
+        X = tf.placeholder(tf.int32, name="X")
+        transitions = tf.placeholder(tf.int32, shape=(FLAGS.batch_size, FLAGS.seq_length), name="transitions")
+        num_transitions = tf.placeholder(tf.int32, name="num_transitions")
 
-        predicted_transitions, logits = build_sentence_model(
+        stack, predicted_transitions, logits = build_sentence_model(
             model_cls, len(vocabulary), FLAGS.seq_length,
-            X, transitions, len(data_manager.LABEL_MAP), apply_dropout, vs, 
-            initial_embeddings=initial_embeddings, project_embeddings=(not train_embeddings))        
+            X, transitions, len(data_manager.LABEL_MAP), apply_dropout, vs,
+            initial_embeddings=initial_embeddings, project_embeddings=(not train_embeddings))
 
-    xent_cost, acc = build_cost(logits, y)
+    xent_cost, acc = build_cost(logits, y, FLAGS.batch_size, len(data_manager.LABEL_MAP))
 
     # Set up L2 regularization.
     l2_cost = 0.0
     for var in vs.vars:
         if "embedding" not in var:
-            l2_cost += FLAGS.l2_lambda * T.sum(T.sqr(vs.vars[var]))
+            l2_cost += FLAGS.l2_lambda * tf.reduce_sum(tf.square(vs.vars[var]))
 
     # Compute cross-entropy cost on action predictions.
     if (not data_manager.SENTENCE_PAIR_DATA) and predicted_transitions is not None:
@@ -331,8 +331,8 @@ def train():
         action_cost = p_action_cost + h_action_cost
         action_acc = (p_action_acc + h_action_acc) / 2  # TODO(SB): Average over transitions, not words.
     else:
-        action_cost = T.constant(0.0)
-        action_acc = T.constant(0.0)
+        action_cost = tf.constant(0.0)
+        action_acc = tf.constant(0.0)
 
     # TODO(jongauthier): Add hyperparameter for trading off action cost vs xent
     # cost
@@ -344,31 +344,46 @@ def train():
     else:
         trained_params = [vs.vars[key] for key in vs.vars if 'embedding' not in key]
 
-    new_values = util.RMSprop(total_cost, trained_params, lr)
+#    optim = tf.train.RMSPropOptimizer(FLAGS.learning_rate, 0.9, epsilon=1e-6)
+    optim = tf.train.GradientDescentOptimizer(FLAGS.learning_rate)
+    train_op = optim.minimize(total_cost)
     # Training open-vocabulary embeddings is a questionable idea right now. Disabled:
     # new_values.append(
     #     util.embedding_SGD(total_cost, embedding_params, embedding_lr))
 
-    # Create training and eval functions. 
-    # Unused variable warnings are supressed so that num_transitions can be passed in when training Model 0,
-    # which ignores it. This yields more readable code that is very slightly slower.
-    logger.Log("Building update function.")
-    update_fn = theano.function(
-        [X, transitions, y, num_transitions, lr, apply_dropout],
-        [total_cost, xent_cost, action_cost, action_acc, l2_cost, acc],
-        updates=new_values,
-        on_unused_input='warn')
-    logger.Log("Building eval function.")
-    eval_fn = theano.function([X, transitions, y, num_transitions, apply_dropout], [acc, action_acc],
-        on_unused_input='warn')
-    logger.Log("Training.")
+    # # Create training and eval functions.
+    # # Unused variable warnings are supressed so that num_transitions can be passed in when training Model 0,
+    # # which ignores it. This yields more readable code that is very slightly slower.
+    # logger.Log("Building update function.")
+    # update_fn = theano.function(
+    #     [X, transitions, y, num_transitions, lr, apply_dropout],
+    #     [total_cost, xent_cost, action_cost, action_acc, l2_cost, acc],
+    #     updates=new_values,
+    #     on_unused_input='warn')
+    # logger.Log("Building eval function.")
+    # eval_fn = theano.function([X, transitions, y, num_transitions, apply_dropout], [acc, action_acc],
+    #     on_unused_input='warn')
+    # logger.Log("Training.")
+
+    sess = tf.Session()
+    sess.run(tf.initialize_all_variables())
+
+    train_fetch = (train_op, total_cost, xent_cost, action_cost, action_acc, l2_cost, acc)
+    eval_fetch = (acc, action_acc)
 
     # Main training loop.
     for step in range(FLAGS.training_steps):
+        stack.zero(sess)
+
         X_batch, transitions_batch, y_batch, num_transitions_batch = training_data_iter.next()
-        ret = update_fn(X_batch, transitions_batch, y_batch, num_transitions_batch,
-                        FLAGS.learning_rate, 1.0)
-        total_cost_val, xent_cost_val, action_cost_val, action_acc_val, l2_cost_val, acc_val = ret
+        if len(X_batch) != FLAGS.batch_size:
+            continue
+        ret = sess.run(train_fetch, {X: X_batch,
+                                     transitions: transitions_batch,
+                                     y: y_batch,
+                                     num_transitions: num_transitions_batch,
+                                     apply_dropout: 1.0})
+        _, total_cost_val, xent_cost_val, action_cost_val, action_acc_val, l2_cost_val, acc_val = ret
 
         if step % FLAGS.statistics_interval_steps == 0:
             logger.Log(
@@ -383,14 +398,21 @@ def train():
                 action_acc_accum = 0.0
                 eval_batches = 0.0
                 for (eval_X_batch, eval_transitions_batch, eval_y_batch, eval_num_transitions_batch) in eval_set[1]:
-                    acc_value, action_acc_value = eval_fn(
-                        eval_X_batch, eval_transitions_batch,
-                        eval_y_batch, eval_num_transitions_batch, 0.0)
+                    acc_value, action_acc_value = sess.run(
+                            eval_fetch,
+                            {X: eval_X_batch,
+                             transitions: eval_transitions_batch,
+                             y: eval_y_batch,
+                             num_transitions: eval_num_transitions_batch,
+                             apply_dropout: 0.0})
                     acc_accum += acc_value
                     action_acc_accum += action_acc_value
                     eval_batches += 1.0
                 logger.Log("Step: %i\tEval acc: %f\t %f\t%s" %
                           (step, acc_accum / eval_batches, action_acc_accum / eval_batches, eval_set[0]))
+
+
+    sess.close()
 
 if __name__ == '__main__':
     # Experiment naming.
@@ -414,9 +436,9 @@ if __name__ == '__main__':
                        "")
     gflags.DEFINE_integer("model_dim", 5, "")
     gflags.DEFINE_integer("word_embedding_dim", 5, "")
-    gflags.DEFINE_float("semantic_classifier_keep_rate", 0.5, 
+    gflags.DEFINE_float("semantic_classifier_keep_rate", 0.5,
         "Used for dropout in the semantic task classifier.")
-    gflags.DEFINE_float("embedding_keep_rate", 0.5, 
+    gflags.DEFINE_float("embedding_keep_rate", 0.5,
         "Used for dropout on transformed embeddings.")
     gflags.DEFINE_boolean("lstm_composition", False, "")
     # gflags.DEFINE_integer("num_composition_layers", 1, "")
