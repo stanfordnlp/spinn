@@ -67,6 +67,7 @@ def build_sentence_model(cls, vocab_size, seq_length, tokens, transitions,
         compose_network = partial(util.TreeLSTMLayer,
                                   initializer=util.HeKaimingInitializer())
     else:
+        assert not FLAGS.connect_tracking_comp, "Can only connect tracking and composition unit while using TreeLSTM"
         compose_network = partial(util.ReLULayer,
                                   initializer=util.HeKaimingInitializer())
 
@@ -88,7 +89,8 @@ def build_sentence_model(cls, vocab_size, seq_length, tokens, transitions,
         initial_embeddings=initial_embeddings, 
         embedding_dropout_keep_rate=FLAGS.embedding_keep_rate,
         ss_mask_gen=ss_mask_gen,
-        ss_prob=ss_prob)
+        ss_prob=ss_prob,
+        connect_tracking_comp=FLAGS.connect_tracking_comp)
 
     # Extract top element of final stack timestep.
     final_stack = stack.final_stack
@@ -132,6 +134,7 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
         compose_network = partial(util.TreeLSTMLayer,
                                   initializer=util.HeKaimingInitializer())
     else:
+        assert not FLAGS.connect_tracking_comp, "Can only connect tracking and composition unit while using TreeLSTM"
         compose_network = partial(util.ReLULayer,
                                   initializer=util.HeKaimingInitializer())
 
@@ -160,7 +163,8 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
         initial_embeddings=initial_embeddings, 
         embedding_dropout_keep_rate=FLAGS.embedding_keep_rate,
         ss_mask_gen=ss_mask_gen,
-        ss_prob=ss_prob)
+        ss_prob=ss_prob,
+        connect_tracking_comp=FLAGS.connect_tracking_comp)
     hypothesis_model = cls(
         FLAGS.model_dim, FLAGS.word_embedding_dim, vocab_size, seq_length,
         compose_network, embedding_projection_network, training_mode, ground_truth_transitions_visible, vs, 
@@ -171,7 +175,8 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
         initial_embeddings=initial_embeddings, 
         embedding_dropout_keep_rate=FLAGS.embedding_keep_rate,
         ss_mask_gen=ss_mask_gen,
-        ss_prob=ss_prob)
+        ss_prob=ss_prob,
+        connect_tracking_comp=FLAGS.connect_tracking_comp)
 
     # Extract top element of final stack timestep.
     premise_stack_top = premise_model.final_stack[:, 0]
@@ -645,6 +650,10 @@ if __name__ == '__main__':
         "Used for scheduled sampling, with probability of Model 1 over Model 2 being base^#training_steps")
     gflags.DEFINE_boolean("use_difference_feature", True, 
         "Supply the sentence pair classifier with sentence difference features.")
+    gflags.DEFINE_boolean("connect_tracking_comp", False, 
+        "Connect tracking unit and composition unit. Can only be true if using LSTM in both units.")
+
+
 
     # Optimization settings.
     gflags.DEFINE_integer("training_steps", 1000000, "Stop training after this point.")

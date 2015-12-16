@@ -129,7 +129,7 @@ class VariableStore(object):
             full_name = "%s/%s" % (self.prefix, name)
             if self.logger:
                 self.logger.Log(
-                    "Created variable " + full_name, level=self.logger.DEBUG)
+                    "Created variable " + full_name + " shape: " + str(shape), level=self.logger.DEBUG)
             init_value = initializer(shape).astype(theano.config.floatX)
             self.vars[name] = theano.shared(init_value,
                                             name=full_name)
@@ -221,11 +221,11 @@ def IdentityLayer(inp, inp_dim, outp_dim, vs, name="identity_layer", use_bias=Tr
     return inp
 
 
-def TreeLSTMLayer(lstm_prev, _, full_memory_dim, vs, name="tree_lstm", initializer=None):
+def TreeLSTMLayer(lstm_prev, external_state, full_memory_dim, vs, name="tree_lstm", initializer=None, external_state_dim=0):
     assert full_memory_dim % 2 == 0, "Input is concatenated (h, c); dim must be even."
     hidden_dim = full_memory_dim / 2
 
-    W = vs.add_param("%s/W" % name, (hidden_dim * 2, hidden_dim * 5),
+    W = vs.add_param("%s/W" % name, (hidden_dim * 2 + external_state_dim, hidden_dim * 5),
                      initializer=initializer)
     b = vs.add_param("%s/b" % name, (hidden_dim * 5,),
                      initializer=TreeLSTMBiasInitializer())
@@ -238,8 +238,10 @@ def TreeLSTMLayer(lstm_prev, _, full_memory_dim, vs, name="tree_lstm", initializ
     l_c_prev = lstm_prev[:, hidden_dim:2 * hidden_dim]
     r_h_prev = lstm_prev[:, 2 * hidden_dim:3 * hidden_dim]
     r_c_prev = lstm_prev[:, 3 * hidden_dim:]
-
-    h_prev = T.concatenate([l_h_prev, r_h_prev], axis=1)
+    if external_state_dim == 0:
+        h_prev = T.concatenate([l_h_prev, r_h_prev], axis=1)
+    else:
+        h_prev = T.concatenate([l_h_prev, external_state, r_h_prev], axis=1)
 
     # Compute and slice gate values
     gates = T.dot(h_prev, W) + b

@@ -72,7 +72,8 @@ class HardStack(object):
                  ss_mask_gen=None, 
                  ss_prob=0.0,
                  use_tracking_lstm=False,
-                tracking_lstm_hidden_dim=8):
+                 tracking_lstm_hidden_dim=8,
+                 connect_tracking_comp=False):
         """
         Construct a HardStack.
 
@@ -130,12 +131,16 @@ class HardStack(object):
         self.X = X
         self.transitions = transitions
         
-        # Mask for scheduled sampling
+        # Mask for scheduled sampling.
         self.ss_mask_gen = ss_mask_gen
-        # Flag for scheduled sampling
+        # Flag for scheduled sampling.
         self.interpolate = interpolate
-        # Training step number
+        # Training step number.
         self.ss_prob = ss_prob
+        # Connect tracking unit and composition unit.
+        self.connect_tracking_comp = connect_tracking_comp
+        assert (use_tracking_lstm or not connect_tracking_comp), \
+            "Must use tracking LSTM if connecting tracking and composition units" 
 
         self._make_params()
         self._make_inputs()
@@ -210,9 +215,13 @@ class HardStack(object):
 
         # Now update the stack: first precompute merge results.
         merge_items = stack_t[:, :2].reshape((-1, self.model_dim * 2))
-        merge_value = self._compose_network(
-            merge_items, self.model_dim * 2, self.model_dim,
-            self._vs, name="compose")
+        if not self.connect_tracking_comp:
+            merge_value = self._compose_network(merge_items, self.model_dim * 2, self.model_dim,
+                self._vs, name="compose")
+        else:
+            tracking_h_t = tracking_hidden[:, :self.tracking_lstm_hidden_dim]
+            merge_value = self._compose_network(merge_items, tracking_h_t, self.model_dim,
+                self._vs, name="compose", external_state_dim=self.tracking_lstm_hidden_dim)
 
         # Compute new stack value.
         stack_next = update_hard_stack(
