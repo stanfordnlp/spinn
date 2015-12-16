@@ -32,17 +32,20 @@ FIXED_PARAMETERS = {
     "clipping_max_value":  "5.0",
     "batch_size":  "32",
     "lstm_composition": "",
+    "use_tracking_lstm": "",
     "ckpt_root":    os.path.join("/afs/cs.stanford.edu/u", getpass.getuser(), "scr/")  # Launching user's home scr dir
 }
 
 # Tunable parameters.
 SWEEP_PARAMETERS = {
-    "learning_rate":      (EXP, 0.0001, 0.0003),
+    "learning_rate":      (EXP, 0.0001, 0.0006),
     "l2_lambda":   		  (EXP, 2e-7, 2e-5),
     "init_range":         (EXP, 0.002, 0.008),
     "semantic_classifier_keep_rate": (LIN, 0.4, 0.75),
     "embedding_keep_rate": (LIN, 0.4, 1.0),
-    "scheduled_sampling_exponent_base": (SS_BASE, 2e-6, 2e-4)
+    "scheduled_sampling_exponent_base": (SS_BASE, 2e-6, 2e-4),
+    "transition_cost_scale": (LIN, 5.0, 50.0),
+    "tracking_lstm_hidden_dim": (EXP, 2, 25)
 }
 
 sweep_name = "sweep_" + \

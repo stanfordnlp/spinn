@@ -44,6 +44,10 @@ def ZeroInitializer():
     return lambda shape: np.zeros(shape)
 
 
+def OneInitializer():
+    return lambda shape: np.ones(shape)
+
+
 def TreeLSTMBiasInitializer():
     def init(shape):
         hidden_dim = shape[0] / 5
@@ -69,22 +73,41 @@ def DoubleIdentityInitializer(range):
     return init
 
 
-def BatchNorm(x, input_dim, vs, name, axes=[0]):
+def BatchNorm(x, input_dim, vs, name, training_mode, axes=[0], momentum=0.9):
     """Apply simple batch normalization.
     This requires introducing new learned scale parameters, so it's 
     important to use unique names unless you're sure you want to share 
     these parameters.
     """
-    g = vs.add_param("%s_bn_g" %
-                 name, (input_dim))
-    b = vs.add_param("%s_bn_b" %
-                     name, (input_dim), initializer=ZeroInitializer())
 
-    centered_x = x - x.mean(axis=axes, keepdims=True)
-    scale = g / T.sqrt(x.var(axis=axes, keepdims=True) + 1e-12)
-    rval = centered_x * scale + b
-    
-    return rval
+    # Create the trained gamma and beta parameters.
+    g = vs.add_param("%s_bn_g" % name, (input_dim), 
+        initializer=OneInitializer())
+    b = vs.add_param("%s_bn_b" % name, (input_dim), 
+        initializer=ZeroInitializer())
+
+    # Create the training set moving averages for test time use.
+    tracking_std = vs.add_param("%s_bn_ts" % name, (input_dim), 
+        initializer=OneInitializer(),
+        trainable=False)
+    tracking_mean = vs.add_param("%s_bn_tm" % name, (input_dim), 
+        initializer=ZeroInitializer(),
+        trainable=False)
+
+    # Compute the empirical mean and std.
+    mean = x.mean(axis=axes, keepdims=True)
+    std = T.sqrt(x.var(axis=axes, keepdims=True) + 1e-12)
+
+    # Update the moving averages.
+    vs.add_nongradient_update(tracking_std, (momentum * tracking_std + (1 - momentum) * std).flatten(ndim=1))
+    vs.add_nongradient_update(tracking_mean, (momentum * tracking_mean + (1 - momentum) * mean).flatten(ndim=1))
+
+    # Switch between train and test modes.
+    effective_mean = mean * training_mode + tracking_mean * (1 - training_mode)
+    effective_std = std * training_mode + tracking_std * (1 - training_mode)
+
+    # Apply batch norm.
+    return (x - effective_mean) * (g / effective_std) + b
 
 
 class VariableStore(object):
@@ -93,9 +116,12 @@ class VariableStore(object):
         self.prefix = prefix
         self.default_initializer = default_initializer
         self.vars = OrderedDict()  # Order is used in saving and loading
+        self.savable_vars = OrderedDict()
+        self.trainable_vars = OrderedDict()
         self.logger = logger
+        self.nongradient_updates = OrderedDict()
 
-    def add_param(self, name, shape, initializer=None):
+    def add_param(self, name, shape, initializer=None, savable=True, trainable=True):
         if not initializer:
             initializer = self.default_initializer
 
@@ -107,11 +133,16 @@ class VariableStore(object):
             init_value = initializer(shape).astype(theano.config.floatX)
             self.vars[name] = theano.shared(init_value,
                                             name=full_name)
+            if savable:
+                self.savable_vars[name] = self.vars[name]
+            if trainable:
+                self.trainable_vars[name] = self.vars[name]
+
         return self.vars[name]
 
     def save_checkpoint(self, filename="vs_ckpt", keys=None, step=None):
         if not keys:
-            keys = self.vars
+            keys = self.savable_vars
         save_file = open(filename, 'w')  # this will overwrite current contents
         for key in keys:
             if self.logger:
@@ -125,7 +156,7 @@ class VariableStore(object):
 
     def load_checkpoint(self, filename="vs_ckpt", keys=None, get_step=False):
         if not keys:
-            keys = self.vars
+            keys = self.savable_vars
         save_file = open(filename)
         for key in keys:
             if self.logger:
@@ -135,6 +166,12 @@ class VariableStore(object):
             self.vars[key].set_value(cPickle.load(save_file), borrow=True)
         if get_step:
             return cPickle.load(save_file)
+
+    def add_nongradient_update(self, variable, new_value):
+        # Track an update that should be applied during training but that aren't gradients.
+        # self.nongradient_updates should be fed as an update to theano.function().
+        self.nongradient_updates[variable] = new_value
+
 
 def ReLULayer(inp, inp_dim, outp_dim, vs, name="relu_layer", use_bias=True, initializer=None):
     pre_nl = Linear(inp, inp_dim, outp_dim, vs, name, use_bias, initializer)
