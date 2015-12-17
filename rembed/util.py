@@ -262,11 +262,14 @@ def TreeLSTMLayer(lstm_prev, external_state, full_memory_dim, vs, name="tree_lst
 
 
 
-def LSTMLayer(lstm_prev, inp, inp_dim, hidden_dim, vs, name="lstm"):
+def LSTMLayer(lstm_prev, inp, inp_dim, full_memory_dim, vs, name="lstm", initializer=None):
+    assert full_memory_dim % 2 == 0, "Input is concatenated (h, c); dim must be even."
+    hidden_dim = full_memory_dim / 2
+
     # input -> hidden mapping
-    W = vs.add_param("%s_W" % name, (inp_dim, hidden_dim * 4))
+    W = vs.add_param("%s_W" % name, (inp_dim, hidden_dim * 4), initializer=initializer)
     # hidden -> hidden mapping
-    U = vs.add_param("%s_U" % name, (hidden_dim, hidden_dim * 4))
+    U = vs.add_param("%s_U" % name, (hidden_dim, hidden_dim * 4), initializer=initializer)
     # gate biases
     # TODO(jgauthier): support excluding params from regularization
     b = vs.add_param("%s_b" % name, (hidden_dim * 4,),
@@ -297,7 +300,7 @@ def LSTMLayer(lstm_prev, inp, inp_dim, hidden_dim, vs, name="lstm"):
 
 def TrackingUnit(state_prev, inp, inp_dim, hidden_dim, vs, name="track_unit"):
     # Pass previous state and input to an LSTM layer.
-    state = LSTMLayer(state_prev, inp, inp_dim, hidden_dim, vs, name="%s/lstm" % name)
+    state = LSTMLayer(state_prev, inp, inp_dim, 2 * hidden_dim, vs, name="%s/lstm" % name)
 
     # Pass LSTM states through a Linear layer to predict the next transition.
     pred = Linear(state, 2 * hidden_dim, NUM_TRANSITION_TYPES, vs, name="%s/linear" % name)

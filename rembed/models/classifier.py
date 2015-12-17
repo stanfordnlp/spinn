@@ -36,6 +36,7 @@ from rembed.data.sst import load_sst_data
 from rembed.data.snli import load_snli_data
 
 import rembed.stack
+import rembed.plain_rnn
 
 
 FLAGS = gflags.FLAGS
@@ -63,23 +64,28 @@ def build_sentence_model(cls, vocab_size, seq_length, tokens, transitions,
     """
 
     # Prepare layer which performs stack element composition.
-    if FLAGS.lstm_composition:
-        compose_network = partial(util.TreeLSTMLayer,
-                                  initializer=util.HeKaimingInitializer())
+    if cls is rembed.plain_rnn.RNN:
+        compose_network = partial(util.LSTMLayer,
+                                      initializer=util.HeKaimingInitializer())
+        embedding_projection_network = None
     else:
-        assert not FLAGS.connect_tracking_comp, "Can only connect tracking and composition unit while using TreeLSTM"
-        compose_network = partial(util.ReLULayer,
-                                  initializer=util.HeKaimingInitializer())
+        if FLAGS.lstm_composition:
+            compose_network = partial(util.TreeLSTMLayer,
+                                      initializer=util.HeKaimingInitializer())
+        else:
+            assert not FLAGS.connect_tracking_comp, "Can only connect tracking and composition unit while using TreeLSTM"
+            compose_network = partial(util.ReLULayer,
+                                      initializer=util.HeKaimingInitializer())
 
-    if project_embeddings:
-        embedding_projection_network = util.Linear
-    else:
-        assert FLAGS.word_embedding_dim == FLAGS.model_dim, \
-            "word_embedding_dim must equal model_dim unless a projection layer is used."
-        embedding_projection_network = util.IdentityLayer
+        if project_embeddings:
+            embedding_projection_network = util.Linear
+        else:
+            assert FLAGS.word_embedding_dim == FLAGS.model_dim, \
+                "word_embedding_dim must equal model_dim unless a projection layer is used."
+            embedding_projection_network = util.IdentityLayer
 
     # Build hard stack which scans over input sequence.
-    stack = cls(
+    sentence_model = cls(
         FLAGS.model_dim, FLAGS.word_embedding_dim, vocab_size, seq_length,
         compose_network, embedding_projection_network, training_mode, ground_truth_transitions_visible, vs, 
         use_tracking_lstm=FLAGS.use_tracking_lstm,
@@ -93,9 +99,7 @@ def build_sentence_model(cls, vocab_size, seq_length, tokens, transitions,
         connect_tracking_comp=FLAGS.connect_tracking_comp)
 
     # Extract top element of final stack timestep.
-    final_stack = stack.final_stack
-    stack_top = final_stack[:, 0]
-    sentence_vector = stack_top.reshape((-1, FLAGS.model_dim))
+    sentence_vector = sentence_model.embeddings.reshape((-1, FLAGS.model_dim))
 
     sentence_vector = util.BatchNorm(sentence_vector, FLAGS.model_dim, vs, "sentence_vector", training_mode)
     sentence_vector = util.Dropout(sentence_vector, FLAGS.semantic_classifier_keep_rate, training_mode)
@@ -104,7 +108,7 @@ def build_sentence_model(cls, vocab_size, seq_length, tokens, transitions,
     logits = util.Linear(
         sentence_vector, FLAGS.model_dim, num_classes, vs, use_bias=True)
 
-    return stack.transitions_pred, logits
+    return sentence_model.transitions_pred, logits
 
 
 
@@ -129,21 +133,27 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
       vs: Variable store.
     """
 
-    # Prepare layer which performs stack element composition.
-    if FLAGS.lstm_composition:
-        compose_network = partial(util.TreeLSTMLayer,
-                                  initializer=util.HeKaimingInitializer())
-    else:
-        assert not FLAGS.connect_tracking_comp, "Can only connect tracking and composition unit while using TreeLSTM"
-        compose_network = partial(util.ReLULayer,
-                                  initializer=util.HeKaimingInitializer())
 
-    if project_embeddings:
-        embedding_projection_network = util.Linear
+    # Prepare layer which performs stack element composition.
+    if cls is rembed.plain_rnn.RNN:
+        compose_network = partial(util.LSTMLayer,
+                                      initializer=util.HeKaimingInitializer())
+        embedding_projection_network = None
     else:
-        assert FLAGS.word_embedding_dim == FLAGS.model_dim, \
-            "word_embedding_dim must equal model_dim unless a projection layer is used."
-        embedding_projection_network = util.IdentityLayer
+        if FLAGS.lstm_composition:
+            compose_network = partial(util.TreeLSTMLayer,
+                                      initializer=util.HeKaimingInitializer())
+        else:
+            assert not FLAGS.connect_tracking_comp, "Can only connect tracking and composition unit while using TreeLSTM"
+            compose_network = partial(util.ReLULayer,
+                                      initializer=util.HeKaimingInitializer())
+
+        if project_embeddings:
+            embedding_projection_network = util.Linear
+        else:
+            assert FLAGS.word_embedding_dim == FLAGS.model_dim, \
+                "word_embedding_dim must equal model_dim unless a projection layer is used."
+            embedding_projection_network = util.IdentityLayer
 
     # Split the two sentences
     premise_tokens = tokens[:, :, 0]
@@ -179,11 +189,11 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
         connect_tracking_comp=FLAGS.connect_tracking_comp)
 
     # Extract top element of final stack timestep.
-    premise_stack_top = premise_model.final_stack[:, 0]
-    hypothesis_stack_top = hypothesis_model.final_stack[:, 0]
+    premise_embeddings = premise_model.embeddings
+    hypothesis_embeddings = hypothesis_model.embeddings
     
-    premise_vector = premise_stack_top.reshape((-1, FLAGS.model_dim))
-    hypothesis_vector = hypothesis_stack_top.reshape((-1, FLAGS.model_dim))
+    premise_vector = premise_embeddings.reshape((-1, FLAGS.model_dim))
+    hypothesis_vector = hypothesis_embeddings.reshape((-1, FLAGS.model_dim))
 
     # Concatenate and apply dropout
     if FLAGS.use_difference_feature:
@@ -454,8 +464,12 @@ def run(only_forward=False):
     logger.Log("Building model.")
     vs = util.VariableStore(
         default_initializer=util.UniformInitializer(FLAGS.init_range), logger=logger)
-    model_cls = getattr(rembed.stack, FLAGS.model_type)
-    
+
+    if FLAGS.model_type == "RNN":
+        model_cls = rembed.plain_rnn.RNN
+    else:
+        model_cls = getattr(rembed.stack, FLAGS.model_type)
+
     # Generator of mask for scheduled sampling
     numpy_random = np.random.RandomState(1234)
     ss_mask_gen = T.shared_randomstreams.RandomStreams(numpy_random.randint(999999))
@@ -627,7 +641,7 @@ if __name__ == '__main__':
 
     # Model architecture settings.
     gflags.DEFINE_enum("model_type", "Model0",
-                       ["Model0", "Model1", "Model2", "Model2S"],
+                       ["RNN", "Model0", "Model1", "Model2", "Model2S"],
                        "")
     gflags.DEFINE_boolean("allow_gt_transitions_in_eval", False,
                           "Whether to use ground truth transitions in evaluation when appropriate "
@@ -635,7 +649,7 @@ if __name__ == '__main__':
     gflags.DEFINE_integer("model_dim", 8, "")
     gflags.DEFINE_integer("word_embedding_dim", 8, "")
     
-    gflags.DEFINE_integer("tracking_lstm_hidden_dim", 8, "")
+    gflags.DEFINE_integer("tracking_lstm_hidden_dim", 4, "")
     gflags.DEFINE_boolean("use_tracking_lstm", False,
                           "Whether to use LSTM in the tracking unit")
 

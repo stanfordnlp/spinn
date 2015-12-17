@@ -315,6 +315,7 @@ class HardStack(object):
 
         stack_ind = 0 if self.interpolate else 1
         self.final_stack = scan_ret[stack_ind][-1]
+        self.embeddings = self.final_stack[:, 0]
 
         self.transitions_pred = None
         if self._predict_network is not None:
