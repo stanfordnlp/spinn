@@ -7,9 +7,10 @@ import random
 import numpy as np
 import theano
 from theano import tensor as T
+from theano.sandbox.rng_mrg import MRG_RandomStreams
 
 numpy_random = np.random.RandomState(1234)
-theano_random = T.shared_randomstreams.RandomStreams(numpy_random.randint(999999))
+theano_random = MRG_RandomStreams(numpy_random.randint(999999))
 
 # With loaded embedding matrix, the padding vector will be initialized to zero
 # and will not be trained. Hopefully this isn't a problem. It seems better than
@@ -212,7 +213,7 @@ def Dropout(inp, keep_rate, apply_dropout):
 
     dropout_mask = theano_random.binomial(n=1, p=keep_rate, size=inp.shape, dtype=theano.config.floatX)
 
-    dropout_candidate = dropout_mask * inp 
+    dropout_candidate = dropout_mask * inp
     rescaling_candidate = keep_rate * inp
     result = apply_dropout * dropout_candidate + (1 - apply_dropout) * rescaling_candidate
 
@@ -255,7 +256,7 @@ def TreeLSTMLayer(lstm_prev, external_state, full_memory_dim, vs, name="tree_lst
     # Apply nonlinearities
     i_gate = T.nnet.sigmoid(i_gate)
     fl_gate = T.nnet.sigmoid(fl_gate)
-    fr_gate = T.nnet.sigmoid(fr_gate) 
+    fr_gate = T.nnet.sigmoid(fr_gate)
     o_gate = T.nnet.sigmoid(o_gate)
     cell_inp = T.tanh(cell_inp)
 
@@ -323,7 +324,7 @@ def MLP(inp, inp_dim, outp_dim, vs, layer=ReLULayer, hidden_dims=None,
     prev_val = inp
     dims = [inp_dim] + hidden_dims + [outp_dim]
     for i, (src_dim, tgt_dim) in enumerate(zip(dims, dims[1:])):
-        prev_val = layer(prev_val, src_dim, tgt_dim, vs, 
+        prev_val = layer(prev_val, src_dim, tgt_dim, vs,
                          use_bias=True,
                          name="%s/%i" % (name, i),
                          initializer=initializer)
@@ -393,11 +394,11 @@ def TrimDataset(dataset, seq_length, eval_mode=False, sentence_pair_data=False):
     else:
         if sentence_pair_data:
             new_dataset = [example for example in dataset if
-                len(example["premise_transitions"]) <= seq_length and 
-                len(example["hypothesis_transitions"]) <= seq_length]   
+                len(example["premise_transitions"]) <= seq_length and
+                len(example["hypothesis_transitions"]) <= seq_length]
         else:
             new_dataset = [example for example in dataset if len(
-                example["transitions"]) <= seq_length]         
+                example["transitions"]) <= seq_length]
         return new_dataset
 
 
@@ -443,7 +444,7 @@ def CropAndPad(dataset, length, logger=None, sentence_pair_data=False):
     # the final stack top is the root of the tree. If cropping is used, it should
     # just introduce empty nodes into the tree.
     if sentence_pair_data:
-        keys = [("premise_transitions", "num_premise_transitions", "premise_tokens"), 
+        keys = [("premise_transitions", "num_premise_transitions", "premise_tokens"),
                 ("hypothesis_transitions", "num_hypothesis_transitions", "hypothesis_tokens")]
     else:
         keys = [("transitions", "num_transitions", "tokens")]
@@ -500,7 +501,7 @@ def MakeEvalIterator(sources, batch_size):
     return data_iter
 
 
-def PreprocessDataset(dataset, vocabulary, seq_length, data_manager, eval_mode=False, logger=None, 
+def PreprocessDataset(dataset, vocabulary, seq_length, data_manager, eval_mode=False, logger=None,
                       sentence_pair_data=False):
     dataset = TrimDataset(dataset, seq_length, eval_mode=eval_mode, sentence_pair_data=sentence_pair_data)
     dataset = TokensToIDs(vocabulary, dataset, sentence_pair_data=sentence_pair_data)

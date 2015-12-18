@@ -14,8 +14,8 @@ python -m rembed.models.classifier --data_type snli --training_data_path snli_1.
        --eval_data_path snli_1.0/snli_1.0_dev.jsonl --embedding_data_path rembed/tests/test_embedding_matrix.5d.txt \
        --model_dim 10 --word_embedding_dim 5
 
-Note: If you get an error starting with "TypeError: ('Wrong number of dimensions..." during development, 
-    there may already be a saved checkpoint in ckpt_path that matches the name of the model you're developing. 
+Note: If you get an error starting with "TypeError: ('Wrong number of dimensions..." during development,
+    there may already be a saved checkpoint in ckpt_path that matches the name of the model you're developing.
     Move or delete it as appropriate.
 """
 
@@ -43,7 +43,7 @@ FLAGS = gflags.FLAGS
 
 
 def build_sentence_model(cls, vocab_size, seq_length, tokens, transitions,
-                         num_classes, training_mode, ground_truth_transitions_visible, vs, 
+                         num_classes, training_mode, ground_truth_transitions_visible, vs,
                          initial_embeddings=None, project_embeddings=False, ss_mask_gen=None, ss_prob=0.0):
     """
     Construct a classifier which makes use of some hard-stack model.
@@ -55,7 +55,7 @@ def build_sentence_model(cls, vocab_size, seq_length, tokens, transitions,
       tokens: Theano batch (integer matrix), `batch_size * seq_length`
       transitions: Theano batch (integer matrix), `batch_size * seq_length`
       num_classes: Number of output classes
-      training_mode: A Theano scalar indicating whether to act as a training model 
+      training_mode: A Theano scalar indicating whether to act as a training model
         with dropout (1.0) or to act as an eval model with rescaling (0.0).
       ground_truth_transitions_visible: A Theano scalar. If set (1.0), allow the model access
         to ground truth transitions. This can be disabled at evaluation time to force Model 1
@@ -87,12 +87,12 @@ def build_sentence_model(cls, vocab_size, seq_length, tokens, transitions,
     # Build hard stack which scans over input sequence.
     sentence_model = cls(
         FLAGS.model_dim, FLAGS.word_embedding_dim, vocab_size, seq_length,
-        compose_network, embedding_projection_network, training_mode, ground_truth_transitions_visible, vs, 
+        compose_network, embedding_projection_network, training_mode, ground_truth_transitions_visible, vs,
         use_tracking_lstm=FLAGS.use_tracking_lstm,
         tracking_lstm_hidden_dim=FLAGS.tracking_lstm_hidden_dim,
-        X=tokens, 
-        transitions=transitions, 
-        initial_embeddings=initial_embeddings, 
+        X=tokens,
+        transitions=transitions,
+        initial_embeddings=initial_embeddings,
         embedding_dropout_keep_rate=FLAGS.embedding_keep_rate,
         ss_mask_gen=ss_mask_gen,
         ss_prob=ss_prob,
@@ -108,7 +108,7 @@ def build_sentence_model(cls, vocab_size, seq_length, tokens, transitions,
 
     # Feed forward through a single output layer
     logits = util.Linear(
-        sentence_vector, FLAGS.model_dim, num_classes, vs, 
+        sentence_vector, FLAGS.model_dim, num_classes, vs,
         name="semantic_classifier", use_bias=True)
 
     return sentence_model.transitions_pred, logits
@@ -116,7 +116,7 @@ def build_sentence_model(cls, vocab_size, seq_length, tokens, transitions,
 
 
 def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
-                     num_classes, training_mode, ground_truth_transitions_visible, vs, 
+                     num_classes, training_mode, ground_truth_transitions_visible, vs,
                      initial_embeddings=None, project_embeddings=False, ss_mask_gen=None, ss_prob=0.0):
     """
     Construct a classifier which makes use of some hard-stack model.
@@ -128,7 +128,7 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
       tokens: Theano batch (integer matrix), `batch_size * seq_length`
       transitions: Theano batch (integer matrix), `batch_size * seq_length`
       num_classes: Number of output classes
-      training_mode: A Theano scalar indicating whether to act as a training model 
+      training_mode: A Theano scalar indicating whether to act as a training model
         with dropout (1.0) or to act as an eval model with rescaling (0.0).
       ground_truth_transitions_visible: A Theano scalar. If set (1.0), allow the model access
         to ground truth transitions. This can be disabled at evaluation time to force Model 1
@@ -168,12 +168,12 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
     # Build two hard stack models which scan over input sequences.
     premise_model = cls(
         FLAGS.model_dim, FLAGS.word_embedding_dim, vocab_size, seq_length,
-        compose_network, embedding_projection_network, training_mode, ground_truth_transitions_visible, vs, 
+        compose_network, embedding_projection_network, training_mode, ground_truth_transitions_visible, vs,
         use_tracking_lstm=FLAGS.use_tracking_lstm,
         tracking_lstm_hidden_dim=FLAGS.tracking_lstm_hidden_dim,
-        X=premise_tokens, 
-        transitions=premise_transitions, 
-        initial_embeddings=initial_embeddings, 
+        X=premise_tokens,
+        transitions=premise_transitions,
+        initial_embeddings=initial_embeddings,
         embedding_dropout_keep_rate=FLAGS.embedding_keep_rate,
         ss_mask_gen=ss_mask_gen,
         ss_prob=ss_prob,
@@ -182,12 +182,12 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
         context_sensitive_use_relu=FLAGS.context_sensitive_use_relu)
     hypothesis_model = cls(
         FLAGS.model_dim, FLAGS.word_embedding_dim, vocab_size, seq_length,
-        compose_network, embedding_projection_network, training_mode, ground_truth_transitions_visible, vs, 
+        compose_network, embedding_projection_network, training_mode, ground_truth_transitions_visible, vs,
         use_tracking_lstm=FLAGS.use_tracking_lstm,
         tracking_lstm_hidden_dim=FLAGS.tracking_lstm_hidden_dim,
-        X=hypothesis_tokens, 
-        transitions=hypothesis_transitions, 
-        initial_embeddings=initial_embeddings, 
+        X=hypothesis_tokens,
+        transitions=hypothesis_transitions,
+        initial_embeddings=initial_embeddings,
         embedding_dropout_keep_rate=FLAGS.embedding_keep_rate,
         ss_mask_gen=ss_mask_gen,
         ss_prob=ss_prob,
@@ -198,7 +198,7 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
     # Extract top element of final stack timestep.
     premise_embeddings = premise_model.embeddings
     hypothesis_embeddings = hypothesis_model.embeddings
-    
+
     premise_vector = premise_embeddings.reshape((-1, FLAGS.model_dim))
     hypothesis_vector = hypothesis_embeddings.reshape((-1, FLAGS.model_dim))
 
@@ -231,7 +231,7 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
 
     # Feed forward through a single output layer
     logits = util.Linear(
-        prev_features, prev_features_dim, num_classes, vs, 
+        prev_features, prev_features_dim, num_classes, vs,
         name="semantic_classifier", use_bias=True)
 
     return premise_model.transitions_pred, hypothesis_model.transitions_pred, logits
@@ -287,7 +287,7 @@ def build_transition_cost(logits, targets, num_transitions):
     mask = T.gt(rng, padding)
 
     # Compute acc using the mask
-    acc = 1.0 - (T.sum(errors * mask, dtype=theano.config.floatX) 
+    acc = 1.0 - (T.sum(errors * mask, dtype=theano.config.floatX)
                  / T.sum(num_transitions, dtype=theano.config.floatX))
 
     # Compute cost directly, since we *do* want a cost incentive to get the padding
@@ -304,10 +304,10 @@ def evaluate(eval_fn, eval_set, logger, step):
     for (eval_X_batch, eval_transitions_batch, eval_y_batch, eval_num_transitions_batch) in eval_set[1]:
         acc_value, action_acc_value = eval_fn(
             eval_X_batch, eval_transitions_batch,
-            eval_y_batch, eval_num_transitions_batch, 0.0,  # Eval mode: Don't apply dropout. 
-            int(FLAGS.allow_gt_transitions_in_eval),  # Allow GT transitions to be used according to flag. 
+            eval_y_batch, eval_num_transitions_batch, 0.0,  # Eval mode: Don't apply dropout.
+            int(FLAGS.allow_gt_transitions_in_eval),  # Allow GT transitions to be used according to flag.
             float(FLAGS.allow_gt_transitions_in_eval))  # If flag not set, used scheduled sampling
-                                                        # p(ground truth) = 0.0, 
+                                                        # p(ground truth) = 0.0,
                                                         # else SS p(ground truth) = 1.0
         acc_accum += acc_value
         action_acc_accum += action_acc_value
@@ -335,12 +335,12 @@ def evaluate_expanded(eval_fn, eval_set, eval_path, logger, step, sentence_pair_
         if FLAGS.write_predicted_label:
             label_out = open(eval_lbl_path, "w")
         if sentence_pair_data:
-            for (eval_X_batch, eval_transitions_batch, eval_y_batch, 
+            for (eval_X_batch, eval_transitions_batch, eval_y_batch,
                     eval_num_transitions_batch) in eval_set[1]:
                 acc_value, action_acc_value, sem_logit_values, logits_pred_hyp, logits_pred_prem = eval_fn(
                     eval_X_batch, eval_transitions_batch, eval_y_batch, eval_num_transitions_batch,
-                    0.0,  # Eval mode: Don't apply dropout. 
-                    int(FLAGS.allow_gt_transitions_in_eval),  # Allow GT transitions to be used according to flag. 
+                    0.0,  # Eval mode: Don't apply dropout.
+                    int(FLAGS.allow_gt_transitions_in_eval),  # Allow GT transitions to be used according to flag.
                     float(FLAGS.allow_gt_transitions_in_eval)) # adjust visibility of GT
 
                 acc_accum += acc_value
@@ -349,7 +349,7 @@ def evaluate_expanded(eval_fn, eval_set, eval_path, logger, step, sentence_pair_
 
                 # write each predicted transition to file
                 for orig_transitions, pred_logit_hyp, pred_logit_prem, tokens, true_class, example_sem_logits \
-                        in zip(eval_transitions_batch, logits_pred_hyp, 
+                        in zip(eval_transitions_batch, logits_pred_hyp,
                                logits_pred_prem, eval_X_batch, eval_y_batch, sem_logit_values):
                     orig_hyp_transitions, orig_prem_transitions = orig_transitions.T
                     hyp_tokens, prem_tokens = tokens.T
@@ -360,7 +360,7 @@ def evaluate_expanded(eval_fn, eval_set, eval_path, logger, step, sentence_pair_
                     eval_gold.write(util.TransitionsToParse(orig_prem_transitions, prem_words) + "\n")
                     eval_out.write(util.TransitionsToParse(pred_logit_prem.argmax(axis=1), prem_words) + "\n")
 
-                    predicted_class = np.argmax(example_sem_logits)    
+                    predicted_class = np.argmax(example_sem_logits)
                     exp_logit_values = np.exp(example_sem_logits)
                     class_probs = exp_logit_values / np.sum(exp_logit_values)
                     class_probs_repr = "\t".join(map(lambda p : "%.3f" % (p,), class_probs))
@@ -368,12 +368,12 @@ def evaluate_expanded(eval_fn, eval_set, eval_path, logger, step, sentence_pair_
                         label_out.write(str(true_class == predicted_class) + "\t" + str(true_class)
                                   + "\t" + str(predicted_class) + "\t" + class_probs_repr + "\n")
         else:
-            for (eval_X_batch, eval_transitions_batch, eval_y_batch, 
+            for (eval_X_batch, eval_transitions_batch, eval_y_batch,
                  eval_num_transitions_batch) in eval_set[1]:
                 acc_value, action_acc_value, sem_logit_values, logits_pred = eval_fn(
                     eval_X_batch, eval_transitions_batch, eval_y_batch, eval_num_transitions_batch,
-                    0.0,  # Eval mode: Don't apply dropout. 
-                    int(FLAGS.allow_gt_transitions_in_eval),  # Allow GT transitions to be used according to flag. 
+                    0.0,  # Eval mode: Don't apply dropout.
+                    int(FLAGS.allow_gt_transitions_in_eval),  # Allow GT transitions to be used according to flag.
                     float(FLAGS.allow_gt_transitions_in_eval)) # adjust visibility of GT
 
                 acc_accum += acc_value
@@ -387,7 +387,7 @@ def evaluate_expanded(eval_fn, eval_set, eval_path, logger, step, sentence_pair_
                     eval_gold.write(util.TransitionsToParse(orig_transitions, words) + "\n")
                     eval_out.write(util.TransitionsToParse(pred_logit.argmax(axis=1), words) + "\n")
 
-                    predicted_class = np.argmax(example_sem_logits)    
+                    predicted_class = np.argmax(example_sem_logits)
                     exp_logit_values = np.exp(example_sem_logits)
                     class_probs = exp_logit_values / np.sum(exp_logit_values)
                     class_probs_repr = "\t".join(map(lambda p : "%.3f" % (p,), class_probs))
@@ -491,7 +491,7 @@ def run(only_forward=False):
 
     # Training step number
     ss_prob = T.scalar("ss_prob")
-    
+
     if data_manager.SENTENCE_PAIR_DATA:
         X = T.itensor3("X")
         transitions = T.itensor3("transitions")
@@ -499,21 +499,21 @@ def run(only_forward=False):
 
         predicted_premise_transitions, predicted_hypothesis_transitions, logits = build_sentence_pair_model(
             model_cls, len(vocabulary), FLAGS.seq_length,
-            X, transitions, len(data_manager.LABEL_MAP), training_mode, ground_truth_transitions_visible, vs, 
+            X, transitions, len(data_manager.LABEL_MAP), training_mode, ground_truth_transitions_visible, vs,
             initial_embeddings=initial_embeddings, project_embeddings=(not train_embeddings),
             ss_mask_gen=ss_mask_gen,
             ss_prob=ss_prob)
     else:
         X = T.matrix("X", dtype="int32")
-        transitions = T.imatrix("transitions")   
+        transitions = T.imatrix("transitions")
         num_transitions = T.vector("num_transitions", dtype="int32")
 
         predicted_transitions, logits = build_sentence_model(
             model_cls, len(vocabulary), FLAGS.seq_length,
-            X, transitions, len(data_manager.LABEL_MAP), training_mode, ground_truth_transitions_visible, vs, 
+            X, transitions, len(data_manager.LABEL_MAP), training_mode, ground_truth_transitions_visible, vs,
             initial_embeddings=initial_embeddings, project_embeddings=(not train_embeddings),
             ss_mask_gen=ss_mask_gen,
-            ss_prob=ss_prob)        
+            ss_prob=ss_prob)
 
     xent_cost, acc = build_cost(logits, y)
 
@@ -526,9 +526,9 @@ def run(only_forward=False):
     if (not data_manager.SENTENCE_PAIR_DATA) and predicted_transitions is not None:
         transition_cost, action_acc = build_transition_cost(predicted_transitions, transitions, num_transitions)
     elif data_manager.SENTENCE_PAIR_DATA and predicted_hypothesis_transitions is not None:
-        p_transition_cost, p_action_acc = build_transition_cost(predicted_premise_transitions, transitions[:, :, 0], 
+        p_transition_cost, p_action_acc = build_transition_cost(predicted_premise_transitions, transitions[:, :, 0],
             num_transitions[:, 0])
-        h_transition_cost, h_action_acc = build_transition_cost(predicted_hypothesis_transitions, transitions[:, :, 1], 
+        h_transition_cost, h_action_acc = build_transition_cost(predicted_hypothesis_transitions, transitions[:, :, 1],
             num_transitions[:, 1])
         transition_cost = p_transition_cost + h_transition_cost
         action_acc = (p_action_acc + h_action_acc) / 2.0  # TODO(SB): Average over transitions, not words.
@@ -547,7 +547,7 @@ def run(only_forward=False):
         checkpoint_path = os.path.join(FLAGS.ckpt_path, FLAGS.experiment_name + ".ckpt")
     if os.path.isfile(checkpoint_path):
         logger.Log("Found checkpoint, restoring.")
-        step, best_dev_error = vs.load_checkpoint(checkpoint_path, num_extra_vars=2) 
+        step, best_dev_error = vs.load_checkpoint(checkpoint_path, num_extra_vars=2)
     else:
         assert not only_forward, "Can't run an eval-only run without a checkpoint. Supply a checkpoint."
         step = 0
@@ -559,7 +559,7 @@ def run(only_forward=False):
             eval_output_paths = FLAGS.eval_output_paths.strip().split(":")
             assert len(eval_output_paths) == len(eval_iterators), "Invalid no. of output paths."
         else:
-            eval_output_paths = [FLAGS.experiment_name + "-" + os.path.split(eval_set[0])[1] + "-parse" 
+            eval_output_paths = [FLAGS.experiment_name + "-" + os.path.split(eval_set[0])[1] + "-parse"
                                   for eval_set in eval_iterators]
 
         # Load model from checkpoint.
@@ -586,7 +586,7 @@ def run(only_forward=False):
         # Do a forward pass and write the output to disk.
         for eval_set, eval_out_path in zip(eval_iterators, eval_output_paths):
             logger.Log("Writing eval output for %s." % (eval_set[0],))
-            evaluate_expanded(eval_fn, eval_set, eval_out_path, logger, step, 
+            evaluate_expanded(eval_fn, eval_set, eval_out_path, logger, step,
                               data_manager.SENTENCE_PAIR_DATA, ind_to_word)
     else:
          # Train
@@ -597,7 +597,7 @@ def run(only_forward=False):
         # new_values.append(
         #     util.embedding_SGD(total_cost, embedding_params, embedding_lr))
 
-        # Create training and eval functions. 
+        # Create training and eval functions.
         # Unused variable warnings are supressed so that num_transitions can be passed in when training Model 0,
         # which ignores it. This yields more readable code that is very slightly slower.
         logger.Log("Building update function.")
@@ -636,21 +636,21 @@ def run(only_forward=False):
 
             if step % FLAGS.ckpt_interval_steps == 0 and step > 0:
                 vs.save_checkpoint(checkpoint_path, extra_vars=[step, best_dev_error])
-  
+
 
 if __name__ == '__main__':
     # Experiment naming.
     gflags.DEFINE_string("experiment_name", "experiment", "")
 
     # Data types.
-    gflags.DEFINE_enum("data_type", "bl", ["bl", "sst", "snli"], 
+    gflags.DEFINE_enum("data_type", "bl", ["bl", "sst", "snli"],
         "Which data handler and classifier to use.")
 
     # Where to store checkpoints
     gflags.DEFINE_string("ckpt_path", ".", "Where to save/load checkpoints. Can be either "
         "a filename or a directory. In the latter case, the experiment name serves as the "
-        "base for the filename.") 
-    gflags.DEFINE_string("log_path", ".", "A directory in which to write logs.") 
+        "base for the filename.")
+    gflags.DEFINE_string("log_path", ".", "A directory in which to write logs.")
 
     # Data settings.
     gflags.DEFINE_string("training_data_path", None, "")
@@ -671,29 +671,29 @@ if __name__ == '__main__':
         "(i.e., in Model 1 and Model 2S.)")
     gflags.DEFINE_integer("model_dim", 8, "")
     gflags.DEFINE_integer("word_embedding_dim", 8, "")
-    
+
     gflags.DEFINE_integer("tracking_lstm_hidden_dim", 4, "")
     gflags.DEFINE_boolean("use_tracking_lstm", True,
                           "Whether to use LSTM in the tracking unit")
-    gflags.DEFINE_boolean("context_sensitive_shift", False, 
+    gflags.DEFINE_boolean("context_sensitive_shift", False,
         "Use LSTM hidden state and word embedding to determine the vector to be pushed")
     gflags.DEFINE_boolean("context_sensitive_use_relu", False,
         "Use ReLU Layer to combine embedding and tracking unit hidden state")
-    gflags.DEFINE_float("semantic_classifier_keep_rate", 0.5, 
+    gflags.DEFINE_float("semantic_classifier_keep_rate", 0.5,
         "Used for dropout in the semantic task classifier.")
-    gflags.DEFINE_float("embedding_keep_rate", 0.5, 
+    gflags.DEFINE_float("embedding_keep_rate", 0.5,
         "Used for dropout on transformed embeddings.")
     gflags.DEFINE_boolean("lstm_composition", True, "")
     # gflags.DEFINE_integer("num_composition_layers", 1, "")
     gflags.DEFINE_integer("num_sentence_pair_combination_layers", 2, "")
     gflags.DEFINE_integer("sentence_pair_combination_layer_dim", 1024, "")
-    gflags.DEFINE_float("scheduled_sampling_exponent_base", 0.99, 
+    gflags.DEFINE_float("scheduled_sampling_exponent_base", 0.99,
         "Used for scheduled sampling, with probability of Model 1 over Model 2 being base^#training_steps")
-    gflags.DEFINE_boolean("use_difference_feature", True, 
+    gflags.DEFINE_boolean("use_difference_feature", True,
         "Supply the sentence pair classifier with sentence difference features.")
-    gflags.DEFINE_boolean("use_product_feature", True, 
+    gflags.DEFINE_boolean("use_product_feature", True,
         "Supply the sentence pair classifier with sentence product features.")
-    gflags.DEFINE_boolean("connect_tracking_comp", True, 
+    gflags.DEFINE_boolean("connect_tracking_comp", True,
         "Connect tracking unit and composition unit. Can only be true if using LSTM in both units.")
 
     # Optimization settings.
@@ -714,11 +714,11 @@ if __name__ == '__main__':
         "at most 0.99 of error at the previous checkpoint, save a special 'best' checkpoint.")
 
     # Evaluation settings
-    gflags.DEFINE_boolean("expanded_eval_only_mode", False, 
+    gflags.DEFINE_boolean("expanded_eval_only_mode", False,
         "If set, a checkpoint is loaded and a forward pass is done to get the predicted "
         "transitions. The inferred parses are written to the supplied file(s) along with example-"
         "by-example accuracy information. Requirements: Must specify checkpoint path.")
-    gflags.DEFINE_string("eval_output_paths", None, 
+    gflags.DEFINE_string("eval_output_paths", None,
         "Used when expanded_eval_only_mode is set. The number of supplied paths should be same"
         "as the number of eval sets.")
     gflags.DEFINE_boolean("write_predicted_label", False,

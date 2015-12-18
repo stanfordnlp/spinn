@@ -10,7 +10,7 @@ from rembed import util
 
 
 def update_hard_stack(t, stack_t, push_value, merge_value, merge_queue_t,
-                      merge_cursors_t, mask):
+                      merge_cursors_t, mask, batch_size, stack_size, batch_range):
     """Compute the new value of the given hard stack.
 
     This performs stack pushes and pops in parallel, and somewhat wastefully.
@@ -27,14 +27,12 @@ def update_hard_stack(t, stack_t, push_value, merge_value, merge_queue_t,
         mask: Batch of booleans: 1 if merge, 0 if push
     """
 
-    batch_size = stack_t.shape[1]
-
-    mask2 = mask.dimshuffle(0, "x")
+    mask2 = T.cast(mask.dimshuffle(0, "x"), "float32")
     top_next = mask2 * merge_value + (1 - mask2) * push_value
-    stack_next = T.set_subtensor(stack_t[t], top_next)
+    stack_next = T.set_subtensor(stack_t[t * batch_size + batch_range], top_next, inplace=True)
 
     cursors_next = merge_cursors_t + (mask * -1 + (1 - mask) * 1)
-    queue_next = T.set_subtensor(merge_queue_t[T.arange(batch_size), cursors_next], t)
+    queue_next = T.set_subtensor(merge_queue_t[batch_range * stack_size + cursors_next], t)
 
     return stack_next, queue_next, cursors_next
 
@@ -200,7 +198,7 @@ class HardStack(object):
         batch_size, _ = self.X.shape
 
         # Extract top buffer values.
-        idxs = buffer_cur_t + (T.arange(batch_size) * self.seq_length)
+        idxs = buffer_cur_t + (self.batch_range * self.seq_length)
 
         if self.context_sensitive_shift:
             # Combine with the hidden state from previous unit.
@@ -252,11 +250,11 @@ class HardStack(object):
             mask = transitions_t
 
         # Fetch top two stack elements.
-        stack_1 = stack_t[t - 1]
+        stack_1 = stack_t[(t - 1) * self.batch_size + self.batch_range]
         # Get pointers into stack for second-to-top element.
-        merge_ptrs = merge_queue_t[T.arange(batch_size), merge_cursors_t - 1]
+        stack_2_ptrs = merge_queue_t[merge_cursors_t - 1 + self.batch_range * self.seq_length]
         # Retrieve second-to-top element.
-        stack_2 = stack_t[merge_ptrs, T.arange(batch_size)].reshape((batch_size, self.model_dim))
+        stack_2 = stack_t[stack_2_ptrs * self.batch_size + self.batch_range].reshape((self.batch_size, self.model_dim))
 
         # Now update the stack: first precompute merge results.
         merge_items = T.concatenate([stack_1, stack_2], axis=1)
@@ -271,7 +269,8 @@ class HardStack(object):
         # Compute new stack value.
         stack_next, merge_queue_next, merge_cursors_next = update_hard_stack(
             t, stack_t, buffer_top_t, merge_value, merge_queue_t,
-            merge_cursors_t, mask)
+            merge_cursors_t, mask, self.batch_size, self.seq_length,
+            self.batch_range)
 
         # Move buffer cursor as necessary. Since mask == 1 when merge, we
         # should increment each buffer cursor by 1 - mask.
@@ -292,13 +291,14 @@ class HardStack(object):
         """Build the sequential composition / scan graph."""
 
         batch_size, max_stack_size = self.X.shape
+        self.batch_size = batch_size
+        self.batch_range = batch_range = T.arange(batch_size, dtype="int32")
 
         # Stack batch is a 3D tensor.
-        stack_shape = (max_stack_size, batch_size, self.model_dim)
-        stack_init = T.zeros(stack_shape)
+        stack_init = T.zeros((max_stack_size * batch_size, self.model_dim), dtype=np.float32)#theano.config.floatX)
 
         merge_cursors = T.ones((batch_size,), dtype=np.int32) * -1
-        merge_queue = T.zeros((batch_size, max_stack_size), dtype=np.int32)
+        merge_queue = T.zeros((batch_size * max_stack_size,), dtype=np.int32)
 
         # Look up all of the embeddings that will be used.
         raw_embeddings = self.embeddings[self.X]  # batch_size * seq_length * emb_dim
@@ -367,7 +367,7 @@ class HardStack(object):
                 outputs_info=outputs_info)[0]
 
         scan_ind = 0 if self.interpolate else 1
-        self.final_stack = scan_ret[scan_ind][-1].dimshuffle(1, 0, 2)
+        self.final_stack = scan_ret[scan_ind][-1].reshape((self.seq_length, self.batch_size, self.model_dim)).dimshuffle(1, 0, 2)
         self.embeddings = self.final_stack[:, 0]
 
         self.transitions_pred = None
