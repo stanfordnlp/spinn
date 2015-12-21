@@ -17,7 +17,7 @@ class RNN(object):
                  X=None,
                  initial_embeddings=None,
                  make_test_fn=False,
-                 embedding_dropout_keep_rate=1.0,
+                 _3,
                  **kwargs):
         """Construct an RNN.
 
@@ -32,9 +32,7 @@ class RNN(object):
             X: Theano batch describing input matrix, or `None` (in which case
               this instance will make its own batch variable).
             make_test_fn: If set, create a function to run a scan for testing.
-            embedding_dropout_keep_rate: The keep rate for dropout on projected
-              embeddings.
-            kwargs, _0, _1, _2: Ignored. Meant to make the signature match the signature of HardStack().
+            kwargs, _0, _1, _2, _3: Ignored. Meant to make the signature match the signature of HardStack().
         """
 
         self.model_dim = model_dim
@@ -48,7 +46,6 @@ class RNN(object):
         self.initial_embeddings = initial_embeddings
 
         self.training_mode = training_mode
-        self.embedding_dropout_keep_rate = embedding_dropout_keep_rate
 
         self.X = X
         
