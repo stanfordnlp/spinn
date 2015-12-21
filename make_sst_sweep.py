@@ -38,8 +38,8 @@ FIXED_PARAMETERS = {
 
 # Tunable parameters.
 SWEEP_PARAMETERS = {
-    "learning_rate":      (EXP, 0.0003, 0.001),
-    "l2_lambda":   		  (EXP, 2e-7, 2e-5),
+    "learning_rate":      (EXP, 0.0003, 0.001),  # Plain RNN likes lower
+    "l2_lambda":   		  (EXP, 2e-7, 2e-5),  # Plain RNN likes > 1e-6
     "init_range":         (EXP, 0.002, 0.008),
     "semantic_classifier_keep_rate": (LIN, 0.5, 0.75),
     "embedding_keep_rate": (LIN, 0.4, 1.0),
