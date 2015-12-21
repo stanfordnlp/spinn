@@ -17,7 +17,6 @@ class RNN(object):
                  X=None,
                  initial_embeddings=None,
                  make_test_fn=False,
-                 _3,
                  **kwargs):
         """Construct an RNN.
 
@@ -32,7 +31,7 @@ class RNN(object):
             X: Theano batch describing input matrix, or `None` (in which case
               this instance will make its own batch variable).
             make_test_fn: If set, create a function to run a scan for testing.
-            kwargs, _0, _1, _2, _3: Ignored. Meant to make the signature match the signature of HardStack().
+            kwargs, _0, _1, _2: Ignored. Meant to make the signature match the signature of HardStack().
         """
 
         self.model_dim = model_dim
