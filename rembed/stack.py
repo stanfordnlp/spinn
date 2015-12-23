@@ -4,6 +4,7 @@ import numpy as np
 import theano
 
 from theano import tensor as T
+from rembed import gpu_row_switch
 from rembed import util
 
 
@@ -38,8 +39,8 @@ def update_hard_stack(stack_t, stack_pushed, stack_merged, push_value,
 
     # Make sure mask broadcasts over all dimensions after the first.
     mask = mask.dimshuffle(0, "x", "x")
-    mask = T.cast(mask, dtype=theano.config.floatX)
-    stack_next = mask * stack_merged + (1. - mask) * stack_pushed
+    stack_next = T.switch(mask, stack_merged, stack_pushed)
+#    stack_next = ifelse(mask, stack_merged, stack_pushed)
 
     return stack_next
 
@@ -60,18 +61,18 @@ class HardStack(object):
     """
 
     def __init__(self, model_dim, word_embedding_dim, vocab_size, seq_length, compose_network,
-                 embedding_projection_network, training_mode, ground_truth_transitions_visible, vs, 
+                 embedding_projection_network, training_mode, ground_truth_transitions_visible, vs,
                  predict_network=None,
-                 train_with_predicted_transitions=False, 
-                 interpolate=False, 
-                 X=None, 
-                 transitions=None, 
+                 train_with_predicted_transitions=False,
+                 interpolate=False,
+                 X=None,
+                 transitions=None,
                  initial_embeddings=None,
                  make_test_fn=False,
                  use_input_batch_norm=True,
                  use_input_dropout=True,
-                 embedding_dropout_keep_rate=1.0, 
-                 ss_mask_gen=None, 
+                 embedding_dropout_keep_rate=1.0,
+                 ss_mask_gen=None,
                  ss_prob=0.0,
                  use_tracking_lstm=False,
                  tracking_lstm_hidden_dim=8,
@@ -90,7 +91,7 @@ class HardStack(object):
               returns a transformed Theano batch of dimension
               `batch_size * outp_dim`.
             embedding_projection_network: Same form as `compose_network`.
-            training_mode: A Theano scalar indicating whether to act as a training model 
+            training_mode: A Theano scalar indicating whether to act as a training model
               with dropout (1.0) or to act as an eval model with rescaling (0.0).
             ground_truth_transitions_visible: A Theano scalar. If set (1.0), allow the model access
               to ground truth transitions. This can be disabled at evaluation time to force Model 1
@@ -135,7 +136,7 @@ class HardStack(object):
 
         self.use_input_batch_norm = use_input_batch_norm
         self.use_input_dropout = use_input_dropout
-        
+
         # Mask for scheduled sampling.
         self.ss_mask_gen = ss_mask_gen
         # Flag for scheduled sampling.
@@ -145,14 +146,14 @@ class HardStack(object):
         # Connect tracking unit and composition unit.
         self.connect_tracking_comp = connect_tracking_comp
         assert (use_tracking_lstm or not connect_tracking_comp), \
-            "Must use tracking LSTM if connecting tracking and composition units" 
+            "Must use tracking LSTM if connecting tracking and composition units"
 
         self._make_params()
         self._make_inputs()
         self._make_scan()
 
         if make_test_fn:
-            self.scan_fn = theano.function([self.X, self.transitions, self.training_mode, 
+            self.scan_fn = theano.function([self.X, self.transitions, self.training_mode,
                                             self.ground_truth_transitions_visible],
                                            self.final_stack,
                                            on_unused_input='warn')
@@ -163,7 +164,7 @@ class HardStack(object):
             def EmbeddingInitializer(shape):
                 return self.initial_embeddings
             self.embeddings = self._vs.add_param(
-                    "embeddings", (self.vocab_size, self.word_embedding_dim), 
+                    "embeddings", (self.vocab_size, self.word_embedding_dim),
                     initializer=EmbeddingInitializer,
                     trainable=False)
         else:
@@ -174,8 +175,8 @@ class HardStack(object):
         self.X = self.X or T.imatrix("X")
         self.transitions = self.transitions or T.imatrix("transitions")
 
-    def _step(self, transitions_t, ss_mask_gen_matrix_t, stack_t, buffer_cur_t, 
-            tracking_hidden, stack_pushed, stack_merged, buffer, 
+    def _step(self, transitions_t, ss_mask_gen_matrix_t, stack_t, buffer_cur_t,
+            tracking_hidden, stack_pushed, stack_merged, buffer,
             ground_truth_transitions_visible):
         batch_size, _ = self.X.shape
         # Extract top buffer values.
@@ -190,8 +191,8 @@ class HardStack(object):
             if self.use_tracking_lstm:
                 # Update the hidden state and obtain predicted actions.
                 tracking_hidden, actions_t = self._predict_network(
-                    tracking_hidden, predict_inp, self.model_dim * 3, 
-                    self.tracking_lstm_hidden_dim, self._vs, 
+                    tracking_hidden, predict_inp, self.model_dim * 3,
+                    self.tracking_lstm_hidden_dim, self._vs,
                     name="predict_actions")
             else:
                 # Obtain predicted actions directly.
@@ -199,22 +200,22 @@ class HardStack(object):
                     predict_inp, self.model_dim * 3, util.NUM_TRANSITION_TYPES, self._vs,
                     name="predict_actions")
 
-        if self.train_with_predicted_transitions: 
+        if self.train_with_predicted_transitions:
             # Model 2 case.
             if self.interpolate:
                 # Only use ground truth transitions if they are marked as visible to the model.
                 effective_ss_mask_gen_matrix_t = ss_mask_gen_matrix_t * ground_truth_transitions_visible
-                # Interpolate between truth and prediction using bernoulli RVs 
+                # Interpolate between truth and prediction using bernoulli RVs
                 # generated prior to the step
-                mask = (transitions_t * effective_ss_mask_gen_matrix_t 
+                mask = (transitions_t * effective_ss_mask_gen_matrix_t
                         + actions_t.argmax(axis=1) * (1 - effective_ss_mask_gen_matrix_t))
             else:
                 # Use predicted actions to build a mask.
                 mask = actions_t.argmax(axis=1)
         elif self._predict_network is not None:
             # Use transitions provided from external parser when not masked out
-            mask = (transitions_t * ground_truth_transitions_visible 
-                        + actions_t.argmax(axis=1) * (1 - ground_truth_transitions_visible)) 
+            mask = (transitions_t * ground_truth_transitions_visible
+                        + actions_t.argmax(axis=1) * (1 - ground_truth_transitions_visible))
         else:
             # Model 0 case.
             mask = transitions_t
@@ -284,10 +285,10 @@ class HardStack(object):
 
         # Dimshuffle inputs to seq_len * batch_size for scanning
         transitions = self.transitions.dimshuffle(1, 0)
-        
+
         # Initialize the hidden state for the tracking LSTM, if needed.
-        if self.use_tracking_lstm:            
-            # TODO: Unify what 'dim' means with LSTM. Here, it's the dim of 
+        if self.use_tracking_lstm:
+            # TODO: Unify what 'dim' means with LSTM. Here, it's the dim of
             # each of h and c. For 'model_dim', it's the combined dimension
             # of the full hidden state (so h and c are each model_dim/2).
             hidden_init = T.zeros((batch_size, self.tracking_lstm_hidden_dim * 2))
@@ -303,7 +304,7 @@ class HardStack(object):
         # Prepare data to scan over.
         sequences = [transitions]
         if self.interpolate:
-            # Generate Bernoulli RVs to simulate scheduled sampling 
+            # Generate Bernoulli RVs to simulate scheduled sampling
             # if the interpolate flag is on.
             ss_mask_gen_matrix = self.ss_mask_gen.binomial(
                                 transitions.shape, p=self.ss_prob)
@@ -317,7 +318,7 @@ class HardStack(object):
         scan_ret = theano.scan(
                 self._step,
                 sequences=sequences,
-                non_sequences=[stack_pushed, stack_merged, 
+                non_sequences=[stack_pushed, stack_merged,
                         buffer_t, self.ground_truth_transitions_visible],
                 outputs_info=outputs_info)[0]
 
