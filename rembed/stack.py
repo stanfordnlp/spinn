@@ -83,6 +83,7 @@ class HardStack(object):
 
         Args:
             model_dim: Dimensionality of token embeddings and stack values
+            word_embedding_dim: dimension of the word embedding
             vocab_size: Number of unique tokens in vocabulary
             seq_length: Maximum sequence length which will be processed by this
               stack
@@ -96,20 +97,34 @@ class HardStack(object):
               with dropout (1.0) or to act as an eval model with rescaling (0.0).
             ground_truth_transitions_visible: A Theano scalar. If set (1.0), allow the model access
               to ground truth transitions. This can be disabled at evaluation time to force Model 1
-              (or 12SS) to evaluate in the Model 2 style with predicted transitions. Has no effect on Model 0.
+              (or 12SS) to evaluate in the Model 2 style with predicted transitions. Has no effect 
+              on Model 0.
             vs: VariableStore instance for parameter storage
             predict_network: Blocks-like function which maps values
               `3 * model_dim` to `action_dim`
             train_with_predicted_transitions: If `True`, use the predictions from the model
               (rather than the ground-truth `transitions`) to perform stack
               operations
+            interpolate: If True, use scheduled sampling while training
             X: Theano batch describing input matrix, or `None` (in which case
               this instance will make its own batch variable).
             transitions: Theano batch describing transition matrix, or `None`
               (in which case this instance will make its own batch variable).
+            initial_embeddings: pretrained embeddings or None
             make_test_fn: If set, create a function to run a scan for testing.
-            embedding_dropout_keep_rate: The keep rate for dropout on projected
-              embeddings.
+            use_input_batch_norm: If True, use batch normalization 
+            use_input_dropout: If True, use dropout
+            embedding_dropout_keep_rate: The keep rate for dropout on projected embeddings.
+            ss_mask_gen: A theano random stream
+            ss_prob: Scheduled sampling probability
+            use_tracking_lstm: If True, LSTM will be used in the tracking unit
+            tracking_lstm_hidden_dim: hidden state dimension of the tracking LSTM
+            connect_tracking_comp: If True, the hidden state of tracking LSTM will be
+                fed to the TreeLSTM in the composition unit
+            context_sensitive_shift: If True, the hidden state of tracking LSTM and the embedding 
+                vector will be used to calculate the vector that will be pushed onto the stack
+            context_sensitive_use_relu: If True, a ReLU layer will be used while doing context 
+                sensitive shift, otherwise a Linear layer will be used 
         """
 
         self.model_dim = model_dim
@@ -187,13 +202,14 @@ class HardStack(object):
         # Extract top buffer values.
         idxs = buffer_cur_t + (T.arange(batch_size) * self.seq_length)
         if self.context_sensitive_shift:
-            # combine with the hidden state from previous unit
+            # Combine with the hidden state from previous unit.
             tracking_h_t = tracking_hidden[:, :self.tracking_lstm_hidden_dim]
             context_comb_input_t = T.concatenate([tracking_h_t, buffer[idxs]], axis=1)
             context_comb_input_dim = self.word_embedding_dim + self.tracking_lstm_hidden_dim
             comb_layer = util.ReLULayer if self.context_sensitive_use_relu else util.Linear
-            buffer_top_t = comb_layer(context_comb_input_t, context_comb_input_dim, self.model_dim, self._vs, 
-                                name="context_comb_unit", use_bias=True, initializer=util.HeKaimingInitializer())
+            buffer_top_t = comb_layer(context_comb_input_t, context_comb_input_dim, self.model_dim, 
+                                self._vs, name="context_comb_unit", use_bias=True, 
+                                initializer=util.HeKaimingInitializer())
         else:
             buffer_top_t = buffer[idxs]
 
@@ -220,7 +236,7 @@ class HardStack(object):
                 # Only use ground truth transitions if they are marked as visible to the model.
                 effective_ss_mask_gen_matrix_t = ss_mask_gen_matrix_t * ground_truth_transitions_visible
                 # Interpolate between truth and prediction using bernoulli RVs 
-                # generated prior to the step
+                # generated prior to the step.
                 mask = (transitions_t * effective_ss_mask_gen_matrix_t 
                         + actions_t.argmax(axis=1) * (1 - effective_ss_mask_gen_matrix_t))
             else:
@@ -245,10 +261,11 @@ class HardStack(object):
                 self._vs, name="compose", external_state_dim=self.tracking_lstm_hidden_dim)
 
         # Compute new stack value.
-        stack_next = update_hard_stack(stack_t, stack_pushed, stack_merged, buffer_top_t, merge_value, mask)
+        stack_next = update_hard_stack(stack_t, stack_pushed, stack_merged, buffer_top_t, 
+                                    merge_value, mask)
 
         # Move buffer cursor as necessary. Since mask == 1 when merge, we
-        # should increment each buffer cursor by 1 - mask
+        # should increment each buffer cursor by 1 - mask.
         buffer_cur_next = buffer_cur_t + (1 - mask)
 
         if self._predict_network is not None:
@@ -282,13 +299,14 @@ class HardStack(object):
             buffer_t = self._embedding_projection_network(
                 raw_embeddings, self.word_embedding_dim, self.model_dim, self._vs, name="project")
             if self.use_input_batch_norm:
-                buffer_t = util.BatchNorm(buffer_t, self.model_dim, self._vs, "buffer", self.training_mode,
-                    axes=[0, 1])
+                buffer_t = util.BatchNorm(buffer_t, self.model_dim, self._vs, "buffer", 
+                    self.training_mode, axes=[0, 1])
             if self.use_input_dropout:
                 buffer_t = util.Dropout(buffer_t, self.embedding_dropout_keep_rate, self.training_mode)
             buffer_emb_dim = self.model_dim
         else:
-            # use the raw embedding vectors, they will be combined with the state of the tracking unit later
+            # Use the raw embedding vectors, they will be combined with the hidden state of 
+            # the tracking unit later
             buffer_t = raw_embeddings
             buffer_emb_dim = self.word_embedding_dim
 
@@ -359,13 +377,13 @@ class Model0(HardStack):
 class Model1(HardStack):
 
     def __init__(self, *args, **kwargs):
-        # set the tracking unit based on supplied tracking_lstm_hidden_dim
+        # Set the tracking unit based on supplied tracking_lstm_hidden_dim.
         use_tracking_lstm = kwargs.get("use_tracking_lstm", False)
         if use_tracking_lstm:
             kwargs["predict_network"] = util.TrackingUnit
         else:
             kwargs["predict_network"] = util.Linear
-        # defaults to not using predictions while training and not using scheduled sampling
+        # Defaults to not using predictions while training and not using scheduled sampling.
         kwargs["train_with_predicted_transitions"] = False
         kwargs["interpolate"] = False
         super(Model1, self).__init__(*args, **kwargs)
@@ -374,13 +392,13 @@ class Model1(HardStack):
 class Model2(HardStack):
 
     def __init__(self, *args, **kwargs):
-        # set the tracking unit based on supplied tracking_lstm_hidden_dim
+        # Set the tracking unit based on supplied tracking_lstm_hidden_dim.
         use_tracking_lstm = kwargs.get("use_tracking_lstm", False)
         if use_tracking_lstm:
             kwargs["predict_network"] = util.TrackingUnit
         else:
             kwargs["predict_network"] = util.Linear
-        # defaults to using predictions while training and not using scheduled sampling
+        # Defaults to using predictions while training and not using scheduled sampling.
         kwargs["train_with_predicted_transitions"] = True
         kwargs["interpolate"] = False
         super(Model2, self).__init__(*args, **kwargs)
@@ -394,7 +412,7 @@ class Model2S(HardStack):
             kwargs["predict_network"] = util.TrackingUnit
         else:
             kwargs["predict_network"] = util.Linear
-        # use supplied settings and use scheduled sampling
+        # Use supplied settings and use scheduled sampling.
         kwargs["train_with_predicted_transitions"] = True
         kwargs["interpolate"] = True
         super(Model2S, self).__init__(*args, **kwargs)
