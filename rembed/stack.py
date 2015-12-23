@@ -73,7 +73,9 @@ class HardStack(object):
                  ss_prob=0.0,
                  use_tracking_lstm=False,
                  tracking_lstm_hidden_dim=8,
-                 connect_tracking_comp=False):
+                 connect_tracking_comp=False,
+                 context_sensitive_shift=False,
+                 context_sensitive_use_relu=False):
         """
         Construct a HardStack.
 
@@ -141,6 +143,10 @@ class HardStack(object):
         self.connect_tracking_comp = connect_tracking_comp
         assert (use_tracking_lstm or not connect_tracking_comp), \
             "Must use tracking LSTM if connecting tracking and composition units" 
+        self.context_sensitive_shift = context_sensitive_shift
+        assert (use_tracking_lstm or not context_sensitive_shift), \
+            "Must use tracking LSTM while doing context sensitive shift"
+        self.context_sensitive_use_relu = context_sensitive_use_relu
 
         self._make_params()
         self._make_inputs()
@@ -174,7 +180,16 @@ class HardStack(object):
         batch_size, _ = self.X.shape
         # Extract top buffer values.
         idxs = buffer_cur_t + (T.arange(batch_size) * self.seq_length)
-        buffer_top_t = buffer[idxs]
+        if self.context_sensitive_shift:
+            # combine with the hidden state from previous unit
+            tracking_h_t = tracking_hidden[:, :self.tracking_lstm_hidden_dim]
+            context_comb_input_t = T.concatenate([tracking_h_t, buffer[idxs]], axis=1)
+            context_comb_input_dim = self.word_embedding_dim + self.tracking_lstm_hidden_dim
+            comb_layer = util.ReLULayer if self.context_sensitive_use_relu else util.Linear
+            buffer_top_t = comb_layer(context_comb_input_t, context_comb_input_dim, self.model_dim, self._vs, 
+                                name="context_comb_unit", use_bias=True, initializer=util.HeKaimingInitializer())
+        else:
+            buffer_top_t = buffer[idxs]
 
         if self._predict_network is not None:
             # We are predicting our own stack operations.
@@ -224,9 +239,7 @@ class HardStack(object):
                 self._vs, name="compose", external_state_dim=self.tracking_lstm_hidden_dim)
 
         # Compute new stack value.
-        stack_next = update_hard_stack(
-            stack_t, stack_pushed, stack_merged, buffer_top_t,
-            merge_value, mask)
+        stack_next = update_hard_stack(stack_t, stack_pushed, stack_merged, buffer_top_t, merge_value, mask)
 
         # Move buffer cursor as necessary. Since mask == 1 when merge, we
         # should increment each buffer cursor by 1 - mask
@@ -257,18 +270,22 @@ class HardStack(object):
         # Look up all of the embeddings that will be used.
         raw_embeddings = self.embeddings[self.X]  # batch_size * seq_length * emb_dim
 
-        # Allocate a "buffer" stack initialized with projected embeddings,
-        # and maintain a cursor in this buffer.
-        buffer_t = self._embedding_projection_network(
-            raw_embeddings, self.word_embedding_dim, self.model_dim, self._vs, name="project")
-
-        buffer_t = util.BatchNorm(buffer_t, self.model_dim, self._vs, "buffer", self.training_mode,
-            axes=[0, 1])
-        buffer_t = util.Dropout(buffer_t, self.embedding_dropout_keep_rate, self.training_mode)
-
+        if not self.context_sensitive_shift:
+            # Allocate a "buffer" stack initialized with projected embeddings,
+            # and maintain a cursor in this buffer.
+            buffer_t = self._embedding_projection_network(
+                raw_embeddings, self.word_embedding_dim, self.model_dim, self._vs, name="project")
+            buffer_t = util.BatchNorm(buffer_t, self.model_dim, self._vs, "buffer", self.training_mode,
+                axes=[0, 1])
+            buffer_t = util.Dropout(buffer_t, self.embedding_dropout_keep_rate, self.training_mode)
+            buffer_emb_dim = self.model_dim
+        else:
+            # use the raw embedding vectors, they will be combined with the state of the tracking unit later
+            buffer_t = raw_embeddings
+            buffer_emb_dim = self.word_embedding_dim
 
         # Collapse buffer to (batch_size * buffer_size) * emb_dim for fast indexing.
-        buffer_t = buffer_t.reshape((-1, self.model_dim))
+        buffer_t = buffer_t.reshape((-1, buffer_emb_dim))
 
         buffer_cur_init = T.zeros((batch_size,), dtype="int")
 
