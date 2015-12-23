@@ -54,7 +54,8 @@ class RNN(object):
 
         if make_test_fn:
             self.scan_fn = theano.function([self.X, self.training_mode],
-                                           self.embeddings)
+                                           self.embeddings,
+                                           on_unused_input='warn')
 
     def _make_params(self):
         # Per-token embeddings.

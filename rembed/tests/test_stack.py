@@ -27,15 +27,19 @@ class HardStackTestCase(unittest.TestCase):
         training_mode = T.scalar("training_mode")
         ground_truth_transitions_visible = T.scalar("ground_truth_transitions_visible", dtype="int32")
         vs = VariableStore()
+
+        # Swap in our own dummy embeddings and weights.
+        initial_embeddings = np.arange(vocab_size).reshape(
+            (vocab_size, 1)).repeat(embedding_dim, axis=1)
+
         self.stack = HardStack(
             embedding_dim, embedding_dim, vocab_size, seq_length, compose_network,
             IdentityLayer, training_mode, ground_truth_transitions_visible, vs,
-            X=X, transitions=transitions, make_test_fn=True)
-
-        # Swap in our own dummy embeddings and weights.
-        embeddings = np.arange(vocab_size).reshape(
-            (vocab_size, 1)).repeat(embedding_dim, axis=1)
-        self.stack.embeddings.set_value(embeddings)
+            X=X,
+            transitions=transitions,
+            make_test_fn=True,
+            initial_embeddings=initial_embeddings,
+            use_input_batch_norm=False, use_input_dropout=False)
 
     def test_basic_ff(self):
         self._make_stack(4)
