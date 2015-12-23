@@ -67,7 +67,9 @@ class HardStack(object):
                  X=None, 
                  transitions=None, 
                  initial_embeddings=None,
-                 make_test_fn=False, 
+                 make_test_fn=False,
+                 use_input_batch_norm=True,
+                 use_input_dropout=True,
                  embedding_dropout_keep_rate=1.0, 
                  ss_mask_gen=None, 
                  ss_prob=0.0,
@@ -132,6 +134,9 @@ class HardStack(object):
 
         self.X = X
         self.transitions = transitions
+
+        self.use_input_batch_norm = use_input_batch_norm
+        self.use_input_dropout = use_input_dropout
         
         # Mask for scheduled sampling.
         self.ss_mask_gen = ss_mask_gen
@@ -155,7 +160,8 @@ class HardStack(object):
         if make_test_fn:
             self.scan_fn = theano.function([self.X, self.transitions, self.training_mode, 
                                             self.ground_truth_transitions_visible],
-                                           self.final_stack)
+                                           self.final_stack,
+                                           on_unused_input='warn')
 
     def _make_params(self):
         # Per-token embeddings.
@@ -275,9 +281,11 @@ class HardStack(object):
             # and maintain a cursor in this buffer.
             buffer_t = self._embedding_projection_network(
                 raw_embeddings, self.word_embedding_dim, self.model_dim, self._vs, name="project")
-            buffer_t = util.BatchNorm(buffer_t, self.model_dim, self._vs, "buffer", self.training_mode,
-                axes=[0, 1])
-            buffer_t = util.Dropout(buffer_t, self.embedding_dropout_keep_rate, self.training_mode)
+            if self.use_input_batch_norm:
+                buffer_t = util.BatchNorm(buffer_t, self.model_dim, self._vs, "buffer", self.training_mode,
+                    axes=[0, 1])
+            if self.use_input_dropout:
+                buffer_t = util.Dropout(buffer_t, self.embedding_dropout_keep_rate, self.training_mode)
             buffer_emb_dim = self.model_dim
         else:
             # use the raw embedding vectors, they will be combined with the state of the tracking unit later
