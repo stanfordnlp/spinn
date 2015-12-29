@@ -201,13 +201,17 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
     premise_vector = premise_embeddings.reshape((-1, FLAGS.model_dim))
     hypothesis_vector = hypothesis_embeddings.reshape((-1, FLAGS.model_dim))
 
-    # Concatenate and apply dropout
+    # Create MLP features
+    mlp_input = T.concatenate([premise_vector, hypothesis_vector], axis=1)
+    mlp_input_dim = 2 * FLAGS.model_dim
+
     if FLAGS.use_difference_feature:
-        mlp_input = T.concatenate([premise_vector, hypothesis_vector, premise_vector - hypothesis_vector], axis=1)
-        mlp_input_dim = 3 * FLAGS.model_dim
-    else:
-        mlp_input = T.concatenate([premise_vector, hypothesis_vector], axis=1)
-        mlp_input_dim = 2 * FLAGS.model_dim
+        mlp_input = T.concatenate([mlp_input, premise_vector - hypothesis_vector], axis=1)
+        mlp_input_dim += FLAGS.model_dim
+
+    if FLAGS.use_product_feature:
+        mlp_input = T.concatenate([mlp_input, premise_vector * hypothesis_vector], axis=1)
+        mlp_input_dim += FLAGS.model_dim
 
     mlp_input = util.BatchNorm(mlp_input, mlp_input_dim, vs, "sentence_vectors", training_mode)
     mlp_input = util.Dropout(mlp_input, FLAGS.semantic_classifier_keep_rate, training_mode)
@@ -641,7 +645,6 @@ if __name__ == '__main__':
     gflags.DEFINE_string("eval_data_path", None, "")
     gflags.DEFINE_integer("seq_length", 30, "")
     gflags.DEFINE_integer("eval_seq_length", 30, "")
-
     gflags.DEFINE_string("embedding_data_path", None,
                          "If set, load GloVe formatted embeddings from here.")
 
@@ -662,7 +665,6 @@ if __name__ == '__main__':
         "Use LSTM hidden state and word embedding to determine the vector to be pushed")
     gflags.DEFINE_boolean("context_sensitive_use_relu", False,
         "Use ReLU Layer to combine embedding and tracking unit hidden state")
-
     gflags.DEFINE_float("semantic_classifier_keep_rate", 0.5, 
         "Used for dropout in the semantic task classifier.")
     gflags.DEFINE_float("embedding_keep_rate", 0.5, 
@@ -674,16 +676,15 @@ if __name__ == '__main__':
         "Used for scheduled sampling, with probability of Model 1 over Model 2 being base^#training_steps")
     gflags.DEFINE_boolean("use_difference_feature", True, 
         "Supply the sentence pair classifier with sentence difference features.")
+    gflags.DEFINE_boolean("use_product_feature", True, 
+        "Supply the sentence pair classifier with sentence product features.")
     gflags.DEFINE_boolean("connect_tracking_comp", False, 
         "Connect tracking unit and composition unit. Can only be true if using LSTM in both units.")
 
-
-
     # Optimization settings.
-    gflags.DEFINE_integer("training_steps", 1000000, "Stop training after this point.")
+    gflags.DEFINE_integer("training_steps", 500000, "Stop training after this point.")
     gflags.DEFINE_integer("batch_size", 32, "SGD minibatch size.")
     gflags.DEFINE_float("learning_rate", 0.001, "Used in RMSProp.")
-    # gflags.DEFINE_float("momentum", 0.9, "")
     gflags.DEFINE_float("clipping_max_value", 1.0, "")
     gflags.DEFINE_float("l2_lambda", 1e-5, "")
     gflags.DEFINE_float("init_range", 0.01, "Mainly used for softmax parameters. Range for uniform random init.")
@@ -693,10 +694,9 @@ if __name__ == '__main__':
     gflags.DEFINE_integer("statistics_interval_steps", 50, "Print training set results at this interval.")
     gflags.DEFINE_integer("eval_interval_steps", 50, "Evaluate at this interval.")
 
-    gflags.DEFINE_integer("ckpt_interval_steps", 10000, "Update the checkpoint on disk at this interval.")
+    gflags.DEFINE_integer("ckpt_interval_steps", 5000, "Update the checkpoint on disk at this interval.")
     gflags.DEFINE_boolean("ckpt_on_best_dev_error", True, "If error on the first eval set (the dev set) is "
                           "at most 0.95 of error at the previous checkpoint, save a special 'best' checkpoint.")
-
 
     # Evaluation settings
     gflags.DEFINE_boolean("expanded_eval_only_mode", False, 

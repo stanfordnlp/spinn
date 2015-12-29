@@ -33,6 +33,8 @@ FIXED_PARAMETERS = {
     "batch_size":  "32",
     "lstm_composition": "",
     "use_tracking_lstm": "",
+    "init_range", "0.005",
+    "context_sensitive_shift": "",
     "ckpt_root":    os.path.join("/afs/cs.stanford.edu/u", getpass.getuser(), "scr/")  # Launching user's home scr dir
 }
 
@@ -40,7 +42,6 @@ FIXED_PARAMETERS = {
 SWEEP_PARAMETERS = {
     "learning_rate":      (EXP, 0.0005, 0.005),  # RNN likes higher end of range.
     "l2_lambda":   		  (EXP, 5e-7, 2e-5),
-    "init_range":         (EXP, 0.004, 0.008),
     "semantic_classifier_keep_rate": (LIN, 0.85, 1.0),  # NB: Keep rates may depend considerably on dims.
     "embedding_keep_rate": (LIN, 0.75, 1.0),
     "scheduled_sampling_exponent_base": (SS_BASE, 2e-6, 2e-4),
