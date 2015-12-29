@@ -26,7 +26,7 @@ FIXED_PARAMETERS = {
     "eval_data_path":    "/scr/nlp/data/snli_1.0/snli_1.0_dev.jsonl",
     "embedding_data_path": "/scr/nlp/data/glove_vecs/glove.840B.300d.txt",
     "word_embedding_dim":	"300",
-    "model_dim":   "100",
+    "model_dim":   "300",
     "seq_length":	"50",
     "eval_seq_length":	"100",
     "clipping_max_value":  "5.0",
