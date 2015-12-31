@@ -40,13 +40,13 @@ FIXED_PARAMETERS = {
 
 # Tunable parameters.
 SWEEP_PARAMETERS = {
-    "learning_rate":      (EXP, 0.0003, 0.001),  # Plain RNN likes lower
+    "learning_rate":      (EXP, 0.0003, 0.002),  # Plain RNN likes lower
     "l2_lambda":   		  (EXP, 1e-7, 2e-5),  # Plain RNN likes > 5e-6
-    "semantic_classifier_keep_rate": (LIN, 0.5, 0.75),
+    "semantic_classifier_keep_rate": (LIN, 0.5, 0.65),
     "embedding_keep_rate": (LIN, 0.4, 1.0),
-    "scheduled_sampling_exponent_base": (SS_BASE, 2e-7, 2e-5),
-    "transition_cost_scale": (LIN, 12.0, 28.0),
-    "tracking_lstm_hidden_dim": (EXP, 2, 25)
+    "scheduled_sampling_exponent_base": (SS_BASE, 2e-6, 2e-4),
+    "transition_cost_scale": (LIN, 18.0, 28.0),
+    "tracking_lstm_hidden_dim": (EXP, 0, 50)
 }
 
 sweep_name = "sweep_" + \
