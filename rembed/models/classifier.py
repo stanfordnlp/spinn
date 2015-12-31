@@ -659,7 +659,7 @@ if __name__ == '__main__':
     gflags.DEFINE_integer("word_embedding_dim", 8, "")
     
     gflags.DEFINE_integer("tracking_lstm_hidden_dim", 4, "")
-    gflags.DEFINE_boolean("use_tracking_lstm", False,
+    gflags.DEFINE_boolean("use_tracking_lstm", True,
                           "Whether to use LSTM in the tracking unit")
     gflags.DEFINE_boolean("context_sensitive_shift", False, 
         "Use LSTM hidden state and word embedding to determine the vector to be pushed")
@@ -669,7 +669,7 @@ if __name__ == '__main__':
         "Used for dropout in the semantic task classifier.")
     gflags.DEFINE_float("embedding_keep_rate", 0.5, 
         "Used for dropout on transformed embeddings.")
-    gflags.DEFINE_boolean("lstm_composition", False, "")
+    gflags.DEFINE_boolean("lstm_composition", True, "")
     # gflags.DEFINE_integer("num_composition_layers", 1, "")
     gflags.DEFINE_integer("num_sentence_pair_combination_layers", 2, "")
     gflags.DEFINE_float("scheduled_sampling_exponent_base", 0.99, 
@@ -678,7 +678,7 @@ if __name__ == '__main__':
         "Supply the sentence pair classifier with sentence difference features.")
     gflags.DEFINE_boolean("use_product_feature", True, 
         "Supply the sentence pair classifier with sentence product features.")
-    gflags.DEFINE_boolean("connect_tracking_comp", False, 
+    gflags.DEFINE_boolean("connect_tracking_comp", True, 
         "Connect tracking unit and composition unit. Can only be true if using LSTM in both units.")
 
     # Optimization settings.
