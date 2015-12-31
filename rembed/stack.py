@@ -1,5 +1,7 @@
 """Theano-based stack implementations."""
 
+from functools import partial
+
 import numpy as np
 import theano
 
@@ -54,14 +56,15 @@ class HardStack(object):
     predictions from some external parser which acts as the "ground truth"
     parser.
 
-    Model 0: predict_network=None, train_with_predicted_transitions=False
-    Model 1: predict_network=something, train_with_predicted_transitions=False
-    Model 2: predict_network=something, train_with_predicted_transitions=True
+    Model 0: prediction_and_tracking_network=None, train_with_predicted_transitions=False
+    Model 1: prediction_and_tracking_network=something, train_with_predicted_transitions=False
+    Model 2: prediction_and_tracking_network=something, train_with_predicted_transitions=True
     """
 
     def __init__(self, model_dim, word_embedding_dim, vocab_size, seq_length, compose_network,
                  embedding_projection_network, training_mode, ground_truth_transitions_visible, vs, 
-                 predict_network=None,
+                 prediction_and_tracking_network=None,
+                 predict_transitions=False,
                  train_with_predicted_transitions=False, 
                  interpolate=False, 
                  X=None, 
@@ -100,8 +103,10 @@ class HardStack(object):
               (or 12SS) to evaluate in the Model 2 style with predicted transitions. Has no effect 
               on Model 0.
             vs: VariableStore instance for parameter storage
-            predict_network: Blocks-like function which maps values
-              `3 * model_dim` to `action_dim`
+            prediction_and_tracking_network: Blocks-like function which either maps values
+              `3 * model_dim` to `action_dim` or uses the more complex TrackingUnit template.
+            predict_transitions: If set, predict transitions. If not, the tracking LSTM may still
+              be used for other purposes.
             train_with_predicted_transitions: If `True`, use the predictions from the model
               (rather than the ground-truth `transitions`) to perform stack
               operations
@@ -136,7 +141,8 @@ class HardStack(object):
 
         self._compose_network = compose_network
         self._embedding_projection_network = embedding_projection_network
-        self._predict_network = predict_network
+        self._prediction_and_tracking_network = prediction_and_tracking_network
+        self._predict_transitions = predict_transitions
         self.train_with_predicted_transitions = train_with_predicted_transitions
 
         self._vs = vs
@@ -199,8 +205,10 @@ class HardStack(object):
             tracking_hidden, stack_pushed, stack_merged, buffer, 
             ground_truth_transitions_visible):
         batch_size, _ = self.X.shape
+
         # Extract top buffer values.
         idxs = buffer_cur_t + (T.arange(batch_size) * self.seq_length)
+
         if self.context_sensitive_shift:
             # Combine with the hidden state from previous unit.
             tracking_h_t = tracking_hidden[:, :self.tracking_lstm_hidden_dim]
@@ -213,22 +221,22 @@ class HardStack(object):
         else:
             buffer_top_t = buffer[idxs]
 
-        if self._predict_network is not None:
+        if self._prediction_and_tracking_network is not None:
             # We are predicting our own stack operations.
             predict_inp = T.concatenate(
                 [stack_t[:, 0], stack_t[:, 1], buffer_top_t], axis=1)
 
             if self.use_tracking_lstm:
                 # Update the hidden state and obtain predicted actions.
-                tracking_hidden, actions_t = self._predict_network(
+                tracking_hidden, actions_t = self._prediction_and_tracking_network(
                     tracking_hidden, predict_inp, self.model_dim * 3, 
                     self.tracking_lstm_hidden_dim, self._vs, 
-                    name="predict_actions")
+                    name="prediction_and_tracking")
             else:
                 # Obtain predicted actions directly.
-                actions_t = self._predict_network(
+                actions_t = self._prediction_and_tracking_network(
                     predict_inp, self.model_dim * 3, util.NUM_TRANSITION_TYPES, self._vs,
-                    name="predict_actions")
+                    name="prediction_and_tracking")
 
         if self.train_with_predicted_transitions: 
             # Model 2 case.
@@ -242,7 +250,7 @@ class HardStack(object):
             else:
                 # Use predicted actions to build a mask.
                 mask = actions_t.argmax(axis=1)
-        elif self._predict_network is not None:
+        elif self._predict_transitions:
             # Use transitions provided from external parser when not masked out
             mask = (transitions_t * ground_truth_transitions_visible 
                         + actions_t.argmax(axis=1) * (1 - ground_truth_transitions_visible)) 
@@ -252,13 +260,13 @@ class HardStack(object):
 
         # Now update the stack: first precompute merge results.
         merge_items = stack_t[:, :2].reshape((-1, self.model_dim * 2))
-        if not self.connect_tracking_comp:
-            merge_value = self._compose_network(merge_items, self.model_dim * 2, self.model_dim,
-                self._vs, name="compose")
-        else:
+        if self.connect_tracking_comp:
             tracking_h_t = tracking_hidden[:, :self.tracking_lstm_hidden_dim]
             merge_value = self._compose_network(merge_items, tracking_h_t, self.model_dim,
                 self._vs, name="compose", external_state_dim=self.tracking_lstm_hidden_dim)
+        else:
+            merge_value = self._compose_network(merge_items, self.model_dim * 2, self.model_dim,
+                self._vs, name="compose")
 
         # Compute new stack value.
         stack_next = update_hard_stack(stack_t, stack_pushed, stack_merged, buffer_top_t, 
@@ -268,13 +276,15 @@ class HardStack(object):
         # should increment each buffer cursor by 1 - mask.
         buffer_cur_next = buffer_cur_t + (1 - mask)
 
-        if self._predict_network is not None:
+        if self._predict_transitions:
             ret_val = stack_next, buffer_cur_next, tracking_hidden, actions_t
         else:
             ret_val = stack_next, buffer_cur_next, tracking_hidden
+
         if not self.interpolate:
             # Use ss_mask as a redundant return value.
             ret_val = (ss_mask_gen_matrix_t,) + ret_val
+
         return ret_val
 
     def _make_scan(self):
@@ -293,7 +303,12 @@ class HardStack(object):
         # Look up all of the embeddings that will be used.
         raw_embeddings = self.embeddings[self.X]  # batch_size * seq_length * emb_dim
 
-        if not self.context_sensitive_shift:
+        if self.context_sensitive_shift:
+            # Use the raw embedding vectors, they will be combined with the hidden state of 
+            # the tracking unit later
+            buffer_t = raw_embeddings
+            buffer_emb_dim = self.word_embedding_dim
+        else:
             # Allocate a "buffer" stack initialized with projected embeddings,
             # and maintain a cursor in this buffer.
             buffer_t = self._embedding_projection_network(
@@ -304,11 +319,6 @@ class HardStack(object):
             if self.use_input_dropout:
                 buffer_t = util.Dropout(buffer_t, self.embedding_dropout_keep_rate, self.training_mode)
             buffer_emb_dim = self.model_dim
-        else:
-            # Use the raw embedding vectors, they will be combined with the hidden state of 
-            # the tracking unit later
-            buffer_t = raw_embeddings
-            buffer_emb_dim = self.word_embedding_dim
 
         # Collapse buffer to (batch_size * buffer_size) * emb_dim for fast indexing.
         buffer_t = buffer_t.reshape((-1, buffer_emb_dim))
@@ -321,7 +331,7 @@ class HardStack(object):
         transitions = self.transitions.dimshuffle(1, 0)
         
         # Initialize the hidden state for the tracking LSTM, if needed.
-        if self.use_tracking_lstm:            
+        if self.use_tracking_lstm:    
             # TODO: Unify what 'dim' means with LSTM. Here, it's the dim of 
             # each of h and c. For 'model_dim', it's the combined dimension
             # of the full hidden state (so h and c are each model_dim/2).
@@ -330,7 +340,7 @@ class HardStack(object):
             hidden_init = DUMMY
 
         # Set up the output list for scanning over _step().
-        if self._predict_network is not None:
+        if self._predict_transitions:
             outputs_info = [stack_init, buffer_cur_init, hidden_init, None]
         else:
             outputs_info = [stack_init, buffer_cur_init, hidden_init]
@@ -361,14 +371,20 @@ class HardStack(object):
         self.embeddings = self.final_stack[:, 0]
 
         self.transitions_pred = None
-        if self._predict_network is not None:
+        if self._predict_transitions:
             self.transitions_pred = scan_ret[-1].dimshuffle(1, 0, 2)
 
 
 class Model0(HardStack):
 
     def __init__(self, *args, **kwargs):
-        kwargs["predict_network"] = None
+        use_tracking_lstm = kwargs.get("use_tracking_lstm", False)
+        if use_tracking_lstm:
+            kwargs["prediction_and_tracking_network"] = partial(util.TrackingUnit, make_logits=False)
+        else:
+            kwargs["prediction_and_tracking_network"] = None
+
+        kwargs["predict_transitions"] = False
         kwargs["train_with_predicted_transitions"] = False
         kwargs["interpolate"] = False
         super(Model0, self).__init__(*args, **kwargs)
@@ -380,10 +396,11 @@ class Model1(HardStack):
         # Set the tracking unit based on supplied tracking_lstm_hidden_dim.
         use_tracking_lstm = kwargs.get("use_tracking_lstm", False)
         if use_tracking_lstm:
-            kwargs["predict_network"] = util.TrackingUnit
+            kwargs["prediction_and_tracking_network"] = util.TrackingUnit
         else:
-            kwargs["predict_network"] = util.Linear
+            kwargs["prediction_and_tracking_network"] = util.Linear
         # Defaults to not using predictions while training and not using scheduled sampling.
+        kwargs["predict_transitions"] = True
         kwargs["train_with_predicted_transitions"] = False
         kwargs["interpolate"] = False
         super(Model1, self).__init__(*args, **kwargs)
@@ -395,10 +412,11 @@ class Model2(HardStack):
         # Set the tracking unit based on supplied tracking_lstm_hidden_dim.
         use_tracking_lstm = kwargs.get("use_tracking_lstm", False)
         if use_tracking_lstm:
-            kwargs["predict_network"] = util.TrackingUnit
+            kwargs["prediction_and_tracking_network"] = util.TrackingUnit
         else:
-            kwargs["predict_network"] = util.Linear
+            kwargs["prediction_and_tracking_network"] = util.Linear
         # Defaults to using predictions while training and not using scheduled sampling.
+        kwargs["predict_transitions"] = True
         kwargs["train_with_predicted_transitions"] = True
         kwargs["interpolate"] = False
         super(Model2, self).__init__(*args, **kwargs)
@@ -409,10 +427,11 @@ class Model2S(HardStack):
     def __init__(self, *args, **kwargs):
         use_tracking_lstm = kwargs.get("use_tracking_lstm", False)
         if use_tracking_lstm:
-            kwargs["predict_network"] = util.TrackingUnit
+            kwargs["prediction_and_tracking_network"] = util.TrackingUnit
         else:
-            kwargs["predict_network"] = util.Linear
+            kwargs["prediction_and_tracking_network"] = util.Linear
         # Use supplied settings and use scheduled sampling.
+        kwargs["predict_transitions"] = True
         kwargs["train_with_predicted_transitions"] = True
         kwargs["interpolate"] = True
         super(Model2S, self).__init__(*args, **kwargs)

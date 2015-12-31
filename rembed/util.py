@@ -298,14 +298,17 @@ def LSTMLayer(lstm_prev, inp, inp_dim, full_memory_dim, vs, name="lstm", initial
 
     return T.concatenate([h_t, c_t], axis=1)
 
-def TrackingUnit(state_prev, inp, inp_dim, hidden_dim, vs, name="track_unit"):
+def TrackingUnit(state_prev, inp, inp_dim, hidden_dim, vs, name="track_unit", make_logits=True):
     # Pass previous state and input to an LSTM layer.
     state = LSTMLayer(state_prev, inp, inp_dim, 2 * hidden_dim, vs, name="%s/lstm" % name)
 
-    # Pass LSTM states through a Linear layer to predict the next transition.
-    pred = Linear(state, 2 * hidden_dim, NUM_TRANSITION_TYPES, vs, name="%s/linear" % name)
+    if make_logits:
+        # Pass LSTM states through a Linear layer to predict the next transition.
+        logits = Linear(state, 2 * hidden_dim, NUM_TRANSITION_TYPES, vs, name="%s/linear" % name)
+    else:
+        logits = 0.0
 
-    return state, pred
+    return state, logits
 
 def MLP(inp, inp_dim, outp_dim, vs, layer=ReLULayer, hidden_dims=None,
         name="mlp", initializer=None):
