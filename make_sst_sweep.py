@@ -41,9 +41,9 @@ SWEEP_PARAMETERS = {
     "l2_lambda":   		  (EXP, 1e-7, 2e-5),  # Plain RNN likes > 5e-6
     "semantic_classifier_keep_rate": (LIN, 0.5, 0.65),
     "embedding_keep_rate": (LIN, 0.4, 1.0),
-    "scheduled_sampling_exponent_base": (SS_BASE, 2e-6, 2e-4),
+    "scheduled_sampling_exponent_base": (SS_BASE, 2e-6, 8e-4),
     "transition_cost_scale": (LIN, 18.0, 28.0),
-    "tracking_lstm_hidden_dim": (EXP, 1, 50)
+    "tracking_lstm_hidden_dim": (EXP, 4, 50)
 }
 
 sweep_name = "sweep_" + \
