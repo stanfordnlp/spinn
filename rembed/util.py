@@ -140,7 +140,7 @@ class VariableStore(object):
 
         return self.vars[name]
 
-    def save_checkpoint(self, filename="vs_ckpt", keys=None, step=None):
+    def save_checkpoint(self, filename="vs_ckpt", keys=None, extra_vars=[]):
         if not keys:
             keys = self.savable_vars
         save_file = open(filename, 'w')  # this will overwrite current contents
@@ -150,11 +150,11 @@ class VariableStore(object):
                 self.logger.Log(
                     "Saving variable " + full_name, level=self.logger.DEBUG)
             cPickle.dump(self.vars[key].get_value(borrow=True), save_file, -1)  # the -1 is for HIGHEST_PROTOCOL
-        if step:
-            cPickle.dump(step, save_file, -1)
+        for var in extra_vars:
+            cPickle.dump(var, save_file, -1)
         save_file.close()
 
-    def load_checkpoint(self, filename="vs_ckpt", keys=None, get_step=False):
+    def load_checkpoint(self, filename="vs_ckpt", keys=None, num_extra_vars=0):
         if not keys:
             keys = self.savable_vars
         save_file = open(filename)
@@ -164,8 +164,11 @@ class VariableStore(object):
                 self.logger.Log(
                     "Restoring variable " + full_name, level=self.logger.DEBUG)
             self.vars[key].set_value(cPickle.load(save_file), borrow=True)
-        if get_step:
-            return cPickle.load(save_file)
+
+        extra_vars = []
+        for _ in range(num_extra_vars):
+            extra_vars.append(cPickle.load(save_file))
+        return extra_vars
 
     def add_nongradient_update(self, variable, new_value):
         # Track an update that should be applied during training but that aren't gradients.
