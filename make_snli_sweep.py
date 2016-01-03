@@ -31,8 +31,8 @@ FIXED_PARAMETERS = {
     "eval_seq_length":	"100",
     "clipping_max_value":  "5.0",
     "batch_size":  "32",
-    "init_range", "0.005",
-    "ckpt_root":    os.path.join("/afs/cs.stanford.edu/u", getpass.getuser(), "scr/")  # Launching user's home scr dir
+    "init_range": "0.005",
+    "ckpt_path":    os.path.join("/afs/cs.stanford.edu/u", getpass.getuser(), "scr/")  # Launching user's home scr dir
 }
 
 # Tunable parameters.
