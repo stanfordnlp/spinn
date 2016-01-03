@@ -108,7 +108,8 @@ def build_sentence_model(cls, vocab_size, seq_length, tokens, transitions,
 
     # Feed forward through a single output layer
     logits = util.Linear(
-        sentence_vector, FLAGS.model_dim, num_classes, vs, use_bias=True)
+        sentence_vector, FLAGS.model_dim, num_classes, vs, 
+        name="semantic_classifier", use_bias=True)
 
     return sentence_model.transitions_pred, logits
 
@@ -217,17 +218,21 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
     mlp_input = util.Dropout(mlp_input, FLAGS.semantic_classifier_keep_rate, training_mode)
 
     # Apply a combining MLP
+    prev_features = mlp_input
+    prev_features_dim = mlp_input_dim
     for layer in range(FLAGS.num_sentence_pair_combination_layers):
-        pair_features = util.ReLULayer(mlp_input, mlp_input_dim, FLAGS.model_dim, vs,
+        prev_features = util.ReLULayer(prev_features, prev_features_dim, FLAGS.sentence_pair_combination_layer_dim, vs,
             name="combining_mlp/" + str(layer),
             initializer=util.HeKaimingInitializer())
+        prev_features_dim = FLAGS.sentence_pair_combination_layer_dim
 
-        pair_features = util.BatchNorm(pair_features, FLAGS.model_dim, vs, "combining_mlp/" + str(layer), training_mode)
-        pair_features = util.Dropout(pair_features, FLAGS.semantic_classifier_keep_rate, training_mode)
+        prev_features = util.BatchNorm(prev_features, prev_features_dim, vs, "combining_mlp/" + str(layer), training_mode)
+        prev_features = util.Dropout(prev_features, FLAGS.semantic_classifier_keep_rate, training_mode)
 
     # Feed forward through a single output layer
     logits = util.Linear(
-        pair_features, FLAGS.model_dim, num_classes, vs, use_bias=True)
+        prev_features, prev_features_dim, num_classes, vs, 
+        name="semantic_classifier", use_bias=True)
 
     return premise_model.transitions_pred, hypothesis_model.transitions_pred, logits
 
@@ -677,6 +682,7 @@ if __name__ == '__main__':
     gflags.DEFINE_boolean("lstm_composition", True, "")
     # gflags.DEFINE_integer("num_composition_layers", 1, "")
     gflags.DEFINE_integer("num_sentence_pair_combination_layers", 2, "")
+    gflags.DEFINE_integer("sentence_pair_combination_layer_dim", 1024, "")
     gflags.DEFINE_float("scheduled_sampling_exponent_base", 0.99, 
         "Used for scheduled sampling, with probability of Model 1 over Model 2 being base^#training_steps")
     gflags.DEFINE_boolean("use_difference_feature", True, 
