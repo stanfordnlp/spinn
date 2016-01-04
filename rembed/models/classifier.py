@@ -644,27 +644,31 @@ if __name__ == '__main__':
 
     # Data types.
     gflags.DEFINE_string("data_type", "bl", "Values: bl, sst, snli")
+    gflags.DEFINE_enum("data_type", "bl", ["bl", "sst", "snli"], 
+        "Which data handler and classifier to use.")
 
     # Where to store checkpoints
     gflags.DEFINE_string("ckpt_path", ".", "Where to save/load checkpoints. Can be either "
-                         "a filename or a directory. In the latter case, the experiment name "
-                         "serves as the base for the filename.") 
+        "a filename or a directory. In the latter case, the experiment name serves as the "
+        "base for the filename.") 
 
     # Data settings.
     gflags.DEFINE_string("training_data_path", None, "")
-    gflags.DEFINE_string("eval_data_path", None, "")
+    gflags.DEFINE_string("eval_data_path", None, "Can contain multiple file paths, separated "
+        "using ':' tokens. The first file should be the dev set, and is used for determining "
+        "when to save the early stopping 'best' checkpoints.")
     gflags.DEFINE_integer("seq_length", 30, "")
     gflags.DEFINE_integer("eval_seq_length", 30, "")
     gflags.DEFINE_string("embedding_data_path", None,
-                         "If set, load GloVe formatted embeddings from here.")
+        "If set, load GloVe-formatted embeddings from here.")
 
     # Model architecture settings.
     gflags.DEFINE_enum("model_type", "Model0",
                        ["RNN", "Model0", "Model1", "Model2", "Model2S"],
                        "")
     gflags.DEFINE_boolean("allow_gt_transitions_in_eval", False,
-                          "Whether to use ground truth transitions in evaluation when appropriate "
-                          "(i.e., in Model 1 and Model 2S.)")
+        "Whether to use ground truth transitions in evaluation when appropriate "
+        "(i.e., in Model 1 and Model 2S.)")
     gflags.DEFINE_integer("model_dim", 8, "")
     gflags.DEFINE_integer("word_embedding_dim", 8, "")
     
@@ -707,7 +711,7 @@ if __name__ == '__main__':
 
     gflags.DEFINE_integer("ckpt_interval_steps", 5000, "Update the checkpoint on disk at this interval.")
     gflags.DEFINE_boolean("ckpt_on_best_dev_error", True, "If error on the first eval set (the dev set) is "
-                          "at most 0.95 of error at the previous checkpoint, save a special 'best' checkpoint.")
+        "at most 0.95 of error at the previous checkpoint, save a special 'best' checkpoint.")
 
     # Evaluation settings
     gflags.DEFINE_boolean("expanded_eval_only_mode", False, 
