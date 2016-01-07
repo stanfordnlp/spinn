@@ -21,7 +21,7 @@ SS_BASE = "SS_BASE"
 
 FIXED_PARAMETERS = {
     "data_type":     "sst",
-    "model_type":     "Model2S",
+    "model_type":     "Model0",
     "training_data_path":    "sst-data/train_expanded.txt",
     "eval_data_path":    "sst-data/dev.txt:sst-data/train_sample.txt",
     "embedding_data_path": "/scr/nlp/data/glove_vecs/glove.840B.300d.txt",
@@ -32,7 +32,7 @@ FIXED_PARAMETERS = {
     "clipping_max_value":  "5.0",
     "batch_size":  "32",
     "init_range": "0.005",
-    "ckpt_path":    os.path.join("/afs/cs.stanford.edu/u/sbowman/scr/")  # Launching user's home scr dir
+    "ckpt_path":    os.path.join("/afs/cs.stanford.edu/u", getpass.getuser(), "scr/")  # Launching user's home scr dir
 }
 
 # Tunable parameters.
@@ -46,9 +46,9 @@ SWEEP_PARAMETERS = {
     "tracking_lstm_hidden_dim": (EXP, 4, 50)
 }
 
-sweep_name = "01_05_sweep_" + \
+sweep_name = "sweep_" + \
     FIXED_PARAMETERS["data_type"] + "_" + FIXED_PARAMETERS["model_type"]
-sweep_runs = 4
+sweep_runs = 6
 queue = "jag"
 
 # - #
