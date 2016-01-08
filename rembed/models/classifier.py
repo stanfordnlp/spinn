@@ -643,7 +643,6 @@ if __name__ == '__main__':
     gflags.DEFINE_string("experiment_name", "experiment", "")
 
     # Data types.
-    gflags.DEFINE_string("data_type", "bl", "Values: bl, sst, snli")
     gflags.DEFINE_enum("data_type", "bl", ["bl", "sst", "snli"], 
         "Which data handler and classifier to use.")
 
