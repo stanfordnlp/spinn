@@ -629,7 +629,7 @@ def run(only_forward=False):
             if step % FLAGS.eval_interval_steps == 0:
                 for index, eval_set in enumerate(eval_iterators):
                     acc = evaluate(eval_fn, eval_set, logger, step)
-                    if FLAGS.ckpt_on_best_dev_error and index == 0 and (1 - acc) < 0.95 * best_dev_error:
+                    if FLAGS.ckpt_on_best_dev_error and index == 0 and (1 - acc) < 0.99 * best_dev_error and step > 1000:
                         best_dev_error = 1 - acc
                         logger.Log("Checkpointing with new best dev accuracy of %f" % acc)
                         vs.save_checkpoint(checkpoint_path + "_best", extra_vars=[step, best_dev_error])
@@ -711,7 +711,7 @@ if __name__ == '__main__':
 
     gflags.DEFINE_integer("ckpt_interval_steps", 5000, "Update the checkpoint on disk at this interval.")
     gflags.DEFINE_boolean("ckpt_on_best_dev_error", True, "If error on the first eval set (the dev set) is "
-        "at most 0.95 of error at the previous checkpoint, save a special 'best' checkpoint.")
+        "at most 0.99 of error at the previous checkpoint, save a special 'best' checkpoint.")
 
     # Evaluation settings
     gflags.DEFINE_boolean("expanded_eval_only_mode", False, 
