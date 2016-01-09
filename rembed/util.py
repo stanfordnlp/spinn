@@ -54,6 +54,7 @@ def TreeLSTMBiasInitializer():
         value = np.zeros(shape)
         value[hidden_dim:3*hidden_dim] = 1
         return value
+    return init
 
 
 def LSTMBiasInitializer():
@@ -62,6 +63,7 @@ def LSTMBiasInitializer():
         value = np.zeros(shape)
         value[hidden_dim:2*hidden_dim] = 1
         return value
+    return init
 
 
 def DoubleIdentityInitializer(range):
