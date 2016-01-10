@@ -86,7 +86,7 @@ def build_sentence_model(cls, vocab_size, seq_length, tokens, transitions,
 
     # Build hard stack which scans over input sequence.
     sentence_model = cls(
-        FLAGS.model_dim, FLAGS.word_embedding_dim, vocab_size, seq_length,
+        FLAGS.model_dim, FLAGS.word_embedding_dim, FLAGS.batch_size, vocab_size, seq_length,
         compose_network, embedding_projection_network, training_mode, ground_truth_transitions_visible, vs,
         use_tracking_lstm=FLAGS.use_tracking_lstm,
         tracking_lstm_hidden_dim=FLAGS.tracking_lstm_hidden_dim,
@@ -111,8 +111,7 @@ def build_sentence_model(cls, vocab_size, seq_length, tokens, transitions,
         sentence_vector, FLAGS.model_dim, num_classes, vs,
         name="semantic_classifier", use_bias=True)
 
-    return sentence_model.transitions_pred, logits
-
+    return stack, sentence_model.transitions_pred, logits
 
 
 def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
@@ -508,7 +507,7 @@ def run(only_forward=False):
         transitions = T.imatrix("transitions")
         num_transitions = T.vector("num_transitions", dtype="int32")
 
-        predicted_transitions, logits = build_sentence_model(
+        stack, predicted_transitions, logits = build_sentence_model(
             model_cls, len(vocabulary), FLAGS.seq_length,
             X, transitions, len(data_manager.LABEL_MAP), training_mode, ground_truth_transitions_visible, vs,
             initial_embeddings=initial_embeddings, project_embeddings=(not train_embeddings),

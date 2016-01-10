@@ -52,7 +52,7 @@ class HardStack(object):
     Model 2: prediction_and_tracking_network=something, train_with_predicted_transitions=True
     """
 
-    def __init__(self, model_dim, word_embedding_dim, vocab_size, seq_length, compose_network,
+    def __init__(self, model_dim, word_embedding_dim, batch_size, vocab_size, seq_length, compose_network,
                  embedding_projection_network, training_mode, ground_truth_transitions_visible, vs,
                  prediction_and_tracking_network=None,
                  predict_transitions=False,
@@ -127,8 +127,11 @@ class HardStack(object):
         self.word_embedding_dim = word_embedding_dim
         self.use_tracking_lstm = use_tracking_lstm
         self.tracking_lstm_hidden_dim = tracking_lstm_hidden_dim
+
+        self.batch_size = batch_size
         self.vocab_size = vocab_size
         self.seq_length = seq_length
+        self.stack_size = seq_length
 
         self._compose_network = compose_network
         self._embedding_projection_network = embedding_projection_network
@@ -166,6 +169,7 @@ class HardStack(object):
         self.context_sensitive_use_relu = context_sensitive_use_relu
 
         self._make_params()
+        self._make_shared()
         self._make_inputs()
         self._make_scan()
 
@@ -188,13 +192,32 @@ class HardStack(object):
             self.embeddings = self._vs.add_param(
                 "embeddings", (self.vocab_size, self.word_embedding_dim))
 
+    def _make_shared(self):
+        stack_init = np.zeros((self.stack_size * self.batch_size, self.model_dim), dtype=np.float32)
+        self._stack_orig = theano.shared(stack_init, borrow=False, name="stack_orig")
+        self.stack = theano.shared(stack_init, borrow=False, name="stack")
+
+        cursors_init = np.zeros((self.batch_size,)).astype(np.int32)
+        self._cursors_orig = theano.shared(cursors_init, borrow=False, name="cursors_orig")
+        self.cursors = theano.shared(cursors_init, borrow=False, name="cursors")
+
+        queue_init = np.zeros((self.batch_size * self.stack_size,)).astype(np.int32)
+        self._queue_orig = theano.shared(queue_init, borrow=False, name="queue_orig")
+        self.queue = theano.shared(queue_init, borrow=False, name="queue")
+
+        zero_updates = {
+                self.stack: self._stack_orig,
+                self.cursors: self._cursors_orig,
+                self.queue: self._queue_orig
+        }
+        self.zero = theano.function([], (), updates=zero_updates)
+
     def _make_inputs(self):
         self.X = self.X or T.imatrix("X")
         self.transitions = self.transitions or T.imatrix("transitions")
 
-    def _step(self, t, transitions_t, ss_mask_gen_matrix_t, stack_t,
-              merge_queue_t, merge_cursors_t, buffer_cur_t, tracking_hidden,
-              buffer, ground_truth_transitions_visible):
+    def _step(self, t, transitions_t, ss_mask_gen_matrix_t, buffer_cur_t,
+              tracking_hidden, buffer, ground_truth_transitions_visible):
         batch_size, _ = self.X.shape
 
         # Extract top buffer values.
@@ -250,11 +273,11 @@ class HardStack(object):
             mask = transitions_t
 
         # Fetch top two stack elements.
-        stack_1 = stack_t[(t - 1) * self.batch_size + self.batch_range]
+        stack_1 = self.stack[(t - 1) * self.batch_size + self.batch_range]
         # Get pointers into stack for second-to-top element.
-        stack_2_ptrs = merge_queue_t[merge_cursors_t - 1 + self.batch_range * self.seq_length]
+        stack_2_ptrs = self.queue[self.cursors - 1 + self.batch_range * self.seq_length]
         # Retrieve second-to-top element.
-        stack_2 = stack_t[stack_2_ptrs * self.batch_size + self.batch_range].reshape((self.batch_size, self.model_dim))
+        stack_2 = self.stack[stack_2_ptrs * self.batch_size + self.batch_range].reshape((self.batch_size, self.model_dim))
 
         # Now update the stack: first precompute merge results.
         merge_items = T.concatenate([stack_1, stack_2], axis=1)
@@ -268,37 +291,36 @@ class HardStack(object):
 
         # Compute new stack value.
         stack_next, merge_queue_next, merge_cursors_next = update_hard_stack(
-            t, stack_t, buffer_top_t, merge_value, merge_queue_t,
-            merge_cursors_t, mask, self.batch_size, self.seq_length,
-            self.batch_range)
+            t, self.stack, buffer_top_t, merge_value, self.queue, self.cursors,
+            mask, self.batch_size, self.seq_length, self.batch_range)
 
         # Move buffer cursor as necessary. Since mask == 1 when merge, we
         # should increment each buffer cursor by 1 - mask.
         buffer_cur_next = buffer_cur_t + (1 - mask)
 
         if self._predict_transitions:
-            ret_val = stack_next, buffer_cur_next, tracking_hidden, actions_t
+            ret_val = buffer_cur_next, tracking_hidden, actions_t
         else:
-            ret_val = stack_next, merge_queue_next, merge_cursors_next, buffer_cur_next, tracking_hidden
+            ret_val = buffer_cur_next, tracking_hidden
 
         if not self.interpolate:
             # Use ss_mask as a redundant return value.
             ret_val = (ss_mask_gen_matrix_t,) + ret_val
+
+        updates = {
+            self.stack: stack_next,
+            self.queue: merge_queue_next,
+            self.cursors: merge_cursors_next
+        }
 
         return ret_val
 
     def _make_scan(self):
         """Build the sequential composition / scan graph."""
 
-        batch_size, max_stack_size = self.X.shape
-        self.batch_size = batch_size
+        batch_size = self.batch_size
+        max_stack_size = stack_size = self.stack_size
         self.batch_range = batch_range = T.arange(batch_size, dtype="int32")
-
-        # Stack batch is a 3D tensor.
-        stack_init = T.zeros((max_stack_size * batch_size, self.model_dim), dtype=np.float32)#theano.config.floatX)
-
-        merge_cursors = T.ones((batch_size,), dtype=np.int32) * -1
-        merge_queue = T.zeros((batch_size * max_stack_size,), dtype=np.int32)
 
         # Look up all of the embeddings that will be used.
         raw_embeddings = self.embeddings[self.X]  # batch_size * seq_length * emb_dim
@@ -323,7 +345,7 @@ class HardStack(object):
         # Collapse buffer to (batch_size * buffer_size) * emb_dim for fast indexing.
         buffer_t = buffer_t.reshape((-1, buffer_emb_dim))
 
-        buffer_cur_init = T.zeros((batch_size,), dtype="int")
+        buffer_cur_init = T.zeros((batch_size,), dtype="int32")
 
         DUMMY = T.zeros((2,)) # a dummy tensor used as a place-holder
 
@@ -343,8 +365,7 @@ class HardStack(object):
         if self._predict_transitions:
             outputs_info = [stack_init, buffer_cur_init, hidden_init, None]
         else:
-            outputs_info = [stack_init, merge_queue, merge_cursors,
-                            buffer_cur_init, hidden_init]
+            outputs_info = [buffer_cur_init, hidden_init]
 
         # Prepare data to scan over.
         sequences = [T.arange(transitions.shape[0]), transitions]
@@ -360,15 +381,15 @@ class HardStack(object):
             # done to avaid defining another step function.
             outputs_info = [DUMMY] + outputs_info
 
-        scan_ret = theano.scan(
+        scan_ret, self.scan_updates = theano.scan(
                 self._step,
                 sequences=sequences,
                 non_sequences=[buffer_t, self.ground_truth_transitions_visible],
-                outputs_info=outputs_info)[0]
+                outputs_info=outputs_info)
 
-        scan_ind = 0 if self.interpolate else 1
-        self.final_stack = scan_ret[scan_ind][-1].reshape((self.seq_length, self.batch_size, self.model_dim)).dimshuffle(1, 0, 2)
-        self.embeddings = self.final_stack[:, 0]
+        buf_ind = 0 if self.interpolate else 1
+        self.final_buf = scan_ret[buf_ind][-1]
+        self.final_stack = self.stack.reshape((max_stack_size, batch_size, self.model_dim)).dimshuffle(1, 0, 2)
 
         self.transitions_pred = None
         if self._predict_transitions:

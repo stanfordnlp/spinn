@@ -13,6 +13,7 @@ class HardStackTestCase(unittest.TestCase):
     """Basic functional tests for HardStack with dummy data."""
 
     def _make_stack(self, seq_length=4):
+        self.batch_size = 2
         self.embedding_dim = embedding_dim = 3
         self.vocab_size = vocab_size = 10
         self.seq_length = seq_length
@@ -33,7 +34,7 @@ class HardStackTestCase(unittest.TestCase):
             (vocab_size, 1)).repeat(embedding_dim, axis=1)
 
         self.stack = HardStack(
-            embedding_dim, embedding_dim, vocab_size, seq_length, compose_network,
+            embedding_dim, embedding_dim, self.batch_size, vocab_size, seq_length, compose_network,
             IdentityLayer, training_mode, ground_truth_transitions_visible, vs,
             X=X,
             transitions=transitions,
