@@ -176,8 +176,8 @@ class HardStack(object):
         if make_test_fn:
             self.scan_fn = theano.function([self.X, self.transitions, self.training_mode,
                                             self.ground_truth_transitions_visible],
-                                           self.final_stack,
-                                           on_unused_input='warn')
+                                           self.stack, updates=self.scan_updates,
+                                           on_unused_input="warn")
 
     def _make_params(self):
         # Per-token embeddings.
@@ -386,10 +386,6 @@ class HardStack(object):
                 sequences=sequences,
                 non_sequences=[buffer_t, self.ground_truth_transitions_visible],
                 outputs_info=outputs_info)
-
-        buf_ind = 0 if self.interpolate else 1
-        self.final_buf = scan_ret[buf_ind][-1]
-        self.final_stack = self.stack.reshape((max_stack_size, batch_size, self.model_dim)).dimshuffle(1, 0, 2)
 
         self.transitions_pred = None
         if self._predict_transitions:

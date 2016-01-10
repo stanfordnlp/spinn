@@ -34,7 +34,7 @@ class HardStackTestCase(unittest.TestCase):
             (vocab_size, 1)).repeat(embedding_dim, axis=1)
 
         self.stack = HardStack(
-            embedding_dim, embedding_dim, self.batch_size, vocab_size, seq_length, compose_network,
+            embedding_dim, embedding_dim, 2, vocab_size, seq_length, compose_network,
             IdentityLayer, training_mode, ground_truth_transitions_visible, vs,
             X=X,
             transitions=transitions,
@@ -58,16 +58,18 @@ class HardStackTestCase(unittest.TestCase):
             [0, 0, 1, 0]
         ], dtype=np.int32)
 
-        expected = np.array([[[3, 3, 3],
-                              [1, 1, 1],
-                              [2, 2, 2],
-                              [0, 0, 0]],
-                             [[3, 3, 3],
-                              [2, 2, 2],
-                              [5, 5, 5],
-                              [4, 4, 4]]])
+        theano.printing.debugprint(self.stack.scan_fn.maker.fgraph.outputs[1])
+        expected = np.array([[ 3.,  3.,  3.],
+                             [ 3.,  3.,  3.],
+                             [ 1.,  1.,  1.],
+                             [ 2.,  2.,  2.],
+                             [ 2.,  2.,  2.],
+                             [ 5.,  5.,  5.],
+                             [ 0.,  0.,  0.],
+                             [ 4.,  4.,  4.]])
 
-        ret = self.stack.scan_fn(X, transitions, 1.0, 1)
+        self.stack.scan_fn(X, transitions, 1.0, 1)
+        ret = self.stack.stack.get_value()
         np.testing.assert_almost_equal(ret, expected)
 
     def test_with_cropped_data(self):
