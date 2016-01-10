@@ -32,7 +32,7 @@ def update_hard_stack(t, stack_t, push_value, merge_value, merge_queue_t,
     stack_next = T.set_subtensor(stack_t[t * batch_size + batch_range], top_next, inplace=True)
 
     cursors_next = merge_cursors_t + (mask * -1 + (1 - mask) * 1)
-    queue_next = T.set_subtensor(merge_queue_t[batch_range * stack_size + cursors_next], t)
+    queue_next = T.set_subtensor(merge_queue_t[batch_range * stack_size + cursors_next], t, inplace=True)
 
     return stack_next, queue_next, cursors_next
 
