@@ -588,7 +588,7 @@ def run(only_forward=False):
             evaluate_expanded(eval_fn, eval_set, eval_out_path, logger, step,
                               data_manager.SENTENCE_PAIR_DATA, ind_to_word)
     else:
-         # Train
+        # Train
 
         new_values = util.RMSprop(total_cost, vs.trainable_vars.values(), lr)
         new_values += [(key, vs.nongradient_updates[key]) for key in vs.nongradient_updates]
