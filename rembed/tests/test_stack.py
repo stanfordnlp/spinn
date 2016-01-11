@@ -58,7 +58,6 @@ class HardStackTestCase(unittest.TestCase):
             [0, 0, 1, 0]
         ], dtype=np.int32)
 
-        theano.printing.debugprint(self.stack.scan_fn.maker.fgraph.outputs[1])
         expected = np.array([[ 3.,  3.,  3.],
                              [ 3.,  3.,  3.],
                              [ 1.,  1.,  1.],
