@@ -101,7 +101,8 @@ def build_sentence_model(cls, vocab_size, seq_length, tokens, transitions,
         context_sensitive_use_relu=FLAGS.context_sensitive_use_relu)
 
     # Extract top element of final stack timestep.
-    sentence_vector = sentence_model.embeddings.reshape((-1, FLAGS.model_dim))
+    stack_top = stack.scan_updates[stack.stack][-FLAGS.batch_size:]
+    sentence_vector = stack_top
 
     sentence_vector = util.BatchNorm(sentence_vector, FLAGS.model_dim, vs, "sentence_vector", training_mode)
     sentence_vector = util.Dropout(sentence_vector, FLAGS.semantic_classifier_keep_rate, training_mode)

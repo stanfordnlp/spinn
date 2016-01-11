@@ -59,7 +59,7 @@ class GpuAdvancedSubtensor1Floats(AdvancedSubtensor1Floats, GpuOp):
         raise NotImplementedError("AdvancedSubtensor1FloatsGPU is GPU only")
 
     def c_code_cache_version(self):
-        return 11
+        return 12
 
     def c_support_code(self):
         return """
@@ -444,7 +444,7 @@ class GpuAdvancedIncSubtensor1Floats_scal_dev20(AdvancedIncSubtensor1Floats, Gpu
         raise NotImplementedError("GpuAdvancedIncSubtensor1Floats_dev20 supports GPU only")
 
     def c_code_cache_version(self):
-        return 3
+        return 4
 
     def c_code(self, node, name, inp, out, sub):
         x, y, ind = inp

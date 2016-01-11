@@ -397,9 +397,15 @@ class HardStack(object):
                 non_sequences=[buffer_t, self.ground_truth_transitions_visible],
                 outputs_info=outputs_info)
 
+        self.final_buf = scan_ret[0][-1]
+
         self.transitions_pred = None
         if self._predict_transitions:
             self.transitions_pred = scan_ret[-1].dimshuffle(1, 0, 2)
+
+    @property
+    def final_stack(self):
+        return self.stack.get_value()[-self.batch_size:]
 
 
 class Model0(HardStack):
