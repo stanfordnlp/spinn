@@ -127,8 +127,6 @@ TakeFrom_Float(CudaNdarray *self, CudaNdarray *indices, long axis,
         PyObject_Print(used_indices, stdout, 0);
         Py_DECREF(used_indices);
     }
-    printf("size: %d\\n", CudaNdarray_HOST_DIMS(indices)[0]);
-    printf("stride: %d\\n", CudaNdarray_HOST_STRIDES(indices)[0]);
 
     if (verbose) printf("after print of object\\n");
     if(!CudaNdarray_is_c_contiguous(indices) != 0) {
@@ -352,7 +350,6 @@ if (out == NULL) {
     %(fail)s;
 }
 %(out)s = out;
-printf("out dim %%d %%d\\n", CudaNdarray_HOST_DIMS(out)[0], CudaNdarray_HOST_DIMS(out)[1]);
 
 if (cudaGetLastError() != cudaSuccess) {
     PyErr_Format(PyExc_RuntimeError, "Cuda error: k_take_3_float: %%s",
@@ -504,7 +501,6 @@ class GpuAdvancedIncSubtensor1Floats_scal_dev20(AdvancedIncSubtensor1Floats, Gpu
             const int *shapeY = CudaNdarray_HOST_DIMS(py_other);
             const int colsX = CudaNdarray_NDIM(py_self) <= 1 ? 1 : shapeX[1];
             const int colsY = CudaNdarray_NDIM(py_other) <= 1 ? 1 : shapeY[1];
-            printf("colsY: %%d %%d\\n", colsY, CudaNdarray_NDIM(py_other));
 
             const int *strX   = CudaNdarray_HOST_STRIDES(py_self);
             const int *strY   = CudaNdarray_HOST_STRIDES(py_other);
