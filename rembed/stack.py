@@ -6,7 +6,7 @@ import numpy as np
 import theano
 
 from theano import tensor as T
-from rembed import util
+from rembed import cuda_util, util
 
 
 def update_hard_stack(t, stack_t, push_value, merge_value, merge_queue_t,
@@ -27,12 +27,13 @@ def update_hard_stack(t, stack_t, push_value, merge_value, merge_queue_t,
         mask: Batch of booleans: 1 if merge, 0 if push
     """
 
-    mask2 = T.cast(mask.dimshuffle(0, "x"), "float32")
+    mask2 = mask.dimshuffle(0, "x")
     top_next = mask2 * merge_value + (1 - mask2) * push_value
     stack_next = T.set_subtensor(stack_t[t * batch_size + batch_range], top_next, inplace=True)
 
     cursors_next = merge_cursors_t + (mask * -1 + (1 - mask) * 1)
-    queue_next = T.set_subtensor(merge_queue_t[batch_range * stack_size + cursors_next], t, inplace=True)
+    queue_next = cuda_util.AdvancedIncSubtensor1Floats(set_instead_of_inc=True, inplace=True)(
+            merge_queue_t, T.cast(t, "float32"), batch_range * stack_size + cursors_next)
 
     return stack_next, queue_next, cursors_next
 
@@ -197,11 +198,11 @@ class HardStack(object):
         self._stack_orig = theano.shared(stack_init, borrow=False, name="stack_orig")
         self.stack = theano.shared(stack_init, borrow=False, name="stack")
 
-        cursors_init = np.zeros((self.batch_size,)).astype(np.int32)
+        cursors_init = np.zeros((self.batch_size,)).astype(np.float32)
         self._cursors_orig = theano.shared(cursors_init, borrow=False, name="cursors_orig")
         self.cursors = theano.shared(cursors_init, borrow=False, name="cursors")
 
-        queue_init = np.zeros((self.batch_size * self.stack_size,)).astype(np.int32)
+        queue_init = np.zeros((self.batch_size * self.stack_size,)).astype(np.float32)
         self._queue_orig = theano.shared(queue_init, borrow=False, name="queue_orig")
         self.queue = theano.shared(queue_init, borrow=False, name="queue")
 
@@ -275,9 +276,10 @@ class HardStack(object):
         # Fetch top two stack elements.
         stack_1 = self.stack[(t - 1) * self.batch_size + self.batch_range]
         # Get pointers into stack for second-to-top element.
-        stack_2_ptrs = self.queue[self.cursors - 1 + self.batch_range * self.seq_length]
+        stack_2_ptrs = cuda_util.AdvancedSubtensor1Floats()(self.queue, self.cursors - 1 + self.batch_range * self.seq_length)
         # Retrieve second-to-top element.
-        stack_2 = self.stack[stack_2_ptrs * self.batch_size + self.batch_range].reshape((self.batch_size, self.model_dim))
+        stack_2 = cuda_util.AdvancedSubtensor1Floats()(self.stack, stack_2_ptrs * self.batch_size + self.batch_range)
+        stack_2 = stack_2.reshape((self.batch_size, self.model_dim))
 
         # Now update the stack: first precompute merge results.
         merge_items = T.concatenate([stack_1, stack_2], axis=1)
@@ -296,7 +298,7 @@ class HardStack(object):
 
         # Move buffer cursor as necessary. Since mask == 1 when merge, we
         # should increment each buffer cursor by 1 - mask.
-        buffer_cur_next = buffer_cur_t + (1 - mask)
+        buffer_cur_next = buffer_cur_t + T.cast(1 - mask, dtype="int32")
 
         if self._predict_transitions:
             ret_val = buffer_cur_next, tracking_hidden, actions_t
@@ -350,7 +352,7 @@ class HardStack(object):
         DUMMY = T.zeros((2,)) # a dummy tensor used as a place-holder
 
         # Dimshuffle inputs to seq_len * batch_size for scanning
-        transitions = self.transitions.dimshuffle(1, 0)
+        transitions = T.cast(self.transitions.dimshuffle(1, 0), dtype=theano.config.floatX)
 
         # Initialize the hidden state for the tracking LSTM, if needed.
         if self.use_tracking_lstm:
