@@ -410,7 +410,7 @@ class AdvancedIncSubtensor1Floats(T.subtensor.AdvancedIncSubtensor1):
         return theano.gof.Apply(self, [x_, y_, ilist_], [x_.type()])
 
 
-class GpuAdvancedIncSubtensor1Floats_scal_dev20(GpuAdvancedIncSubtensor1Floats):
+class GpuAdvancedIncSubtensor1Floats_scal_dev20(AdvancedIncSubtensor1Floats, GpuOp):
 
     """
     Modified form of `GpuAdvancedIncSubtensor1_dev20` which supports indices in
