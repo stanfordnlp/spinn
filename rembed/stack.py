@@ -9,7 +9,7 @@ from theano import tensor as T
 from rembed import cuda_util, util
 
 
-def update_hard_stack(t, stack_t, push_value, merge_value, merge_queue_t,
+def update_hard_stack(t, t_f, stack_t, push_value, merge_value, merge_queue_t,
                       merge_cursors_t, mask, batch_size, stack_size, batch_range, cursors_shift):
     """Compute the new value of the given hard stack.
 
@@ -33,7 +33,7 @@ def update_hard_stack(t, stack_t, push_value, merge_value, merge_queue_t,
 
     cursors_next = merge_cursors_t + (mask * -1 + (1 - mask) * 1)
     queue_next = cuda_util.AdvancedIncSubtensor1Floats(set_instead_of_inc=True, inplace=True)(
-            merge_queue_t, T.cast(t, "float32"), cursors_shift + cursors_next)
+            merge_queue_t, t_f, cursors_shift + cursors_next)
 
     return stack_next, queue_next, cursors_next
 
@@ -217,7 +217,7 @@ class HardStack(object):
         self.X = self.X or T.imatrix("X")
         self.transitions = self.transitions or T.imatrix("transitions")
 
-    def _step(self, t, transitions_t, transitions_t_f, ss_mask_gen_matrix_t,
+    def _step(self, t, t_f, transitions_t, transitions_t_f, ss_mask_gen_matrix_t,
               buffer_cur_t, tracking_hidden, buffer,
               ground_truth_transitions_visible):
         batch_size, _ = self.X.shape
@@ -293,7 +293,7 @@ class HardStack(object):
 
         # Compute new stack value.
         stack_next, merge_queue_next, merge_cursors_next = update_hard_stack(
-            t, self.stack, buffer_top_t, merge_value, self.queue, self.cursors,
+            t, t_f, self.stack, buffer_top_t, merge_value, self.queue, self.cursors,
             mask, self.batch_size, self.seq_length, self.batch_range, self._cursors_shift)
 
         # Move buffer cursor as necessary. Since mask == 1 when merge, we
@@ -377,7 +377,9 @@ class HardStack(object):
             outputs_info = [buffer_cur_init, hidden_init]
 
         # Prepare data to scan over.
-        sequences = [T.arange(transitions.shape[0]), transitions, transitions_f]
+        sequences = [T.arange(transitions.shape[0]),
+                     T.arange(transitions.shape[0], dtype="float32"),
+                     transitions, transitions_f]
         if self.interpolate:
             # Generate Bernoulli RVs to simulate scheduled sampling
             # if the interpolate flag is on.
