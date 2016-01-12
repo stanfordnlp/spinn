@@ -497,15 +497,6 @@ class GpuAdvancedIncSubtensor1Floats_scal_dev20(AdvancedIncSubtensor1Floats, Gpu
             const int set_instead_of_inc)
         {
             if(init_err_var()!= 0) return -1;
-            const int *shapeX = CudaNdarray_HOST_DIMS(py_self);
-            const int *shapeY = CudaNdarray_HOST_DIMS(py_other);
-            const int colsX = CudaNdarray_NDIM(py_self) <= 1 ? 1 : shapeX[1];
-            const int colsY = CudaNdarray_NDIM(py_other) <= 1 ? 1 : shapeY[1];
-
-            const int *strX   = CudaNdarray_HOST_STRIDES(py_self);
-            const int *strY   = CudaNdarray_HOST_STRIDES(py_other);
-            const int strX1 = colsX == 1 ? 0 : strX[1];
-            const int strY1 = colsY == 1 ? 0 : strY[1];
 
             int size = CudaNdarray_SIZE(py_indices);
             if(size == 0){
@@ -532,7 +523,7 @@ class GpuAdvancedIncSubtensor1Floats_scal_dev20(AdvancedIncSubtensor1Floats, Gpu
             if(err != cudaSuccess){
                 PyErr_Format(
                     PyExc_RuntimeError,
-                    "GpuAdvancedIncSubtensor1_dev20: cuda error: %%s",
+                    "GpuAdvancedIncSubtensor1Floats_scal_dev20: cuda error: %%s",
                     cudaGetErrorString(err));
                 return -1;
             }
@@ -544,20 +535,27 @@ class GpuAdvancedIncSubtensor1Floats_scal_dev20(AdvancedIncSubtensor1Floats, Gpu
 @register_opt()
 @local_optimizer([gpu_from_host, AdvancedIncSubtensor1Floats])
 def local_gpu_advanced_incsubtensor1_scal_floats(node):
+    supported_dims = {
+            # x.ndim, y.ndim
+            (1, 0): GpuAdvancedIncSubtensor1Floats_scal_dev20,
+            #(2, 2): GpuAdvancedIncSubtensor1Floats_dev20,
+    }
+
     if isinstance(node.op, GpuFromHost):
         host_input = node.inputs[0]
         # Should not execute for GpuAdvancedIncSubtensor1
         if host_input.owner and \
            host_input.owner.op.__class__ is AdvancedIncSubtensor1Floats:
             x, y = host_input.owner.inputs[0:2]
-            if not (x.ndim == 1 and y.ndim == 0):
+            dims = (x.ndim, y.ndim)
+            if dims not in supported_dims.keys():
                 return False
 
             coords = host_input.owner.inputs[2:]
             set_instead_of_inc = host_input.owner.op.set_instead_of_inc
             inplace = host_input.owner.op.inplace
 
-            gpu_op = GpuAdvancedIncSubtensor1Floats_scal_dev20(inplace=inplace,
+            gpu_op = supported_dims[dims](inplace=inplace,
                 set_instead_of_inc=set_instead_of_inc)
             return [gpu_op(as_cuda_ndarray_variable(x),
                            as_cuda_ndarray_variable(y), *coords)]
@@ -568,7 +566,8 @@ def local_gpu_advanced_incsubtensor1_scal_floats(node):
             node.inputs[1].dtype == "float32" and
             node.inputs[2].dtype == "float32"):
         x, y = node.inputs[0:2]
-        if not (x.ndim == 1 and y.ndim == 0):
+        dims = (x.ndim, y.ndim)
+        if dims not in supported_dims:
             return False
 
         coords = node.inputs[2:]
@@ -583,12 +582,11 @@ def local_gpu_advanced_incsubtensor1_scal_floats(node):
             gpu_y, = y.owner.inputs
         else:
             gpu_y = as_cuda_ndarray_variable(y)
-        print "============='", coords
         if go_gpu:
             set_instead_of_inc = node.op.set_instead_of_inc
             inplace = node.op.inplace
 
-            gpu_op = GpuAdvancedIncSubtensor1Floats_scal_dev20(inplace=inplace,
+            gpu_op = supported_dims[dims](inplace=inplace,
                 set_instead_of_inc=set_instead_of_inc)
             return [host_from_gpu(gpu_op(gpu_x, gpu_y, *coords))]
     return False
