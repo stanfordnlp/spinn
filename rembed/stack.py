@@ -280,7 +280,6 @@ class HardStack(object):
         stack_2_ptrs = cuda_util.AdvancedSubtensor1Floats()(self.queue, self.cursors - 1 + self._queue_shift)
         # Retrieve second-to-top element.
         stack_2 = cuda_util.AdvancedSubtensor1Floats()(self.stack, stack_2_ptrs * self.batch_size + self._stack_shift)
-        stack_2 = stack_2.reshape((self.batch_size, self.model_dim))
 
         # Now update the stack: first precompute merge results.
         merge_items = T.concatenate([stack_1, stack_2], axis=1)
