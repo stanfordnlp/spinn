@@ -407,6 +407,161 @@ class AdvancedIncSubtensor1Floats(T.subtensor.AdvancedIncSubtensor1):
         return theano.gof.Apply(self, [x_, y_, ilist_], [x_.type()])
 
 
+class GpuAdvancedIncSubtensor1Floats_dev20(AdvancedIncSubtensor1Floats, GpuOp):
+
+    """
+    Modified form of `GpuAdvancedIncSubtensor1_dev20` which supports indices in
+    float32 view.
+    """
+
+    def make_node(self, x, y, ilist):
+        x_ = as_cuda_ndarray_variable(x)
+        y_ = as_cuda_ndarray_variable(y)
+        ilist_ = gpu_contiguous(T.cast(ilist, config.floatX))
+
+        assert x_.type.dtype == y_.type.dtype
+        assert x_.type.ndim >= y_.type.ndim
+
+        #if ilist_.type.dtype[:3] not in ('int', 'uin'):
+        #    raise TypeError('index must be integers')
+        if ilist_.type.ndim != 1:
+            raise TypeError('index must be vector')
+        if x_.type.ndim == 0:
+            raise TypeError('cannot index into a scalar')
+        if y_.type.ndim > x_.type.ndim:
+            if self.set_instead_of_inc:
+                opname = 'set'
+            else:
+                opname = 'increment'
+            raise TypeError(
+                'cannot %s x subtensor with ndim=%s'
+                ' by y with ndim=%s to x subtensor with ndim=%s ' % (
+                    opname, x_.type.ndim, y_.type.ndim))
+
+        return theano.gof.Apply(self, [x_, y_, ilist_], [x_.type()])
+
+    def perform(self, node, inp, out):
+        raise NotImplementedError("GpuAdvancedIncSubtensor1Floats_dev20 supports GPU only")
+
+    def c_code_cache_version(self):
+        return 2
+
+    def c_code(self, node, name, inputs, outputs, sub):
+        x, y, ind = inputs
+        out, = outputs
+        fail = sub['fail']
+        inplace = int(self.inplace)
+        set_instead_of_inc = int(self.set_instead_of_inc)
+        return """
+        Py_XDECREF(%(out)s);
+        if (!%(inplace)s) {
+            %(out)s = (CudaNdarray*)CudaNdarray_Copy(%(x)s);
+        } else {
+            %(out)s = %(x)s;
+            Py_XINCREF(%(out)s);
+        }
+        if (CudaNdarray_Fvector_add_or_replace_fast(%(out)s, %(y)s, %(ind)s, %(set_instead_of_inc)s) != 0){
+            %(fail)s
+        }
+        if (!%(out)s) {
+            %(fail)s
+        }
+        """ % locals()
+
+    def c_support_code_apply(self, node, nodename):
+        return """
+        __global__ void k_Fvector_add_or_replace_fast(int numRowsX,
+                                           int numColsX,
+                                           int stridesX0,
+                                           int stridesX1,
+                                           float *X,
+                                           int numRowsY,
+                                           int numColsY,
+                                           int stridesY0,
+                                           int stridesY1,
+                                           float *Y ,
+                                           float *d_indices_arr,
+                                           int num,
+                                           const int set_instead_of_inc,
+                                           int* err)
+        {
+             for (int i = (blockIdx.x); i < num; i += gridDim.x)
+             {
+                  for(int j = (threadIdx.x); j < numColsX;j += blockDim.x)
+                  {
+                      int x_row = (int) d_indices_arr[i];
+                      if(x_row < 0)
+                          x_row += numRowsX;
+                      int y_row = i;
+                      if(x_row < numRowsX && x_row >= 0){
+                        if(set_instead_of_inc){
+                            // HACK: Unsafe (non-atomic) update.
+                            X[(x_row * stridesX0) + (j * stridesX1)] = Y[(y_row * stridesY0) + (j * stridesY1)];
+                        } else{
+                            atomicAdd(&X[(x_row * stridesX0) + (j * stridesX1)],
+                                  Y[(y_row * stridesY0) + (j * stridesY1)]);
+                        }
+                      } else {
+                        *err = 1;
+                      }
+                  }
+             }
+             return;
+        }
+        int CudaNdarray_Fvector_add_or_replace_fast(CudaNdarray* py_self,
+            CudaNdarray* py_other, CudaNdarray *py_indices,
+            const int set_instead_of_inc)
+        {
+            if(init_err_var()!= 0) return -1;
+            const int *shapeX = CudaNdarray_HOST_DIMS(py_self);
+            const int *shapeY = CudaNdarray_HOST_DIMS(py_other);
+            const int *strX   = CudaNdarray_HOST_STRIDES(py_self);
+            const int *strY   = CudaNdarray_HOST_STRIDES(py_other);
+            unsigned int size = (unsigned int)CudaNdarray_SIZE(py_indices);
+            if(size == 0){
+                return 0;
+            }
+            unsigned int numcolsX = shapeX[1];
+            unsigned int num_threads_per_block = std::min(
+                numcolsX, (unsigned int)NUM_VECTOR_OP_THREADS_PER_BLOCK);
+            unsigned int num_blocks = std::min(
+                size, (unsigned int)NUM_VECTOR_OP_BLOCKS);
+            dim3 n_blocks(num_blocks);
+            dim3 n_threads(num_threads_per_block);
+            cudaError_t err;
+
+            k_Fvector_add_or_replace_fast<<<n_blocks, n_threads>>>(
+                shapeX[0],
+                shapeX[1],
+                strX[0],
+                strX[1],
+                CudaNdarray_DEV_DATA(py_self),
+                shapeY[0],
+                shapeY[1],
+                strY[0],
+                strY[1],
+                CudaNdarray_DEV_DATA(py_other),
+                CudaNdarray_DEV_DATA(py_indices),
+                size,
+                set_instead_of_inc,
+                err_var
+            );
+            int index_err = check_err_var();
+            if(index_err != 0) return -1;
+            err = cudaGetLastError();
+            if(err != cudaSuccess){
+                PyErr_Format(
+                    PyExc_RuntimeError,
+                    "GpuAdvancedIncSubtensor1Floats_dev20: cuda error: %%s",
+                    cudaGetErrorString(err));
+                return -1;
+            }
+            return 0;
+        }
+        """ % locals()
+
+
+
 class GpuAdvancedIncSubtensor1Floats_scal_dev20(AdvancedIncSubtensor1Floats, GpuOp):
 
     """
@@ -444,7 +599,7 @@ class GpuAdvancedIncSubtensor1Floats_scal_dev20(AdvancedIncSubtensor1Floats, Gpu
         raise NotImplementedError("GpuAdvancedIncSubtensor1Floats_dev20 supports GPU only")
 
     def c_code_cache_version(self):
-        return 4
+        return 5
 
     def c_code(self, node, name, inp, out, sub):
         x, y, ind = inp
@@ -462,7 +617,7 @@ class GpuAdvancedIncSubtensor1Floats_scal_dev20(AdvancedIncSubtensor1Floats, Gpu
             %(out)s = %(x)s;
             Py_XINCREF(%(out)s);
         }
-        if (CudaNdarray_vector_add_or_replace_fast(%(out)s, %(y)s, %(ind)s, %(set_instead_of_inc)s) != 0){
+        if (CudaNdarray_broadcast_inc_scalar(%(out)s, %(y)s, %(ind)s, %(set_instead_of_inc)s) != 0){
             %(fail)s
         }
         if (!%(out)s) {
@@ -492,7 +647,7 @@ class GpuAdvancedIncSubtensor1Floats_scal_dev20(AdvancedIncSubtensor1Floats, Gpu
 
         }
 
-        int CudaNdarray_vector_add_or_replace_fast(CudaNdarray* py_self,
+        int CudaNdarray_broadcast_inc_scalar(CudaNdarray* py_self,
             CudaNdarray* py_other, CudaNdarray* py_indices,
             const int set_instead_of_inc)
         {
@@ -538,7 +693,7 @@ def local_gpu_advanced_incsubtensor1_scal_floats(node):
     supported_dims = {
             # x.ndim, y.ndim
             (1, 0): GpuAdvancedIncSubtensor1Floats_scal_dev20,
-            #(2, 2): GpuAdvancedIncSubtensor1Floats_dev20,
+            (2, 2): GpuAdvancedIncSubtensor1Floats_dev20,
     }
 
     if isinstance(node.op, GpuFromHost):

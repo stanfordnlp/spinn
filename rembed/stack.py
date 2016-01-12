@@ -10,7 +10,7 @@ from rembed import cuda_util, util
 
 
 def update_hard_stack(t, t_f, stack_t, push_value, merge_value, merge_queue_t,
-                      merge_cursors_t, mask, batch_size, stack_size, batch_range, cursors_shift):
+                      merge_cursors_t, mask, batch_size, stack_size, batch_range, stack_shift, cursors_shift):
     """Compute the new value of the given hard stack.
 
     This performs stack pushes and pops in parallel, and somewhat wastefully.
@@ -29,7 +29,8 @@ def update_hard_stack(t, t_f, stack_t, push_value, merge_value, merge_queue_t,
 
     mask2 = mask.dimshuffle(0, "x")
     top_next = mask2 * merge_value + (1 - mask2) * push_value
-    stack_next = T.set_subtensor(stack_t[t * batch_size + batch_range], top_next, inplace=True)
+    stack_next = cuda_util.AdvancedIncSubtensor1Floats(set_instead_of_inc=True, inplace=True)(
+            stack_t, top_next, t_f * batch_size + stack_shift)
 
     cursors_next = merge_cursors_t + (mask * -1 + (1 - mask) * 1)
     queue_next = cuda_util.AdvancedIncSubtensor1Floats(set_instead_of_inc=True, inplace=True)(
@@ -294,7 +295,8 @@ class HardStack(object):
         # Compute new stack value.
         stack_next, merge_queue_next, merge_cursors_next = update_hard_stack(
             t, t_f, self.stack, buffer_top_t, merge_value, self.queue, self.cursors,
-            mask, self.batch_size, self.seq_length, self.batch_range, self._cursors_shift)
+            mask, self.batch_size, self.seq_length, self.batch_range,
+            self._stack_shift, self._cursors_shift)
 
         # Move buffer cursor as necessary. Since mask == 1 when merge, we
         # should increment each buffer cursor by 1 - mask.
