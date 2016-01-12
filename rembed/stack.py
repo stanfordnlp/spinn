@@ -223,7 +223,7 @@ class HardStack(object):
         batch_size, _ = self.X.shape
 
         # Extract top buffer values.
-        idxs = buffer_cur_t + (self.batch_range * self.seq_length)
+        idxs = buffer_cur_t + self._buffer_shift
 
         if self.context_sensitive_shift:
             # Combine with the hidden state from previous unit.
@@ -235,7 +235,7 @@ class HardStack(object):
                                 self._vs, name="context_comb_unit", use_bias=True,
                                 initializer=util.HeKaimingInitializer())
         else:
-            buffer_top_t = buffer[idxs]
+            buffer_top_t = cuda_util.AdvancedSubtensor1Floats()(buffer, idxs)
 
         if self._prediction_and_tracking_network is not None:
             # We are predicting our own stack operations.
@@ -275,7 +275,7 @@ class HardStack(object):
             mask = transitions_t_f
 
         # Fetch top two stack elements.
-        stack_1 = self.stack[(t - 1) * self.batch_size + self.batch_range]
+        stack_1 = cuda_util.AdvancedSubtensor1Floats()(self.stack, (t - 1) * self.batch_size + self._stack_shift)
         # Get pointers into stack for second-to-top element.
         stack_2_ptrs = cuda_util.AdvancedSubtensor1Floats()(self.queue, self.cursors - 1 + self._queue_shift)
         # Retrieve second-to-top element.
@@ -298,7 +298,7 @@ class HardStack(object):
 
         # Move buffer cursor as necessary. Since mask == 1 when merge, we
         # should increment each buffer cursor by 1 - mask.
-        buffer_cur_next = buffer_cur_t + (1 - transitions_t)
+        buffer_cur_next = buffer_cur_t + (1 - transitions_t_f)
 
         if self._predict_transitions:
             ret_val = buffer_cur_next, tracking_hidden, actions_t
@@ -326,6 +326,7 @@ class HardStack(object):
 
         self._queue_shift = T.cast(batch_range * self.seq_length,
                                    theano.config.floatX)
+        self._buffer_shift = self._queue_shift
         self._cursors_shift = T.cast(batch_range * self.stack_size,
                                      theano.config.floatX)
         self._stack_shift = T.cast(batch_range, theano.config.floatX)
@@ -353,7 +354,7 @@ class HardStack(object):
         # Collapse buffer to (batch_size * buffer_size) * emb_dim for fast indexing.
         buffer_t = buffer_t.reshape((-1, buffer_emb_dim))
 
-        buffer_cur_init = T.zeros((batch_size,), dtype="int32")
+        buffer_cur_init = T.zeros((batch_size,), theano.config.floatX)
 
         DUMMY = T.zeros((2,)) # a dummy tensor used as a place-holder
 
