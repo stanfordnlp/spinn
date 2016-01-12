@@ -271,7 +271,7 @@ class HardStack(object):
             mask = (transitions_t * ground_truth_transitions_visible
                         + actions_t.argmax(axis=1) * (1 - ground_truth_transitions_visible))
         else:
-            # Model 0 case.
+            # Model 0 case
             mask = transitions_t_f
 
         # Fetch top two stack elements.
