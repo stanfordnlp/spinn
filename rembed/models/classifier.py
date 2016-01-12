@@ -405,7 +405,7 @@ def evaluate_expanded(eval_fn, eval_set, eval_path, logger, step, sentence_pair_
 
 
 def run(only_forward=False):
-    logger = afs_safe_logger.Logger(FLAGS.experiment_name + ".log")
+    logger = afs_safe_logger.Logger(os.path.join(FLAGS.log_path, FLAGS.experiment_name) + ".log")
 
     if FLAGS.data_type == "bl":
         data_manager = load_boolean_data
@@ -650,6 +650,7 @@ if __name__ == '__main__':
     gflags.DEFINE_string("ckpt_path", ".", "Where to save/load checkpoints. Can be either "
         "a filename or a directory. In the latter case, the experiment name serves as the "
         "base for the filename.") 
+    gflags.DEFINE_string("log_path", ".", "A directory in which to write logs.") 
 
     # Data settings.
     gflags.DEFINE_string("training_data_path", None, "")
