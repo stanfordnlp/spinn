@@ -543,33 +543,22 @@ class GpuAdvancedIncSubtensor1Floats_scal_dev20(AdvancedIncSubtensor1Floats, Gpu
 
 @register_opt()
 @local_optimizer([gpu_from_host, AdvancedIncSubtensor1Floats])
-def local_gpu_advanced_incsubtensor1_floats(node):
+def local_gpu_advanced_incsubtensor1_scal_floats(node):
     if isinstance(node.op, GpuFromHost):
         host_input = node.inputs[0]
         # Should not execute for GpuAdvancedIncSubtensor1
         if host_input.owner and \
            host_input.owner.op.__class__ is AdvancedIncSubtensor1Floats:
             x, y = host_input.owner.inputs[0:2]
+            if not (x.ndim == 1 and y.ndim == 0):
+                return False
+
             coords = host_input.owner.inputs[2:]
             set_instead_of_inc = host_input.owner.op.set_instead_of_inc
             inplace = host_input.owner.op.inplace
-            if set_instead_of_inc and config.warn.gpu_set_subtensor1:
-                warnings.warn(
-                    'Although your current code is fine, please note that '
-                    'Theano versions prior to 0.6 (more specifically, '
-                    'prior to commitd 2240bddd on March 29, 2012) may have '
-                    'yielded an incorrect result. To remove this warning, '
-                    'either set the `warn.gpu_set_subtensor1` config '
-                    'option to False, or `warn.ignore_bug_before` to at '
-                    'least \'0.6\'.', stacklevel=1)
-            active_device_no = theano.sandbox.cuda.active_device_number()
-            compute_capability = device_properties(active_device_no)['major']
-            if compute_capability < 2:
-                raise RuntimeError("CUDA capability >2.0 required for this custom op")
-            else:
-                # TODO: Check for conditions here (scalar set value)
-                gpu_op = GpuAdvancedIncSubtensor1Floats_scal_dev20(#inplace=inplace,
-                    set_instead_of_inc=set_instead_of_inc)
+
+            gpu_op = GpuAdvancedIncSubtensor1Floats_scal_dev20(inplace=inplace,
+                set_instead_of_inc=set_instead_of_inc)
             return [gpu_op(as_cuda_ndarray_variable(x),
                            as_cuda_ndarray_variable(y), *coords)]
 
@@ -579,6 +568,9 @@ def local_gpu_advanced_incsubtensor1_floats(node):
             node.inputs[1].dtype == "float32" and
             node.inputs[2].dtype == "float32"):
         x, y = node.inputs[0:2]
+        if not (x.ndim == 1 and y.ndim == 0):
+            return False
+
         coords = node.inputs[2:]
         go_gpu = False
         if x.owner and isinstance(x.owner.op, HostFromGpu):
@@ -595,23 +587,8 @@ def local_gpu_advanced_incsubtensor1_floats(node):
         if go_gpu:
             set_instead_of_inc = node.op.set_instead_of_inc
             inplace = node.op.inplace
-            if set_instead_of_inc and config.warn.gpu_set_subtensor1:
-                warnings.warn(
-                    'Although your current code is fine, please note that '
-                    'Theano versions prior to 0.6 (more specifically, '
-                    'prior to commit d2240bddd on March 29, 2012) may have '
-                    'yielded an incorrect result. To remove this warning, '
-                    'either set the `warn.gpu_set_subtensor1` config '
-                    'option to False, or `warn.ignore_bug_before` to at '
-                    'least \'0.6\'.', stacklevel=1)
 
-            active_device_no = theano.sandbox.cuda.active_device_number()
-            compute_capability = device_properties(active_device_no)['major']
-            if compute_capability < 2:
-                raise RuntimeError("CUDA capability >2.0 required for this custom op")
-            else:
-                # TODO: Check for conditions here (scalar set value)
-                gpu_op = GpuAdvancedIncSubtensor1Floats_dev20(#inplace=inplace,
-                    set_instead_of_inc=set_instead_of_inc)
+            gpu_op = GpuAdvancedIncSubtensor1Floats_scal_dev20(inplace=inplace,
+                set_instead_of_inc=set_instead_of_inc)
             return [host_from_gpu(gpu_op(gpu_x, gpu_y, *coords))]
     return False
