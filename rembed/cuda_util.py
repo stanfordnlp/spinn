@@ -444,7 +444,7 @@ class GpuAdvancedIncSubtensor1Floats_dev20(AdvancedIncSubtensor1Floats, GpuOp):
         raise NotImplementedError("GpuAdvancedIncSubtensor1Floats_dev20 supports GPU only")
 
     def c_code_cache_version(self):
-        return 2
+        return 3
 
     def c_code(self, node, name, inputs, outputs, sub):
         x, y, ind = inputs
@@ -546,8 +546,11 @@ class GpuAdvancedIncSubtensor1Floats_dev20(AdvancedIncSubtensor1Floats, GpuOp):
                 set_instead_of_inc,
                 err_var
             );
-            int index_err = check_err_var();
-            if(index_err != 0) return -1;
+
+            // This induces a DtoH transfer. Only enable for dev and the like.
+            //int index_err = check_err_var();
+            //if(index_err != 0) return -1;
+
             err = cudaGetLastError();
             if(err != cudaSuccess){
                 PyErr_Format(
@@ -599,7 +602,7 @@ class GpuAdvancedIncSubtensor1Floats_scal_dev20(AdvancedIncSubtensor1Floats, Gpu
         raise NotImplementedError("GpuAdvancedIncSubtensor1Floats_dev20 supports GPU only")
 
     def c_code_cache_version(self):
-        return 5
+        return 6
 
     def c_code(self, node, name, inp, out, sub):
         x, y, ind = inp
@@ -672,8 +675,10 @@ class GpuAdvancedIncSubtensor1Floats_scal_dev20(AdvancedIncSubtensor1Floats, Gpu
                 CudaNdarray_DEV_DATA(py_indices),
                 size, set_instead_of_inc, err_var);
 
-            int index_err = check_err_var();
-            if(index_err != 0) return -1;
+            // This induces a DtoH transfer. Only enable for dev and the like.
+            //int index_err = check_err_var();
+            //if(index_err != 0) return -1;
+
             err = cudaGetLastError();
             if(err != cudaSuccess){
                 PyErr_Format(
