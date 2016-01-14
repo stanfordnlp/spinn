@@ -32,6 +32,18 @@ class AdvancedSubtensor1Floats(T.subtensor.AdvancedSubtensor1):
         return theano.gof.Apply(self, [x_, ilist_],
                                 [T.TensorType(dtype=x.dtype, broadcastable=bcast)()])
 
+    def grad(self, inputs, grads):
+        x, ilist = inputs
+        gz, = grads
+        assert len(inputs) == 2
+        if self.sparse_grad:
+            raise RuntimeError("sparse grad not supported for AdvancedSubtensor1Floats")
+
+        setinc, inpl = self.set_instead_of_inc, self.inplace
+        inc_op = AdvancedIncSubtensor1Floats(set_instead_of_inc=setinc, inplace=inpl)
+        rval1 = [inc_op(x.zeros_like(), gz, ilist)]
+        return rval1 + [T.DisconnectedType()()] * (len(inputs) - 1)
+
 
 class GpuAdvancedSubtensor1Floats(AdvancedSubtensor1Floats, GpuOp):
 
@@ -405,6 +417,30 @@ class AdvancedIncSubtensor1Floats(T.subtensor.AdvancedIncSubtensor1):
                     opname, x_.type.ndim, y_.type.ndim))
 
         return theano.gof.Apply(self, [x_, y_, ilist_], [x_.type()])
+
+    def grad(self, inputs, grads):
+        g_output, = grads
+        x, y, idx_list = inputs
+        if x.dtype in theano.tensor.discrete_dtypes:
+            # The output dtype is the same as x
+            gx = x.zeros_like(dtype=theano.config.floatX)
+            if y.dtype in theano.tensor.discrete_dtypes:
+                gy = y.zeros_like(dtype=theano.config.floatX)
+            else:
+                gy = y.zeros_like()
+        elif x.dtype in theano.tensor.complex_dtypes:
+            raise NotImplementedError("No support for complex grad yet")
+        else:
+            if self.set_instead_of_inc:
+                gx_op = AdvancedIncSubtensor1Floats(set_instead_of_inc=True,
+                                                    inplace=self.inplace)
+                gx = gx_op(g_output, y.zeros_like(), idx_list)
+            else:
+                gx = g_output
+            gy = AdvancedSubtensor1Floats()(g_output, idx_list)
+            gy = T.subtensor._sum_grad_over_bcasted_dims(y, gy)
+
+        return [gx, gy] + [T.DisconnectedType()()]
 
 
 class GpuAdvancedIncSubtensor1Floats_dev20(AdvancedIncSubtensor1Floats, GpuOp):
