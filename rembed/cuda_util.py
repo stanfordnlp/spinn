@@ -71,7 +71,7 @@ class GpuAdvancedSubtensor1Floats(AdvancedSubtensor1Floats, GpuOp):
         raise NotImplementedError("AdvancedSubtensor1FloatsGPU is GPU only")
 
     def c_code_cache_version(self):
-        return 12
+        return 17
 
     def c_support_code(self):
         return """
@@ -312,7 +312,8 @@ TakeFrom_Float(CudaNdarray *self, CudaNdarray *indices, long axis,
     //-10 could be any value different then 0.
     int cpu_err_var=-10;
 
-    err = cudaMemcpy(&cpu_err_var, err_var, sizeof(int),
+    // Unsafe: don't copy back to CPU for error checking
+    /*err = cudaMemcpy(&cpu_err_var, err_var, sizeof(int),
                      cudaMemcpyDeviceToHost);
     if (cudaSuccess != err) {
         PyErr_Format(
@@ -343,7 +344,7 @@ TakeFrom_Float(CudaNdarray *self, CudaNdarray *indices, long axis,
         Py_DECREF(out);
         return NULL;
 
-    }
+    }*/
 
     if (verbose) printf("TAKE SUCCEDED\\n");
     return out;
