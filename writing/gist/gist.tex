@@ -152,19 +152,23 @@ All five models function as sentence encoding models: their inputs are sentences
 
 \begin{table*}[t]
   \centering\small
-  \begin{tabular}{ccccc} 
+  \begin{tabular}{cccccc} 
     \toprule
-    Name & Stack Representation & Input Representation & Ops Classifier & Op Predictions Used in Training \\ 
+    Name & Stack Representation & Input Representation & Ops Classifier & \multicolumn{2}{l}{Op Predictions Used In} \\ 
+      &   &  &   & Training & Testing \\ 
     \midrule
-Model 0 & Discrete & Op. sequence & N & -- \\
-Model 1 & Discrete & \bf Discrete Buffer & \bf Y: Directly supervised & \bf N \\
-Model 2 & Discrete & Discrete Buffer & Y: Directly supervised & \bf Y \\
-Model 3 & \bf Soft & \bf Soft Buffer & Y: Directly supervised & Y \\
-Model 4 & Soft & Soft Buffer & \bf Y: Indirectly supervised & Y \\
+Model 0 & Discrete & Op. sequence & N & -- & -- \\
+Model 1 & Discrete & \bf Discrete Buffer & \bf Y: Directly supervised & \bf N & Y \\
+Model 2 & Discrete & Discrete Buffer & Y: Directly supervised & \bf Y & Y \\
+Model 2S & Discrete & Discrete Buffer & Y: Directly supervised & \bf Sched. sampling & Y \\
+Model 3 & \bf Soft & \bf Soft Buffer & Y: Directly supervised & Y & Y \\
+Model 4 & Soft & Soft Buffer & \bf Y: Indirectly supervised & Y & Y \\
     \bottomrule
   \end{tabular}
   \protect\caption{\protect\label{models-table}Model variants, ordered by increasing reliance on learning. Bolding indicates the differences between each model and its parent model.} 
 \end{table*}
+
+Our first paper will be focused on Model 0 and Model 2S, with no discussion of soft stack models. Our primary goal with this paper will be to achieve state-of-the-art performance on SNLI with Model 0, and performance with Model 2S that surpasses that of a baseline LSTM encoder. We will pursue the state of the art both in the Siamese architecture regime with sentence encoders and in the \citealt{rocktaschel2015reasoning}-style word-by-word attention regime (reimplemented as constituent-by-constituent attention (See \S\ref{sec:c-by-c}).
 
 \section{Models}
 
@@ -222,6 +226,12 @@ For Model 0, no tracking LSTM is needed for the ordinary operation of the model,
 
 Shift-reduce parsers for natural language typically operate with a restricted set of typed \reduce~operations (also known as ``arc'' operations). These operations specify the precise relation between the elements being merged. It would be possible to train any of the parse-supervised models (1--3) to learn such typed arc operations, expanding the op set dramatically to something like \{\shift, \reduce-NP, \reduce-S, \reduce-PP, ...\} (in the case of constituency parse supervision). The model can then learn a distinct composition function depending on the relation of the two elements being merged.
 
+\subsection{Constituent-by-constituent attention}\label{sec:c-by-c}
+
+We aim to build on the results of \citealt{rocktaschel2015reasoning} and \citealt{wang2015learning}, who find that neural soft attention models is an extremely effective technique for learning natural language inference. In particular, both papers use versions of word-by-word entailment, in which a latent alignment is learned from every word in the hypothesis to one or more words of the premise. We propose to borrow this basic idea, but to adapt it to a tree-structured setting, proposing \textit{constituent-by-constituent} attention. While these models do attention over a matrix $\mathbf{Y}$ of word-in-context representations from the premise encoder, we will perform attention instead over our own primary data structure, $\mathbf{Y}^{st}$, the matrix of vectors that have appeared at the top of the stack during premise encoding, which correspond one-to-one to the constituents in the tree structure representing the premise. Similarly, while the previous models perform one instance of soft attention conditioned on each word in the hypothesis, we perform one instance of soft attention conditioned on each stack top in the hypothesis encoder, representing the constituents of the hypothesis tree.
+
+In our model, attention is performed at each step $t$ of the premise encoder. At step $t$, the query vector that drives attention will be $S^t_0$, the top of the stack. 
+
 \section{Implementation notes}
 
 The size of the stack should be $N$ for sentences of $N$ words, in case the first reduce merges the final two words. The size of the buffer should be $N - 2$.
@@ -245,6 +255,10 @@ stack: $\langle$the, cat$\rangle$\\
 buffer: $\langle$sat, down$\rangle$\\
 ops: \reduce~\shift~\shift~\reduce~\reduce
 \end{quote}
+
+\subsection{Memory management and the thin stack}
+
+\todo{JG, fill out.}
 
 \section{Experiments}
 
