@@ -129,7 +129,9 @@ $^{\S}$Stanford Computer Science}
 \def\colspaceM{4.0mm}
 \def\colspaceL{4.25mm}
 
-\newcommand\todo[1]{\textcolor{blue}{\textbf{TODO:} #1}}
+\newcommand\todo[1]{\textcolor{red}{\textbf{TODO:} #1}}
+\newcommand\note[1]{\textcolor{blue}{\textbf{NOTE:} #1}}
+
 
 \begin{document}
 \maketitle
@@ -168,7 +170,15 @@ Model 4 & Soft & Soft Buffer & \bf Y: Indirectly supervised & Y & Y \\
   \protect\caption{\protect\label{models-table}Model variants, ordered by increasing reliance on learning. Bolding indicates the differences between each model and its parent model.} 
 \end{table*}
 
+\subsection{Publication plans}
+
+\subsubsection{Winter 2016}
+
 Our first paper will be focused on Model 0 and Model 2S, with no discussion of soft stack models. Our primary goal with this paper will be to achieve state-of-the-art performance on SNLI with Model 0, and performance with Model 2S that surpasses that of a baseline LSTM encoder. We will pursue the state of the art both in the Siamese architecture regime with sentence encoders and in the \citealt{rocktaschel2015reasoning}-style word-by-word attention regime (reimplemented as constituent-by-constituent attention (See \S\ref{sec:c-by-c}).
+
+\subsubsection{Spring 2015}
+
+Our second paper will be focused on the soft stack models, Models 3 and 4. It will investigate the role of differentiable stack data structures in sentence encoding and the possibility of learning consistent and useful syntactic parsers using only semantic supervision.
 
 \section{Models}
 
@@ -212,25 +222,36 @@ By removing an external parser signal, we allow Model 4 to fully exploit the sof
 
 \section{Other possible model features}
 
-\subsection{Encoding the contents of the stack and buffer}
-
-The tracking LSTM (red) needs access to the top of the buffer and the top two elements of the stack in order to make even minimally informed decisions about whether to shift or reduce. It could benefit further from additional information about broader sentential context. This can be provided by running new LSTMs along the elements of each of the stack and the buffer (following \citealt{dyer-EtAl:2015:ACL-IJCNLP}) and feeding the result into the tracking LSTM.
-
 \subsection{Contextually-informed composition}
 
-The composition function in the basic model (green) combines only the top elements of the stack, without using any further information. It may be possible to encourage the composition function to learn to do some amount of context-sensitive interpretation/disambiguation by adding a connection from the tracking LSTM (red) directly into the composition function.
+The composition function in the basic model (green) combines only the top elements of the stack, without using any further information. We can encourage the composition function to learn to do some amount of context-sensitive interpretation/disambiguation by adding a connection from the tracking LSTM (red) directly into the composition function.
 
-For Model 0, no tracking LSTM is needed for the ordinary operation of the model, but it would be possible to add one for this purpose, taking as inputs the top two values of the stack at each time point and emitting as output a context vector that can be used to condition the composition function.
+For Model 0, no tracking LSTM is needed for the ordinary operation of the model, but we can simply add one for this purpose, taking as inputs the top two values of the stack at each time point and emitting as output a context vector that can be used to condition the composition function.
 
-\subsection{Typed \reduce~operations}
-
-Shift-reduce parsers for natural language typically operate with a restricted set of typed \reduce~operations (also known as ``arc'' operations). These operations specify the precise relation between the elements being merged. It would be possible to train any of the parse-supervised models (1--3) to learn such typed arc operations, expanding the op set dramatically to something like \{\shift, \reduce-NP, \reduce-S, \reduce-PP, ...\} (in the case of constituency parse supervision). The model can then learn a distinct composition function depending on the relation of the two elements being merged.
+So far, we have found this technique to yield non-trivial performance gain. A clearer evaluation on converged models is forthcoming.
 
 \subsection{Constituent-by-constituent attention}\label{sec:c-by-c}
 
 We aim to build on the results of \citealt{rocktaschel2015reasoning} and \citealt{wang2015learning}, who find that neural soft attention models is an extremely effective technique for learning natural language inference. In particular, both papers use versions of word-by-word entailment, in which a latent alignment is learned from every word in the hypothesis to one or more words of the premise. We propose to borrow this basic idea, but to adapt it to a tree-structured setting, proposing \textit{constituent-by-constituent} attention. While these models do attention over a matrix $\mathbf{Y}$ of word-in-context representations from the premise encoder, we will perform attention instead over our own primary data structure, $\mathbf{Y}^{st}$, the matrix of vectors that have appeared at the top of the stack during premise encoding, which correspond one-to-one to the constituents in the tree structure representing the premise. Similarly, while the previous models perform one instance of soft attention conditioned on each word in the hypothesis, we perform one instance of soft attention conditioned on each stack top in the hypothesis encoder, representing the constituents of the hypothesis tree.
 
 In our model, attention is performed at each step $t$ of the premise encoder. At step $t$, the query vector that drives attention will be $S^t_0$, the top of the stack. 
+
+\todo{[AR, RG] Write up the attention equations that you use.}
+
+\todo{[Anyone -- Sam can] Draw a diagram indicating the structure of constituent by constituent attention.}
+
+\subsection{Encoding the contents of the stack and buffer}
+
+\note{Not currently planned.}
+
+The tracking LSTM (red) needs access to the top of the buffer and the top two elements of the stack in order to make even minimally informed decisions about whether to shift or reduce. It could benefit further from additional information about broader sentential context. This can be provided by running new LSTMs along the elements of each of the stack and the buffer (following \citealt{dyer-EtAl:2015:ACL-IJCNLP}) and feeding the result into the tracking LSTM.
+
+\subsection{Typed \reduce~operations}
+
+\note{Not currently planned.}
+
+Shift-reduce parsers for natural language typically operate with a restricted set of typed \reduce~operations (also known as ``arc'' operations). These operations specify the precise relation between the elements being merged. It would be possible to train any of the parse-supervised models (1--3) to learn such typed arc operations, expanding the op set dramatically to something like \{\shift, \reduce-NP, \reduce-S, \reduce-PP, ...\} (in the case of constituency parse supervision). The model can then learn a distinct composition function depending on the relation of the two elements being merged.
+
 
 \section{Implementation notes}
 
@@ -258,17 +279,21 @@ ops: \reduce~\shift~\shift~\reduce~\reduce
 
 \subsection{Memory management and the thin stack}
 
-\todo{JG, fill out.}
+\todo{[JG] Explain.}
 
 \section{Experiments}
 
 \subsection{Step time}
+
+\todo{Does anyone know of a better baseline TreeRNN implementation that we can use on Jagupard? We can use the CoreNLP SST model, but using a Java model as a baseline seems worrying unless we're guaranteed that it's competitively fast.}
 
 Comparing model step time to the plain RNN of \citealt{li2015tree}. We use the small \citealt{pang2004sentimental} sentiment corpus that they use, and train with identical hyperparameters: ...
 
 Evaluation metrics: Time per minibatch on a jag machine, with and without GPU access.
 
 \subsection{Sentiment}
+
+\note{We're running sentiment experiments to evaluate the behavior of converged models, since SNLI takes too long to train to convergence. However, we don't currently plan to publish SNLI results.}
 
 Learning to jointly parse and to predict logical relations between sentences over SST  
 \cite{socher2013recursive}.
