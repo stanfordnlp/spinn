@@ -156,16 +156,22 @@ class VariableStore(object):
             cPickle.dump(var, save_file, -1)
         save_file.close()
 
-    def load_checkpoint(self, filename="vs_ckpt", keys=None, num_extra_vars=0):
-        if not keys:
-            keys = self.savable_vars
+    def load_checkpoint(self, filename="vs_ckpt", keys=None, num_extra_vars=0, skip_saved_unsavables=False):
+        if skip_saved_unsavables:
+            keys = self.vars
+        else:
+            if not keys:
+                keys = self.savable_vars
         save_file = open(filename)
         for key in keys:
             if self.logger:
                 full_name = "%s/%s" % (self.prefix, key)
                 self.logger.Log(
                     "Restoring variable " + full_name, level=self.logger.DEBUG)
-            self.vars[key].set_value(cPickle.load(save_file), borrow=True)
+            if skip_saved_unsavables and key not in self.savable_vars:
+                _ = cPickle.load(save_file) # Discard
+            else:
+                self.vars[key].set_value(cPickle.load(save_file), borrow=True)
 
         extra_vars = []
         for _ in range(num_extra_vars):

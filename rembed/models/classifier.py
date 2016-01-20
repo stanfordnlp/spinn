@@ -547,7 +547,8 @@ def run(only_forward=False):
         checkpoint_path = os.path.join(FLAGS.ckpt_path, FLAGS.experiment_name + ".ckpt")
     if os.path.isfile(checkpoint_path):
         logger.Log("Found checkpoint, restoring.")
-        step, best_dev_error = vs.load_checkpoint(checkpoint_path, num_extra_vars=2) 
+        step, best_dev_error = vs.load_checkpoint(checkpoint_path, num_extra_vars=2, 
+                                                  skip_saved_unsavables=FLAGS.skip_saved_unsavables) 
     else:
         assert not only_forward, "Can't run an eval-only run without a checkpoint. Supply a checkpoint."
         step = 0
@@ -723,6 +724,9 @@ if __name__ == '__main__':
         "as the number of eval sets.")
     gflags.DEFINE_boolean("write_predicted_label", False,
         "Write the predicted labels in a <eval_output_name>.lbl file.")
+    gflags.DEFINE_boolean("skip_saved_unsavables", False,
+        "Assume that variables marked as not savable will appear in checkpoints anyway, and "
+        "skip them when loading. This should be used only when loading old checkpoints.")
 
     # Parse command line flags.
     FLAGS(sys.argv)
