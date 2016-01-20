@@ -192,7 +192,8 @@ class HardStack(object):
             self.embeddings = self._vs.add_param(
                     "embeddings", (self.vocab_size, self.word_embedding_dim), 
                     initializer=EmbeddingInitializer,
-                    trainable=False)
+                    trainable=False,
+                    savable=False)
         else:
             self.embeddings = self._vs.add_param(
                 "embeddings", (self.vocab_size, self.word_embedding_dim))
@@ -370,7 +371,6 @@ class HardStack(object):
         self.final_stack = scan_ret[stack_ind][-1]
         self.embeddings = self.final_stack[:, 0]
 
-        self.transitions_pred = None
         if self._predict_transitions:
             self.transitions_pred = scan_ret[-1].dimshuffle(1, 0, 2)
 
