@@ -278,12 +278,12 @@ class HardStack(object):
         # Fetch top two stack elements.
         stack_1 = cuda_util.AdvancedSubtensor1Floats()(self.stack, (t - 1) * self.batch_size + self._stack_shift)
         # Get pointers into stack for second-to-top element.
-        stack_2_ptrs = cuda_util.AdvancedSubtensor1Floats()(self.queue, self.cursors - 1 + self._queue_shift)
+        stack_2_ptrs = cuda_util.AdvancedSubtensor1Floats()(self.queue, self.cursors - 1.0 + self._queue_shift)
         # Retrieve second-to-top element.
         stack_2 = cuda_util.AdvancedSubtensor1Floats()(self.stack, stack_2_ptrs * self.batch_size + self._stack_shift)
 
         # Now update the stack: first precompute merge results.
-        merge_items = T.concatenate([stack_1, stack_2], axis=1)
+        merge_items = cuda_util.JoinUnsafe()(1, stack_1, stack_2)
         if self.connect_tracking_comp:
             tracking_h_t = tracking_hidden[:, :self.tracking_lstm_hidden_dim]
             merge_value = self._compose_network(merge_items, tracking_h_t, self.model_dim,
