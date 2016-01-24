@@ -41,10 +41,10 @@ SWEEP_PARAMETERS = {
     "learning_rate":      (EXP, 0.0002, 0.003),  # RNN likes higher end of range, but below 009.
     "l2_lambda":   		  (EXP, 5e-7, 2e-5),
     "semantic_classifier_keep_rate": (LIN, 0.80, 0.95),  # NB: Keep rates may depend considerably on dims.
-    "embedding_keep_rate": (LIN, 0.75, 1.0),
+    "embedding_keep_rate": (LIN, 0.75, 0.9),
     "scheduled_sampling_exponent_base": (SS_BASE, 1e-5, 8e-5),
     "transition_cost_scale": (LIN, 0.5, 4.0),
-    "tracking_lstm_hidden_dim": (EXP, 12, 64),
+    "tracking_lstm_hidden_dim": (EXP, 12, 50),
     "num_sentence_pair_combination_layers": (LIN, 1, 3)
 }
 
