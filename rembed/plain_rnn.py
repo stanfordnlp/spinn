@@ -65,7 +65,8 @@ class RNN(object):
             self.embeddings = self._vs.add_param(
                     "embeddings", (self.vocab_size, self.word_embedding_dim), 
                     initializer=EmbeddingInitializer,
-                    trainable=False)
+                    trainable=False,
+                    savable=False)
         else:
             self.embeddings = self._vs.add_param(
                 "embeddings", (self.vocab_size, self.word_embedding_dim))
