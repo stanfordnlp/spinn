@@ -279,8 +279,9 @@ class HardStack(object):
         stack_1 = cuda_util.AdvancedSubtensor1Floats()(self.stack, (t - 1) * self.batch_size + self._stack_shift)
         # Get pointers into stack for second-to-top element.
         stack_2_ptrs = cuda_util.AdvancedSubtensor1Floats()(self.queue, self.cursors - 1.0 + self._queue_shift)
+        stack_2_ptrs = stack_2_ptrs * batch_size + self._stack_shift
         # Retrieve second-to-top element.
-        stack_2 = cuda_util.AdvancedSubtensor1Floats()(self.stack, stack_2_ptrs * self.batch_size + self._stack_shift)
+        stack_2 = cuda_util.AdvancedSubtensor1Floats()(self.stack, stack_2_ptrs)
 
         # Now update the stack: first precompute merge results.
         merge_items = cuda_util.JoinUnsafe()(1, stack_1, stack_2)
@@ -289,8 +290,9 @@ class HardStack(object):
             merge_value = self._compose_network(merge_items, tracking_h_t, self.model_dim,
                 self._vs, name="compose", external_state_dim=self.tracking_lstm_hidden_dim)
         else:
-            merge_value = self._compose_network(merge_items, self.model_dim * 2, self.model_dim,
-                self._vs, name="compose")
+            # merge_value = self._compose_network(merge_items, self.model_dim * 2, self.model_dim,
+            #     self._vs, name="compose")
+            merge_value = T.dot(merge_items, self.W)
 
         # Compute new stack value.
         stack_next, merge_queue_next, merge_cursors_next = update_hard_stack(
@@ -304,7 +306,7 @@ class HardStack(object):
         if self._predict_transitions:
             ret_val = buffer_cur_next, tracking_hidden, actions_t
         else:
-            ret_val = buffer_cur_next, tracking_hidden
+            ret_val = buffer_cur_next, tracking_hidden, stack_2_ptrs
 
         if not self.interpolate:
             # Use ss_mask as a redundant return value.
@@ -316,7 +318,7 @@ class HardStack(object):
             self.cursors: merge_cursors_next
         }
 
-        return ret_val
+        return ret_val, updates
 
     def _make_scan(self):
         """Build the sequential composition / scan graph."""
@@ -334,6 +336,7 @@ class HardStack(object):
 
         # Look up all of the embeddings that will be used.
         raw_embeddings = self.embeddings[self.X]  # batch_size * seq_length * emb_dim
+        self.W = self._vs.add_param("W", (self.model_dim * 2, self.model_dim))
 
         if self.context_sensitive_shift:
             # Use the raw embedding vectors, they will be combined with the hidden state of
@@ -376,7 +379,7 @@ class HardStack(object):
         if self._predict_transitions:
             outputs_info = [stack_init, buffer_cur_init, hidden_init, None]
         else:
-            outputs_info = [buffer_cur_init, hidden_init]
+            outputs_info = [buffer_cur_init, hidden_init, None]
 
         # Prepare data to scan over.
         sequences = [T.arange(transitions.shape[0]),
@@ -401,14 +404,133 @@ class HardStack(object):
                 outputs_info=outputs_info)
 
         self.final_buf = scan_ret[0][-1]
+        self.stack_2_ptrs = scan_ret[1]
+
+        self.final_stack = self.scan_updates[self.stack]
 
         self.transitions_pred = None
         if self._predict_transitions:
             self.transitions_pred = scan_ret[-1].dimshuffle(1, 0, 2)
 
-    @property
-    def final_stack(self):
-        return self.stack.get_value()[-self.batch_size:]
+
+    def make_backprop_scan(self, error_signal):
+        """
+        Args:
+            error_signal: Theano batch of batch_size * model_dim
+        """
+
+        if not hasattr(self, "stack_2_ptrs"):
+            raise RuntimeError("self._make_scan (forward pass) must be defined "
+                               "before self.make_backprop_scan is called")
+
+        ## Backprop scan ##
+        # defined for simple RNN case, where each merge is ([c1; c2] * W)
+
+        stack_bwd_init = T.zeros((self.stack_size * self.batch_size, self.model_dim))
+        stack_bwd_init = T.set_subtensor(stack_bwd_init[-self.batch_size:], error_signal)
+
+        batch_size = self.batch_size
+        batch_range = T.arange(batch_size)
+        stack_shift = T.cast(batch_range, theano.config.floatX)
+
+        def step_b(# sequences
+                   t, t_f, transitions_t, transitions_t_f, stack_2_ptrs_t,
+                   # outputs_info (inplace update is okay)
+                   dW, stack_bwd_t,
+                   # non_sequences
+                   stack_final):
+            err_prev = stack_bwd_t[t + batch_range]
+
+            ## dW case 2: Merge.
+            # Find the timesteps of the two elements involved in the merge.
+            t_c1 = (t_f - 1.0) * batch_size + stack_shift
+            t_c2 = stack_2_ptrs_t
+            # TODO: Sub in nice CUDA ops
+            t_c1 = T.cast(t_c1, "int32")
+            t_c2 = T.cast(t_c2, "int32")
+
+            # Find the two elements involved in the merge.
+            # batch_size * model_dim
+            c1, c2 = stack_final[t_c1], stack_final[t_c2]
+
+            # Calculate deltas of dW for each element.
+            # batch_size * W_width * W_height
+#            dW_merge = T.outer(T.concatenate([c1, c2], axis=1), err_prev)
+#            dW_merge = T.dot(err_prev, # batch_size * model_dim
+#                             T.concatenate([c1, c2], axis=1) # batch_size * model_dim
+#                             ).T
+
+            # DEV: this is effectively a batched_outer.
+            # can refactor into a batched_dot(x, y.T) for clarity
+            dW_merge = theano.scan(
+                    lambda v1, v2: T.outer(v1, v2),
+                    sequences=[T.concatenate([c1, c2], axis=1), err_prev])[0]
+
+            # Calculate delta vectors for preceding timestep.
+            # batch_size * model_dim
+            new_err_merge = T.dot(err_prev, self.W.T) # T.dot(self.W, err_prev)
+#            err_c1, err_c2 = T.split(new_err_merge, (self.model_dim,), 2)
+            err_c1 = new_err_merge[:, :self.model_dim]
+            err_c2 = new_err_merge[:, self.model_dim:]
+
+            ## Switch between two cases.
+            # TODO: Record actual transitions (e.g. for model 1S and higher)
+            # and repeat those here
+            mask = transitions_t_f
+            mask_2d = mask.dimshuffle(0, "x")
+            mask_3d = mask.dimshuffle(0, "x", "x")
+
+            # TODO: Is this at all efficient? (Bring back GPURowSwitch?)
+            dW += (mask_3d * dW_merge).sum(axis=0)
+
+            stack_bwd_next = T.set_subtensor(
+                    stack_bwd_t[t_c1],
+                    mask_2d * err_c1 + (1. - mask_2d) * err_prev)
+            stack_bwd_next = T.set_subtensor(
+                    stack_bwd_t[t_c2],
+                    mask_2d * err_c2 + (1 - mask_2d) * err_prev)
+
+            # # TODO: Batch-ify.
+            # if transitions_t == 0:
+            #     # Push. Nothing happens. Might need to pass err_prev back?
+            # elif transitions_t == 1:
+            #     # Find the timesteps of these elements.
+            #     t_c1 = t - 1
+            #     t_c2 = stack_2_ptrs_t
+
+            #     # Find the two elements involved in the merge.
+            #     c1, c2 = stack_final[t_c1], stack_final[t_c2]
+
+            #     # Acculumate dW gradient matrix.
+            #     dW += T.outer(T.concatenate([c1, c2], axis=1), err_prev)
+
+            #     # Calculate delta vector for preceding timestep.
+            #     # TODO: Indexing is off.
+            #     new_err = T.dot(self.W, err_prev)
+            #     err_c1, err_c2 = T.split(new_err, sz, 2)
+
+            #     stack_bwd_next = T.set_subtensor(stack_bwd_t[t_c1], err_c1)
+            #     stack_bwd_next = T.set_subtensor(stack_bwd_next[t_c2], err_c2)
+
+            return dW, stack_bwd_next
+
+        # TODO: These should come from forward pass -- not fixed -- in model
+        # 1S, etc.
+        transitions = self.transitions.dimshuffle(1, 0)
+        transitions_f = T.cast(transitions, dtype=theano.config.floatX)
+
+        ts = T.arange(transitions.shape[0])
+        ts_f = T.cast(ts, dtype=theano.config.floatX)
+
+        bscan_ret, _ = theano.scan(
+                step_b,
+                sequences=[ts, ts_f, transitions, transitions_f, self.stack_2_ptrs],
+                outputs_info=[T.zeros_like(self.W), stack_bwd_init],
+                non_sequences=[self.final_stack],
+                go_backwards=True)
+
+        dW, stack_bwd = bscan_ret
+        self.dW = dW
 
 
 class Model0(HardStack):

@@ -112,7 +112,7 @@ def build_sentence_model(cls, vocab_size, seq_length, tokens, transitions,
         sentence_vector, FLAGS.model_dim, num_classes, vs,
         name="semantic_classifier", use_bias=True)
 
-    return stack, sentence_model.transitions_pred, logits
+    return stack, stack_top, sentence_model.transitions_pred, logits
 
 
 def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
@@ -508,7 +508,7 @@ def run(only_forward=False):
         transitions = T.imatrix("transitions")
         num_transitions = T.vector("num_transitions", dtype="int32")
 
-        stack, predicted_transitions, logits = build_sentence_model(
+        stack, stack_top, predicted_transitions, logits = build_sentence_model(
             model_cls, len(vocabulary), FLAGS.seq_length,
             X, transitions, len(data_manager.LABEL_MAP), training_mode, ground_truth_transitions_visible, vs,
             initial_embeddings=initial_embeddings, project_embeddings=(not train_embeddings),
