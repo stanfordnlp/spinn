@@ -164,13 +164,17 @@ class VariableStore(object):
                 keys = self.savable_vars
         save_file = open(filename)
         for key in keys:
-            if self.logger:
-                full_name = "%s/%s" % (self.prefix, key)
-                self.logger.Log(
-                    "Restoring variable " + full_name, level=self.logger.DEBUG)
             if skip_saved_unsavables and key not in self.savable_vars:
+                if self.logger:
+                    full_name = "%s/%s" % (self.prefix, key)
+                    self.logger.Log(
+                        "Not restoring variable " + full_name, level=self.logger.DEBUG)
                 _ = cPickle.load(save_file) # Discard
             else:
+                if self.logger:
+                    full_name = "%s/%s" % (self.prefix, key)
+                    self.logger.Log(
+                        "Restoring variable " + full_name, level=self.logger.DEBUG)
                 self.vars[key].set_value(cPickle.load(save_file), borrow=True)
 
         extra_vars = []
@@ -499,7 +503,7 @@ def MakeEvalIterator(sources, batch_size):
     start = -batch_size
     while True:
         start += batch_size
-        if start > dataset_size:
+        if start >= dataset_size:
             break
         data_iter.append(tuple(source[start:start + batch_size]
                                for source in sources))
