@@ -616,6 +616,14 @@ def run(only_forward=False):
 
         # Main training loop.
         for step in range(step, FLAGS.training_steps):
+            if step % FLAGS.eval_interval_steps == 0:
+                for index, eval_set in enumerate(eval_iterators):
+                    acc = evaluate(eval_fn, eval_set, logger, step)
+                    if FLAGS.ckpt_on_best_dev_error and index == 0 and (1 - acc) < 0.99 * best_dev_error and step > 1000:
+                        best_dev_error = 1 - acc
+                        logger.Log("Checkpointing with new best dev accuracy of %f" % acc)
+                        vs.save_checkpoint(checkpoint_path + "_best", extra_vars=[step, best_dev_error])
+
             X_batch, transitions_batch, y_batch, num_transitions_batch = training_data_iter.next()
             ret = update_fn(X_batch, transitions_batch, y_batch, num_transitions_batch,
                             FLAGS.learning_rate, 1.0, 1.0, np.exp(step*np.log(FLAGS.scheduled_sampling_exponent_base)))
@@ -627,17 +635,9 @@ def run(only_forward=False):
                     % (step, acc_val, action_acc_val, total_cost_val, xent_cost_val, transition_cost_val,
                        l2_cost_val))
 
-            if step % FLAGS.eval_interval_steps == 0:
-                for index, eval_set in enumerate(eval_iterators):
-                    acc = evaluate(eval_fn, eval_set, logger, step)
-                    if FLAGS.ckpt_on_best_dev_error and index == 0 and (1 - acc) < 0.99 * best_dev_error and step > 1000:
-                        best_dev_error = 1 - acc
-                        logger.Log("Checkpointing with new best dev accuracy of %f" % acc)
-                        vs.save_checkpoint(checkpoint_path + "_best", extra_vars=[step, best_dev_error])
-
             if step % FLAGS.ckpt_interval_steps == 0 and step > 0:
                 vs.save_checkpoint(checkpoint_path, extra_vars=[step, best_dev_error])
-  
+
 
 if __name__ == '__main__':
     # Experiment naming.
