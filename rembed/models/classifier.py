@@ -179,7 +179,11 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
         ss_prob=ss_prob,
         connect_tracking_comp=FLAGS.connect_tracking_comp,
         context_sensitive_shift=FLAGS.context_sensitive_shift,
-        context_sensitive_use_relu=FLAGS.context_sensitive_use_relu)
+        context_sensitive_use_relu=FLAGS.context_sensitive_use_relu,
+        use_attention=FLAGS.use_attention)
+
+    premise_stack_tops = premise_model.stack_tops if FLAGS.use_attention else None
+
     hypothesis_model = cls(
         FLAGS.model_dim, FLAGS.word_embedding_dim, vocab_size, seq_length,
         compose_network, embedding_projection_network, training_mode, ground_truth_transitions_visible, vs, 
@@ -193,7 +197,10 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
         ss_prob=ss_prob,
         connect_tracking_comp=FLAGS.connect_tracking_comp,
         context_sensitive_shift=FLAGS.context_sensitive_shift,
-        context_sensitive_use_relu=FLAGS.context_sensitive_use_relu)
+        context_sensitive_use_relu=FLAGS.context_sensitive_use_relu,
+        use_attention=FLAGS.use_attention,
+        premise_stack_top=premise_stack_tops,
+        attention_dim=FLAGS.attention_dim)
 
     # Extract top element of final stack timestep.
     premise_embeddings = premise_model.embeddings
@@ -672,10 +679,13 @@ if __name__ == '__main__':
         "(i.e., in Model 1 and Model 2S.)")
     gflags.DEFINE_integer("model_dim", 8, "")
     gflags.DEFINE_integer("word_embedding_dim", 8, "")
+    gflags.DEFINE_integer("attention_dim", 8, "")
     
     gflags.DEFINE_integer("tracking_lstm_hidden_dim", 4, "")
     gflags.DEFINE_boolean("use_tracking_lstm", True,
                           "Whether to use LSTM in the tracking unit")
+    gflags.DEFINE_boolean("use_attention", False,
+                          "Whether to use word-by-word attention")
     gflags.DEFINE_boolean("context_sensitive_shift", False, 
         "Use LSTM hidden state and word embedding to determine the vector to be pushed")
     gflags.DEFINE_boolean("context_sensitive_use_relu", False,
