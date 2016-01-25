@@ -426,7 +426,7 @@ class HardStack(object):
         ## Backprop scan ##
         # defined for simple RNN case, where each merge is ([c1; c2] * W)
 
-        stack_bwd_init = T.zeros((self.stack_size * self.batch_size, self.model_dim))
+        stack_bwd_init = T.zeros(((self.stack_size + 1) * self.batch_size, self.model_dim))
         stack_bwd_init = T.set_subtensor(stack_bwd_init[-self.batch_size:], error_signal)
 
         batch_size = self.batch_size
@@ -439,7 +439,8 @@ class HardStack(object):
                    dW, stack_bwd_t,
                    # non_sequences
                    stack_final):
-            err_prev = stack_bwd_t[t + batch_range]
+            t = theano.printing.Print("t")(t)
+            err_prev = stack_bwd_t[(t + 1) * batch_size + batch_range]
 
             ## dW case 2: Merge.
             # Find the timesteps of the two elements involved in the merge.
@@ -448,6 +449,8 @@ class HardStack(object):
             # TODO: Sub in nice CUDA ops
             t_c1 = T.cast(t_c1, "int32")
             t_c2 = T.cast(t_c2, "int32")
+            t_c1 = theano.printing.Print("t_c1")(t_c1)
+            t_c2 = theano.printing.Print("t_c2")(t_c2)
 
             # Find the two elements involved in the merge.
             # batch_size * model_dim
@@ -462,6 +465,7 @@ class HardStack(object):
 
             # DEV: this is effectively a batched_outer.
             # can refactor into a batched_dot(x, y.T) for clarity
+            err_prev = theano.printing.Print("err_prev")(err_prev)
             dW_merge = theano.scan(
                     lambda v1, v2: T.outer(v1, v2),
                     sequences=[T.concatenate([c1, c2], axis=1), err_prev])[0]
@@ -472,23 +476,27 @@ class HardStack(object):
 #            err_c1, err_c2 = T.split(new_err_merge, (self.model_dim,), 2)
             err_c1 = new_err_merge[:, :self.model_dim]
             err_c2 = new_err_merge[:, self.model_dim:]
+            err_c1 = theano.printing.Print("err_c1")(err_c1)
 
             ## Switch between two cases.
             # TODO: Record actual transitions (e.g. for model 1S and higher)
             # and repeat those here
             mask = transitions_t_f
+            mask = theano.printing.Print("mask")(mask)
             mask_2d = mask.dimshuffle(0, "x")
             mask_3d = mask.dimshuffle(0, "x", "x")
 
             # TODO: Is this at all efficient? (Bring back GPURowSwitch?)
+            dW_merge = theano.printing.Print("dW_merge")(dW_merge)
             dW += (mask_3d * dW_merge).sum(axis=0)
 
             stack_bwd_next = T.set_subtensor(
-                    stack_bwd_t[t_c1],
+                    stack_bwd_t[t_c1 + batch_size], # DEV
                     mask_2d * err_c1 + (1. - mask_2d) * err_prev)
             stack_bwd_next = T.set_subtensor(
-                    stack_bwd_t[t_c2],
-                    mask_2d * err_c2 + (1 - mask_2d) * err_prev)
+                    stack_bwd_next[t_c2],
+                    mask_2d * err_c2 + (1. - mask_2d) * err_prev)
+            stack_bwd_next = theano.printing.Print("===========================")(stack_bwd_next)#, ("shape",))(stack_bwd_next)
 
             # # TODO: Batch-ify.
             # if transitions_t == 0:
@@ -530,7 +538,7 @@ class HardStack(object):
                 go_backwards=True)
 
         dW, stack_bwd = bscan_ret
-        self.dW = dW
+        self.dW = dW[-1]
 
 
 class Model0(HardStack):
