@@ -80,7 +80,10 @@ class HardStack(object):
                  tracking_lstm_hidden_dim=8,
                  connect_tracking_comp=False,
                  context_sensitive_shift=False,
-                 context_sensitive_use_relu=False):
+                 context_sensitive_use_relu=False,
+                 use_attention=False,
+                 premise_stack_top=None,
+                 attention_dim=8):
         """
         Construct a HardStack.
 
@@ -129,7 +132,11 @@ class HardStack(object):
             context_sensitive_shift: If True, the hidden state of tracking LSTM and the embedding 
                 vector will be used to calculate the vector that will be pushed onto the stack
             context_sensitive_use_relu: If True, a ReLU layer will be used while doing context 
-                sensitive shift, otherwise a Linear layer will be used 
+                sensitive shift, otherwise a Linear layer will be used
+            use_attention: Use attention over premise tree nodes to obtain sentence representation
+            premise_stack_top: Tokens located on the top of premise stack. Used only when use_attention
+                is set to True
+            attention_dim: Dimension of the hidden state of attention unit
         """
 
         self.model_dim = model_dim
@@ -173,6 +180,9 @@ class HardStack(object):
         assert (use_tracking_lstm or not context_sensitive_shift), \
             "Must use tracking LSTM while doing context sensitive shift"
         self.context_sensitive_use_relu = context_sensitive_use_relu
+        self.use_attention = use_attention
+        self.premise_stack_top = premise_stack_top
+        self.attention_dim = attention_dim
 
         self._make_params()
         self._make_inputs()
@@ -365,16 +375,19 @@ class HardStack(object):
                 sequences=sequences,
                 non_sequences=[stack_pushed, stack_merged, 
                         buffer_t, self.ground_truth_transitions_visible],
-                outputs_info=outputs_info)[0]
+                outputs_info=outputs_info)
 
         stack_ind = 0 if self.interpolate else 1
-        self.final_stack = scan_ret[stack_ind][-1]
+        self.final_stack = scan_ret[0][stack_ind][-1]
         self.embeddings = self.final_stack[:, 0]
 
         self.transitions_pred = None
         if self._predict_transitions:
-            self.transitions_pred = scan_ret[-1].dimshuffle(1, 0, 2)
-
+            self.transitions_pred = scan_ret[0][-1].dimshuffle(1, 0, 2)
+        if self.use_attention and self.premise_stack_top is None:
+            # store the stack top at each step as an attribute
+            stack_tops = T.concatenate([sc[stack_ind][-1][:, 0] for sc in scan_ret])
+            self.stack_tops = stack_tops.reshape([-1, self.model_dim])
 
 class Model0(HardStack):
 
