@@ -284,7 +284,7 @@ class HardStack(object):
         stack_2 = cuda_util.AdvancedSubtensor1Floats()(self.stack, stack_2_ptrs)
 
         # Now update the stack: first precompute merge results.
-        merge_items = cuda_util.JoinUnsafe()(1, stack_1, stack_2)
+        merge_items = T.concatenate([stack_1, stack_2], axis=1)
         if self.connect_tracking_comp:
             tracking_h_t = tracking_hidden[:, :self.tracking_lstm_hidden_dim]
             merge_value = self._compose_network(merge_items, tracking_h_t, self.model_dim,
