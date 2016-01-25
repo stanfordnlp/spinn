@@ -199,8 +199,7 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
         context_sensitive_shift=FLAGS.context_sensitive_shift,
         context_sensitive_use_relu=FLAGS.context_sensitive_use_relu,
         use_attention=FLAGS.use_attention,
-        premise_stack_top=premise_stack_tops,
-        attention_dim=FLAGS.attention_dim)
+        premise_stack_tops=premise_stack_tops)
 
     # Extract top element of final stack timestep.
     premise_embeddings = premise_model.embeddings
@@ -679,7 +678,6 @@ if __name__ == '__main__':
         "(i.e., in Model 1 and Model 2S.)")
     gflags.DEFINE_integer("model_dim", 8, "")
     gflags.DEFINE_integer("word_embedding_dim", 8, "")
-    gflags.DEFINE_integer("attention_dim", 8, "")
     
     gflags.DEFINE_integer("tracking_lstm_hidden_dim", 4, "")
     gflags.DEFINE_boolean("use_tracking_lstm", True,

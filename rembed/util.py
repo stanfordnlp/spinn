@@ -325,6 +325,31 @@ def TrackingUnit(state_prev, inp, inp_dim, hidden_dim, vs, name="track_unit", ma
 
     return state, logits
 
+def AttentionUnit(attention_state_prev, current_lstm_state, premise_stack_tops, model_dim, 
+            num_transitions, vs, name="attention_unit", initializer=None):
+    """
+    Dimension notation:
+    B : Batch size
+    k : Model dim
+    L : num_transitions
+    """
+    W_y = vs.add_param("%s_W_y" % name, (model_dim, model_dim), initializer=initializer)
+    W_h = vs.add_param("%s_W_h" % name, (model_dim, model_dim), initializer=initializer)
+    W_r = vs.add_param("%s_W_r" % name, (model_dim, model_dim), initializer=initializer)
+    W_t = vs.add_param("%s_W_t" % name, (model_dim, model_dim), initializer=initializer)
+    w = vs.add_param("%s_w" % name, (model_dim,), initializer=initializer)
+    
+    # Shape: BL x k
+    M_t = T.tanh(T.dot(premise_stack_tops, W_y) + T.dot(W_h, current_lstm_state) + \
+        T.dot(W_r, attention_state_prev))
+    # Shape: B x L
+    alpha_t = T.nnet.softmax(T.dot(M_t, w).reshape([-1, num_transitions]))
+    # Shape: B x L x k
+    stack_top_weighted = T.mul(alpha_t.reshape([-1]), M_t).reshape([-1, num_transitions, model_dim])
+    # Shape B x k
+    r_t = T.sum(stack_top_weighted, axis=1) + T.tanh(T.dot(attention_state_prev, W_t))
+    return r_t
+
 def MLP(inp, inp_dim, outp_dim, vs, layer=ReLULayer, hidden_dims=None,
         name="mlp", initializer=None):
     if hidden_dims is None:

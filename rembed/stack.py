@@ -82,8 +82,7 @@ class HardStack(object):
                  context_sensitive_shift=False,
                  context_sensitive_use_relu=False,
                  use_attention=False,
-                 premise_stack_top=None,
-                 attention_dim=8):
+                 premise_stack_tops=None):
         """
         Construct a HardStack.
 
@@ -134,9 +133,8 @@ class HardStack(object):
             context_sensitive_use_relu: If True, a ReLU layer will be used while doing context 
                 sensitive shift, otherwise a Linear layer will be used
             use_attention: Use attention over premise tree nodes to obtain sentence representation
-            premise_stack_top: Tokens located on the top of premise stack. Used only when use_attention
+            premise_stack_tops: Tokens located on the top of premise stack. Used only when use_attention
                 is set to True
-            attention_dim: Dimension of the hidden state of attention unit
         """
 
         self.model_dim = model_dim
@@ -181,8 +179,7 @@ class HardStack(object):
             "Must use tracking LSTM while doing context sensitive shift"
         self.context_sensitive_use_relu = context_sensitive_use_relu
         self.use_attention = use_attention
-        self.premise_stack_top = premise_stack_top
-        self.attention_dim = attention_dim
+        self.premise_stack_tops = premise_stack_tops
 
         self._make_params()
         self._make_inputs()
@@ -384,7 +381,7 @@ class HardStack(object):
         self.transitions_pred = None
         if self._predict_transitions:
             self.transitions_pred = scan_ret[0][-1].dimshuffle(1, 0, 2)
-        if self.use_attention and self.premise_stack_top is None:
+        if self.use_attention and self.premise_stack_tops is None:
             # store the stack top at each step as an attribute
             stack_tops = T.concatenate([sc[stack_ind][-1][:, 0] for sc in scan_ret])
             self.stack_tops = stack_tops.reshape([-1, self.model_dim])
