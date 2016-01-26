@@ -426,7 +426,7 @@ class HardStack(object):
         ## Backprop scan ##
         # defined for simple RNN case, where each merge is ([c1; c2] * W)
 
-        stack_bwd_init = T.zeros(((self.stack_size + 1) * self.batch_size, self.model_dim))
+        stack_bwd_init = T.zeros((self.stack_size * self.batch_size, self.model_dim))
         stack_bwd_init = T.set_subtensor(stack_bwd_init[-self.batch_size:], error_signal)
 
         batch_size = self.batch_size
@@ -440,7 +440,7 @@ class HardStack(object):
                    # non_sequences
                    stack_final):
             t = theano.printing.Print("t")(t)
-            err_prev = stack_bwd_t[(t + 1) * batch_size + batch_range]
+            err_prev = stack_bwd_t[t * batch_size + batch_range]
 
             ## dW case 2: Merge.
             # Find the timesteps of the two elements involved in the merge.
@@ -491,11 +491,11 @@ class HardStack(object):
             dW += (mask_3d * dW_merge).sum(axis=0)
 
             stack_bwd_next = T.set_subtensor(
-                    stack_bwd_t[t_c1 + batch_size], # DEV
-                    mask_2d * err_c1 + (1. - mask_2d) * err_prev)
+                    stack_bwd_t[t_c1],
+                    mask_2d * err_c1)# + (1. - mask_2d) * err_prev)
             stack_bwd_next = T.set_subtensor(
                     stack_bwd_next[t_c2],
-                    mask_2d * err_c2 + (1. - mask_2d) * err_prev)
+                    mask_2d * err_c2)# + (1. - mask_2d) * err_prev)
             stack_bwd_next = theano.printing.Print("===========================")(stack_bwd_next)#, ("shape",))(stack_bwd_next)
 
             # # TODO: Batch-ify.
