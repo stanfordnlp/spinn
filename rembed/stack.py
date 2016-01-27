@@ -470,18 +470,16 @@ class HardStack(object):
                     sequences=[T.concatenate([c1, c2], axis=1), err_prev])[0]
 
             # Calculate deltas of dE for each element.
-            dE_push = cuda_util.AdvancedSubtensor1Floats()(stack_bwd_t, t_c1)
+            dE_push = cuda_util.AdvancedSubtensor1Floats()(
+                    stack_bwd_t, t_f * batch_size + stack_shift)
             buffer_ids_t = cuda_util.AdvancedSubtensor1Floats()(
                     id_buffer, buffer_cur_t + buffer_shift)
-            buffer_ids_t = theano.printing.Print("buffer_ids_t")(buffer_ids_t)
 
             # Calculate delta vectors for preceding timestep.
             # batch_size * model_dim
             new_err_merge = T.dot(err_prev, self.W.T)
             err_c1 = new_err_merge[:, :self.model_dim]
             err_c2 = new_err_merge[:, self.model_dim:]
-            # err_c1 = theano.printing.Print("err_c1")(err_c1)
-            # err_c2 = theano.printing.Print("err_c2")(err_c2)
 
             ## Switch between two cases.
             # TODO: Record actual transitions (e.g. for model 1S and higher)
@@ -492,9 +490,7 @@ class HardStack(object):
 
             # TODO: Is this at all efficient? (Bring back GPURowSwitch?)
             dW += (mask_3d * dW_merge).sum(axis=0)
-            dE = T.set_subtensor(dE[buffer_ids_t], # TODO: How to manage dupes?
-                                 dE[buffer_ids_t] + (1. - mask_2d) * dE_push)
-            dE = theano.printing.Print("dE")(dE)
+            dE = T.inc_subtensor(dE[buffer_ids_t], (1. - mask_2d) * dE_push)
 
             # Update backward-pass stack structure.
             # For each example:
