@@ -490,12 +490,17 @@ class HardStack(object):
             dW_merge = theano.printing.Print("dW_merge")(dW_merge)
             dW += (mask_3d * dW_merge).sum(axis=0)
 
+            # Update backward-pass stack structure.
+            # For each example:
+            #   Retrieve positions of potential merge elements (t_c1, t_c2)
+            #   If we merged: backprop error signals to these positions
+            #   If we pushed: leave these positions unchanged
             stack_bwd_next = T.set_subtensor(
                     stack_bwd_t[t_c1],
-                    mask_2d * err_c1)# + (1. - mask_2d) * err_prev)
+                    mask_2d * err_c1 + (1. - mask_2d) * stack_bwd_t[t_c1])
             stack_bwd_next = T.set_subtensor(
                     stack_bwd_next[t_c2],
-                    mask_2d * err_c2)# + (1. - mask_2d) * err_prev)
+                    mask_2d * err_c2 + (1. - mask_2d) * stack_bwd_t[t_c2])
             stack_bwd_next = theano.printing.Print("===========================")(stack_bwd_next)#, ("shape",))(stack_bwd_next)
 
             # # TODO: Batch-ify.
