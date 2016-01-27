@@ -136,10 +136,12 @@ class ThinStackBackpropTestCase(unittest.TestCase):
                                     [ 0.96303163,  0.53989795],
                                     [ 0.37782846,  0.83950132]],
                                    dtype=np.float32))
+        b = theano.shared(np.array([1.0, 1.0], dtype=np.float32))
         self.embeddings = embeddings
         self.W = W
+        self.b = b
 
-        self.compose_network = lambda inp, *args, **kwargs: T.dot(inp, W)
+        self.compose_network = lambda inp, *args, **kwargs: T.dot(inp, W) + b
 
         self.X = T.imatrix("X")
         self.transitions = T.imatrix("transitions")
@@ -183,7 +185,8 @@ class ThinStackBackpropTestCase(unittest.TestCase):
         simulated_cost = self._make_cost(simulated_top)
         f_simulated = theano.function(
             [self.X, self.y],
-            (simulated_cost, T.grad(simulated_cost, self.W)))
+            (simulated_cost, T.grad(simulated_cost, self.W),
+             T.grad(simulated_cost, self.b)))
 
         # Build gradient subgraphs.
         delta = lambda err_above: T.dot(err_above, self.W.T)
@@ -191,22 +194,26 @@ class ThinStackBackpropTestCase(unittest.TestCase):
             dW = theano.scan(
                 lambda v1, v2: T.outer(v1, v2),
                 sequences=[T.concatenate([c1, c2], axis=1), err_above])[0]
+            db = err_above
 
-            return [dW]
+            return [dW, db]
 
         top = self.stack.final_stack[-self.batch_size:]
         cost = self._make_cost(top)
         error_signal = T.grad(cost, top)
-        self.stack.make_backprop_scan(error_signal, delta, d_compose)
+        self.stack.make_backprop_scan(error_signal, delta, d_compose,
+                                      [self.W.get_value().shape,
+                                       self.b.get_value().shape])
         f = theano.function(
             [self.X, self.transitions, self.y],
-            (cost, self.stack.deltas[0]))
+            (cost, self.stack.deltas[0], self.stack.deltas[1]))
 
-        b_cost_sim, b_dW_sim = f_simulated(X, y)
-        b_cost, b_dW = f(X, transitions, y)
+        b_cost_sim, b_dW_sim, b_db_sim = f_simulated(X, y)
+        b_cost, b_dW, b_db = f(X, transitions, y)
 
         np.testing.assert_almost_equal(b_cost_sim, b_cost)
         np.testing.assert_almost_equal(b_dW_sim, b_dW)
+        np.testing.assert_almost_equal(b_db_sim, b_db)
 
 
 
