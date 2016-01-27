@@ -468,8 +468,7 @@ class HardStack(object):
             d_compose = f_d_compose(c1, c2, err_prev)
 
             # Calculate deltas of dE for each element.
-            dE_push = cuda_util.AdvancedSubtensor1Floats()(
-                    stack_bwd_t, t_f * batch_size + stack_shift)
+            dE_push = err_prev
             buffer_ids_t = cuda_util.AdvancedSubtensor1Floats()(
                     id_buffer, buffer_cur_t + buffer_shift)
 
