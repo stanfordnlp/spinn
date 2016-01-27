@@ -505,14 +505,10 @@ class HardStack(object):
             bwd_c2 = cuda_util.AdvancedSubtensor1Floats()(stack_bwd_t, t_c2)
             # DEV: Can't force inplace until we update Theano internals to
             # admit inplace updates on stack_bwd_t
-            stack_bwd_next = cuda_util.AdvancedIncSubtensor1Floats(set_instead_of_inc=True)(#, inplace=True)(
-                    stack_bwd_t,
-                    mask_2d * err_c1 + (1. - mask_2d) * bwd_c1,
-                    t_c1)
-            stack_bwd_next = cuda_util.AdvancedIncSubtensor1Floats(set_instead_of_inc=True)(#), inplace=True)(
-                    stack_bwd_next,
-                    mask_2d * err_c2 + (1. - mask_2d) * bwd_c2,
-                    t_c2)
+            stack_bwd_next = cuda_util.AdvancedIncSubtensor1Floats()(#, inplace=True)(
+                    stack_bwd_t, mask_2d * err_c1, t_c1)
+            stack_bwd_next = cuda_util.AdvancedIncSubtensor1Floats()(#), inplace=True)(
+                    stack_bwd_next, mask_2d * err_c2, t_c2)
 
             return [stack_bwd_next, dE] + accum_deltas
 
