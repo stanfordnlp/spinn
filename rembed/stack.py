@@ -412,7 +412,7 @@ class HardStack(object):
             self.transitions_pred = scan_ret[-1].dimshuffle(1, 0, 2)
 
 
-    def make_backprop_scan(self, error_signal, delta):
+    def make_backprop_scan(self, error_signal, f_delta, f_d_compose):
         """
         Args:
             error_signal: Theano batch of batch_size * model_dim
@@ -439,9 +439,12 @@ class HardStack(object):
         def step_b(# sequences
                    t, t_f, transitions_t, transitions_t_f, stack_2_ptrs_t, buffer_cur_t,
                    # outputs_info (inplace update is okay)
-                   dW, dE, stack_bwd_t,
+                   stack_bwd_t, dE, dW,
                    # non_sequences
                    stack_final):
+            # DEV
+            accum_deltas = [dW]
+
             err_prev = cuda_util.AdvancedSubtensor1Floats()(stack_bwd_t, t_f * batch_size + stack_shift)
 
             # Find the timesteps of the two elements involved in the potential
@@ -463,9 +466,7 @@ class HardStack(object):
 
             # DEV: this is effectively a batched_outer.
             # can refactor into a batched_dot(x, y.T) for clarity
-            dW_merge = theano.scan(
-                    lambda v1, v2: T.outer(v1, v2),
-                    sequences=[T.concatenate([c1, c2], axis=1), err_prev])[0]
+            d_compose = f_d_compose(c1, c2, err_prev)
 
             # Calculate deltas of dE for each element.
             dE_push = cuda_util.AdvancedSubtensor1Floats()(
@@ -475,7 +476,7 @@ class HardStack(object):
 
             # Calculate delta vectors for preceding timestep.
             # batch_size * model_dim
-            new_err_merge = delta(err_prev)
+            new_err_merge = f_delta(err_prev)
             err_c1 = new_err_merge[:, :self.model_dim]
             err_c2 = new_err_merge[:, self.model_dim:]
 
@@ -487,7 +488,12 @@ class HardStack(object):
             mask_3d = mask.dimshuffle(0, "x", "x")
 
             # TODO: Is this at all efficient? (Bring back GPURowSwitch?)
-            dW += (mask_3d * dW_merge).sum(axis=0)
+            for i, (accum_delta, delta) in enumerate(zip(accum_deltas, d_compose)):
+                assert delta.ndim == accum_delta.ndim + 1
+                mask = mask_3d if delta.ndim == 3 else mask_2d
+                # TODO: Is this at all efficient? (Bring back GPURowSwitch?)
+                accum_deltas[i] = accum_delta + (mask * delta).sum(axis=0)
+
             dE = T.inc_subtensor(dE[buffer_ids_t], (1. - mask_2d) * dE_push)
 
             # Update backward-pass stack structure.
@@ -508,7 +514,7 @@ class HardStack(object):
                     mask_2d * err_c2 + (1. - mask_2d) * bwd_c2,
                     t_c2)
 
-            return dW, dE, stack_bwd_next
+            return [stack_bwd_next, dE] + accum_deltas
 
         # TODO: These should come from forward pass -- not fixed -- in model
         # 1S, etc.
@@ -524,13 +530,13 @@ class HardStack(object):
         bscan_ret, _ = theano.scan(
                 step_b,
                 sequences=[ts, ts_f, transitions, transitions_f, self.stack_2_ptrs, buf_ptrs],
-                outputs_info=[T.zeros((self.model_dim * 2, self.model_dim)),
-                              T.zeros_like(self.embeddings), stack_bwd_init],
+                outputs_info=[stack_bwd_init, T.zeros_like(self.embeddings),
+                              T.zeros((self.model_dim * 2, self.model_dim))],
                 non_sequences=[self.final_stack],
                 go_backwards=True)
 
-        dW, dE, stack_bwd = bscan_ret
-        self.dW = dW[-1]
+        stack_bwd, dE = bscan_ret[:2]
+        self.deltas = [deltas[-1] for deltas in bscan_ret[2:]]
         self.dE = dE[-1]
 
 
