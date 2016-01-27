@@ -433,11 +433,8 @@ class HardStack(object):
         stack_shift = T.cast(batch_range, theano.config.floatX)
         buffer_shift = T.cast(batch_range * self.seq_length, theano.config.floatX)
 
-        # Representation of buffer using embedding indices rather than values
-        id_buffer = self.X.flatten()
-
         def step_b(# sequences
-                   t, t_f, transitions_t, transitions_t_f, stack_2_ptrs_t, buffer_cur_t,
+                   t_f, transitions_t_f, stack_2_ptrs_t, buffer_cur_t,
                    # outputs_info (inplace update is okay)
                    stack_bwd_t, dE, dW,
                    # non_sequences
@@ -445,7 +442,8 @@ class HardStack(object):
             # DEV
             accum_deltas = [dW]
 
-            err_prev = cuda_util.AdvancedSubtensor1Floats()(stack_bwd_t, t_f * batch_size + stack_shift)
+            err_prev = cuda_util.AdvancedSubtensor1Floats()(
+                stack_bwd_t, t_f * batch_size + stack_shift)
 
             # Find the timesteps of the two elements involved in the potential
             # merge at this timestep.
@@ -501,8 +499,6 @@ class HardStack(object):
             #   Retrieve positions of potential merge elements (t_c1, t_c2)
             #   If we merged: backprop error signals to these positions
             #   If we pushed: leave these positions unchanged
-            bwd_c1 = cuda_util.AdvancedSubtensor1Floats()(stack_bwd_t, t_c1)
-            bwd_c2 = cuda_util.AdvancedSubtensor1Floats()(stack_bwd_t, t_c2)
             # DEV: Can't force inplace until we update Theano internals to
             # admit inplace updates on stack_bwd_t
             stack_bwd_next = cuda_util.AdvancedIncSubtensor1Floats()(#, inplace=True)(
@@ -514,18 +510,23 @@ class HardStack(object):
 
         # TODO: These should come from forward pass -- not fixed -- in model
         # 1S, etc.
-        transitions = self.transitions.dimshuffle(1, 0)
-        transitions_f = T.cast(transitions, dtype=theano.config.floatX)
+        transitions_f = T.cast(self.transitions.dimshuffle(1, 0),
+                               dtype=theano.config.floatX)
 
-        ts = T.arange(transitions.shape[0])
-        ts_f = T.cast(ts, dtype=theano.config.floatX)
+        ts_f = T.cast(T.arange(transitions_f.shape[0]), dtype=theano.config.floatX)
 
-        # DEV: prepend original buf ptr
-        buf_ptrs = T.concatenate([T.zeros((1, batch_size,), dtype=theano.config.floatX), self.buf_ptrs[:-1]], axis=0)
+        # Representation of buffer using embedding indices rather than values
+        id_buffer = self.X.flatten()
+        # Build sequence of buffer pointers, where buf_ptrs[i] indicates the
+        # buffer pointer values *before* computation at timestep *i* proceeds.
+        # (This means we need to slice off the last actual buf_ptr output and
+        # prepend a dummy.)
+        buf_ptrs = T.concatenate([T.zeros((1, batch_size,)),
+                                  self.buf_ptrs[:-1]], axis=0)
 
         bscan_ret, _ = theano.scan(
                 step_b,
-                sequences=[ts, ts_f, transitions, transitions_f, self.stack_2_ptrs, buf_ptrs],
+                sequences=[ts_f, transitions_f, self.stack_2_ptrs, buf_ptrs],
                 outputs_info=[stack_bwd_init, T.zeros_like(self.embeddings),
                               T.zeros((self.model_dim * 2, self.model_dim))],
                 non_sequences=[self.final_stack],
