@@ -439,9 +439,8 @@ class HardStack(object):
                    stack_bwd_t, dE,
                    # rest
                    *accum_and_non_sequences):
-            # DEV
-            accum_deltas = accum_and_non_sequences[:-1]
-            stack_final = accum_and_non_sequences[-1]
+            accum_deltas, stack_final = accum_and_non_sequences[:-1], \
+                accum_and_non_sequences[-1]
 
             err_prev = cuda_util.AdvancedSubtensor1Floats()(
                 stack_bwd_t, t_f * batch_size + stack_shift)
@@ -456,15 +455,7 @@ class HardStack(object):
             c1 = cuda_util.AdvancedSubtensor1Floats()(stack_final, t_c1)
             c2 = cuda_util.AdvancedSubtensor1Floats()(stack_final, t_c2)
 
-            # Calculate deltas of dW for each element.
-            # batch_size * W_width * W_height
-#            dW_merge = T.outer(T.concatenate([c1, c2], axis=1), err_prev)
-#            dW_merge = T.dot(err_prev, # batch_size * model_dim
-#                             T.concatenate([c1, c2], axis=1) # batch_size * model_dim
-#                             ).T
-
-            # DEV: this is effectively a batched_outer.
-            # can refactor into a batched_dot(x, y.T) for clarity
+            # Calculate all composition deltas for this timestep.
             d_compose = f_d_compose(c1, c2, err_prev)
 
             # Calculate deltas of dE for each element.
@@ -472,8 +463,9 @@ class HardStack(object):
             buffer_ids_t = cuda_util.AdvancedSubtensor1Floats()(
                     id_buffer, buffer_cur_t + buffer_shift)
 
-            # Calculate delta vectors for preceding timestep.
-            # batch_size * model_dim
+            # Calculate delta vectors d(cost)/d(stack_val) for preceding
+            # timestep.
+            # 2 * batch_size * model_dim
             new_err_merge = f_delta(err_prev)
             err_c1 = new_err_merge[:, :self.model_dim]
             err_c2 = new_err_merge[:, self.model_dim:]
@@ -482,18 +474,17 @@ class HardStack(object):
             # TODO: Record actual transitions (e.g. for model 1S and higher)
             # and repeat those here
             mask = transitions_t_f
-            mask_2d = mask.dimshuffle(0, "x")
-            mask_3d = mask.dimshuffle(0, "x", "x")
+            masks = [mask, mask.dimshuffle(0, "x"),
+                     mask.dimshuffle(0, "x", "x")]
 
             # TODO: Is this at all efficient? (Bring back GPURowSwitch?)
             new_accum_deltas = []
             for accum_delta, delta in zip(accum_deltas, d_compose):
-                assert delta.ndim == accum_delta.ndim + 1
-                mask = mask_3d if delta.ndim == 3 else mask_2d
+                mask_i = masks[delta.ndim - 1]
                 # TODO: Is this at all efficient? (Bring back GPURowSwitch?)
                 new_accum_deltas.append(accum_delta + (mask * delta).sum(axis=0))
 
-            dE = T.inc_subtensor(dE[buffer_ids_t], (1. - mask_2d) * dE_push)
+            dE = T.inc_subtensor(dE[buffer_ids_t], (1. - masks[1]) * dE_push)
 
             # Update backward-pass stack structure.
             # For each example:
@@ -503,9 +494,9 @@ class HardStack(object):
             # DEV: Can't force inplace until we update Theano internals to
             # admit inplace updates on stack_bwd_t
             stack_bwd_next = cuda_util.AdvancedIncSubtensor1Floats()(#, inplace=True)(
-                    stack_bwd_t, mask_2d * err_c1, t_c1)
+                    stack_bwd_t, masks[1] * err_c1, t_c1)
             stack_bwd_next = cuda_util.AdvancedIncSubtensor1Floats()(#), inplace=True)(
-                    stack_bwd_next, mask_2d * err_c2, t_c2)
+                    stack_bwd_next, masks[1] * err_c2, t_c2)
 
             return [stack_bwd_next, dE] + new_accum_deltas
 
