@@ -290,9 +290,8 @@ class HardStack(object):
             merge_value = self._compose_network(merge_items, tracking_h_t, self.model_dim,
                 self._vs, name="compose", external_state_dim=self.tracking_lstm_hidden_dim)
         else:
-            # merge_value = self._compose_network(merge_items, self.model_dim * 2, self.model_dim,
-            #     self._vs, name="compose")
-            merge_value = T.dot(merge_items, self.W)
+            merge_value = self._compose_network(merge_items, self.model_dim * 2, self.model_dim,
+                self._vs, name="compose")
 
         # Compute new stack value.
         stack_next, merge_queue_next, merge_cursors_next = update_hard_stack(
@@ -336,7 +335,6 @@ class HardStack(object):
 
         # Look up all of the embeddings that will be used.
         raw_embeddings = self.embeddings[self.X]  # batch_size * seq_length * emb_dim
-        self.W = self._vs.add_param("W", (self.model_dim * 2, self.model_dim))
 
         if self.context_sensitive_shift:
             # Use the raw embedding vectors, they will be combined with the hidden state of
@@ -414,7 +412,7 @@ class HardStack(object):
             self.transitions_pred = scan_ret[-1].dimshuffle(1, 0, 2)
 
 
-    def make_backprop_scan(self, error_signal):
+    def make_backprop_scan(self, error_signal, W):
         """
         Args:
             error_signal: Theano batch of batch_size * model_dim
@@ -477,7 +475,7 @@ class HardStack(object):
 
             # Calculate delta vectors for preceding timestep.
             # batch_size * model_dim
-            new_err_merge = T.dot(err_prev, self.W.T)
+            new_err_merge = T.dot(err_prev, W.T)
             err_c1 = new_err_merge[:, :self.model_dim]
             err_c2 = new_err_merge[:, self.model_dim:]
 
@@ -509,7 +507,6 @@ class HardStack(object):
                     stack_bwd_next,
                     mask_2d * err_c2 + (1. - mask_2d) * bwd_c2,
                     t_c2)
-            stack_bwd_next = theano.printing.Print("stack_bwd_next=========================")(stack_bwd_next)
 
             return dW, dE, stack_bwd_next
 
@@ -527,7 +524,7 @@ class HardStack(object):
         bscan_ret, _ = theano.scan(
                 step_b,
                 sequences=[ts, ts_f, transitions, transitions_f, self.stack_2_ptrs, buf_ptrs],
-                outputs_info=[T.zeros_like(self.W), T.zeros_like(self.embeddings), stack_bwd_init],
+                outputs_info=[T.zeros_like(W), T.zeros_like(self.embeddings), stack_bwd_init],
                 non_sequences=[self.final_stack],
                 go_backwards=True)
 

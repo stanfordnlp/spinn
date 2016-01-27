@@ -116,5 +116,90 @@ class HardStackTestCase(unittest.TestCase):
         ret = self.stack.scan_fn(X, transitions, 1.0, 1)
         np.testing.assert_almost_equal(ret, expected)
 
+
+class ThinStackBackpropTestCase(unittest.TestCase):
+
+    def setUp(self):
+        if 'gpu' not in theano.config.device:
+            raise RuntimeError("Thin stack only defined for GPU usage")
+
+        self.embedding_dim = self.model_dim = 2
+        self.vocab_size = 5
+        self.seq_length = 5
+        self.batch_size = 2
+        self.num_classes = 2
+
+        embeddings = (np.arange(self.vocab_size)[:, np.newaxis]
+                .repeat(self.embedding_dim, axis=1).astype(np.float32) + 1.0)
+        W = theano.shared(np.array([[ 0.09853827,  0.28727029],
+                                    [ 0.70784546,  0.17831399],
+                                    [ 0.96303163,  0.53989795],
+                                    [ 0.37782846,  0.83950132]],
+                                   dtype=np.float32))
+        self.embeddings = embeddings
+        self.W = W
+
+        self.compose_network = lambda inp, *args, **kwargs: T.dot(inp, W)
+
+        self.X = T.imatrix("X")
+        self.transitions = T.imatrix("transitions")
+        self.y = T.ivector("y")
+
+        self.stack = HardStack(
+            self.model_dim, self.embedding_dim, self.batch_size,
+            self.vocab_size, self.seq_length, self.compose_network,
+            IdentityLayer, 0.0, 1.0, VariableStore(),
+            X=self.X,
+            transitions=self.transitions,
+            initial_embeddings=embeddings)
+
+    def _fake_stack_ff(self):
+        """Fake a stack feedforward S S M S M with the given data."""
+
+        # seq_length * batch_size * emb_dim
+        X_emb = self.stack.embeddings[self.X].dimshuffle(1, 0, 2)
+
+        z1 = T.concatenate([X_emb[1], X_emb[0]], axis=1)
+        c1 = self.compose_network(z1)
+
+        z2 = T.concatenate([X_emb[2], c1], axis=1)
+        c2 = self.compose_network(z2)
+
+        return c2
+
+    def _make_cost(self, stack_top):
+        logits = stack_top[:, :self.num_classes]
+        costs = T.nnet.categorical_crossentropy(T.nnet.softmax(logits), self.y)
+        return costs.mean()
+
+    def test_backprop(self):
+        # Simulate a batch of two token sequences, each with the same
+        # transition sequence
+        X = np.array([[0, 1, 2, 3, 1], [2, 1, 3, 0, 1]], dtype=np.int32)
+        y = np.array([1, 0], dtype=np.int32)
+        transitions = np.tile([0, 0, 1, 0, 1], (2, 1)).astype(np.int32)
+
+        simulated_top = self._fake_stack_ff()
+        simulated_cost = self._make_cost(simulated_top)
+        f_simulated = theano.function(
+            [self.X, self.y],
+            (simulated_cost, T.grad(simulated_cost, self.W)))
+
+        top = self.stack.final_stack[-self.batch_size:]
+        cost = self._make_cost(top)
+        error_signal = T.grad(cost, top)
+        self.stack.make_backprop_scan(error_signal, self.W)
+        f = theano.function(
+            [self.X, self.transitions, self.y],
+            (cost, self.stack.dW))
+
+        b_cost_sim, b_dW_sim = f_simulated(X, y)
+        b_cost, b_dW = f(X, transitions, y)
+
+        np.testing.assert_almost_equal(b_cost_sim, b_cost)
+        np.testing.assert_almost_equal(b_dW_sim, b_dW)
+
+
+
 if __name__ == '__main__':
     unittest.main()
