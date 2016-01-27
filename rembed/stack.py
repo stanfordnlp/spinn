@@ -412,7 +412,7 @@ class HardStack(object):
             self.transitions_pred = scan_ret[-1].dimshuffle(1, 0, 2)
 
 
-    def make_backprop_scan(self, error_signal, W):
+    def make_backprop_scan(self, error_signal, delta):
         """
         Args:
             error_signal: Theano batch of batch_size * model_dim
@@ -475,7 +475,7 @@ class HardStack(object):
 
             # Calculate delta vectors for preceding timestep.
             # batch_size * model_dim
-            new_err_merge = T.dot(err_prev, W.T)
+            new_err_merge = delta(err_prev)
             err_c1 = new_err_merge[:, :self.model_dim]
             err_c2 = new_err_merge[:, self.model_dim:]
 
@@ -524,7 +524,8 @@ class HardStack(object):
         bscan_ret, _ = theano.scan(
                 step_b,
                 sequences=[ts, ts_f, transitions, transitions_f, self.stack_2_ptrs, buf_ptrs],
-                outputs_info=[T.zeros_like(W), T.zeros_like(self.embeddings), stack_bwd_init],
+                outputs_info=[T.zeros((self.model_dim * 2, self.model_dim)),
+                              T.zeros_like(self.embeddings), stack_bwd_init],
                 non_sequences=[self.final_stack],
                 go_backwards=True)
 

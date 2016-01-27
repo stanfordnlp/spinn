@@ -185,10 +185,13 @@ class ThinStackBackpropTestCase(unittest.TestCase):
             [self.X, self.y],
             (simulated_cost, T.grad(simulated_cost, self.W)))
 
+        # Build gradient subgraphs.
+        delta = lambda err_above: T.dot(err_above, self.W.T)
+
         top = self.stack.final_stack[-self.batch_size:]
         cost = self._make_cost(top)
         error_signal = T.grad(cost, top)
-        self.stack.make_backprop_scan(error_signal, self.W)
+        self.stack.make_backprop_scan(error_signal, delta)
         f = theano.function(
             [self.X, self.transitions, self.y],
             (cost, self.stack.dW))
