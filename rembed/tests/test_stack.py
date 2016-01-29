@@ -188,20 +188,38 @@ class ThinStackBackpropTestCase(unittest.TestCase):
             (simulated_cost, T.grad(simulated_cost, self.W),
              T.grad(simulated_cost, self.b)))
 
-        # Build gradient subgraphs.
-        delta = lambda err_above: T.dot(err_above, self.W.T)
-        def d_compose(c1, c2, err_above):
-            dW = theano.scan(
-                lambda v1, v2: T.outer(v1, v2),
-                sequences=[T.concatenate([c1, c2], axis=1), err_above])[0]
-            db = err_above
-
-            return [dW, db]
-
         top = self.stack.final_stack[-self.batch_size:]
         cost = self._make_cost(top)
         error_signal = T.grad(cost, top)
-        self.stack.make_backprop_scan(error_signal, delta, d_compose,
+
+        # Build composition gradient subgraph.
+        above = T.vector("err_above")
+        z = T.vector("z")
+        d_wrt, d_end = theano.gradient.subgraph_grad([self.W, self.b], [z],
+                                                     {self.compose_network(z): above})
+        # DEV: Strip GPU wrappers from the d_wrt outputs
+        from theano.sandbox.cuda import GpuFromHost
+        for i in range(len(d_wrt)):
+            if isinstance(d_wrt[i].owner.op, GpuFromHost):
+                d_wrt[i] = d_wrt[i].owner.inputs[0]
+
+        # Build gradient subgraphs.
+        # (b * d) * (d * 2d) = b * 2d
+        def f_delta(c1, c2, err_above):
+            def delta_i(zi, err_i):
+                d_end_i = theano.clone(d_end[0], replace={z: zi, above: err_i})
+
+                d_wrt_i = [theano.clone(d_wrt_j, replace={z: zi, above: err_i})
+                           for d_wrt_j in d_wrt]
+
+                return [d_end_i] + d_wrt_i
+
+            ds = theano.scan(delta_i, sequences=[T.concatenate([c1, c2], axis=1), err_above],
+                             outputs_info=[None] * 3)[0]
+
+            return ds[0], ds[1:]
+
+        self.stack.make_backprop_scan(error_signal, f_delta,
                                       [self.W.get_value().shape,
                                        self.b.get_value().shape])
         f = theano.function(

@@ -412,7 +412,7 @@ class HardStack(object):
             self.transitions_pred = scan_ret[-1].dimshuffle(1, 0, 2)
 
 
-    def make_backprop_scan(self, error_signal, f_delta, f_d_compose, grad_shapes):
+    def make_backprop_scan(self, error_signal, f_delta, grad_shapes):
         """
         Args:
             error_signal: Theano batch of batch_size * model_dim
@@ -455,8 +455,8 @@ class HardStack(object):
             c1 = cuda_util.AdvancedSubtensor1Floats()(stack_final, t_c1)
             c2 = cuda_util.AdvancedSubtensor1Floats()(stack_final, t_c2)
 
-            # Calculate all composition deltas for this timestep.
-            d_compose = f_d_compose(c1, c2, err_prev)
+            # Calculate deltas for this timestep.
+            delta, d_compose = f_delta(c1, c2, err_prev)
 
             # Calculate deltas of dE for each element.
             dE_push = err_prev
@@ -466,9 +466,8 @@ class HardStack(object):
             # Calculate delta vectors d(cost)/d(stack_val) for preceding
             # timestep.
             # 2 * batch_size * model_dim
-            new_err_merge = f_delta(err_prev)
-            err_c1 = new_err_merge[:, :self.model_dim]
-            err_c2 = new_err_merge[:, self.model_dim:]
+            err_c1 = delta[:, :self.model_dim]
+            err_c2 = delta[:, self.model_dim:]
 
             ## Switch between two cases.
             # TODO: Record actual transitions (e.g. for model 1S and higher)
@@ -480,6 +479,7 @@ class HardStack(object):
             # TODO: Is this at all efficient? (Bring back GPURowSwitch?)
             new_accum_deltas = []
             for accum_delta, delta in zip(accum_deltas, d_compose):
+                assert accum_delta.ndim == delta.ndim - 1, delta.ndim
                 mask_i = masks[delta.ndim - 1]
                 # TODO: Is this at all efficient? (Bring back GPURowSwitch?)
                 new_accum_deltas.append(accum_delta + (mask * delta).sum(axis=0))
