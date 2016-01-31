@@ -456,7 +456,9 @@ class HardStack(object):
             c2 = cuda_util.AdvancedSubtensor1Floats()(stack_final, t_c2)
 
             # Calculate deltas for this timestep.
-            delta, d_compose = f_delta(c1, c2, err_prev)
+            delta, d_compose = f_delta((c1, c2), (err_prev,))
+            # TODO support multiple graph inputs
+            delta = delta[0]
 
             # Calculate deltas of dE for each element.
             dE_push = err_prev

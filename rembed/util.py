@@ -387,6 +387,125 @@ def RMSprop(cost, params, lr=0.001, rho=0.9, epsilon=1e-6):
     return updates
 
 
+def tensorx(name, ndim, dtype=theano.config.floatX):
+    return T.TensorType(dtype, (False,) * ndim)(name)
+
+
+def batch_subgraph_gradients(g_in, wrt, f_g_out, name="batch_subgraph_grad"):
+    """
+    Build gradients w.r.t. some cost on a subgraph of a larger graph.
+
+    Let G be a feedforward subgraph for which we want to compute gradients.
+    G has N_I inputs and N_O outputs.
+
+    This function will compute the *unaccumulated* batch gradients on the
+    subgraph G. That is, for a batch of M inputs, it allocates M separate
+    gradient entries and returns these without aggregating them. This is useful
+    for downstream uses that need to input-wise mask the gradients.
+
+    Args:
+        g_in: List of N_I inputs to G. Each element may be either a
+            symbolic Theano input variable or an integer (signifying the number
+            of dimensions of the input).
+        wrt: Any variables inside G for which we should also collect gradients.
+        f_g_out: Function which accepts N_I Theano vars and returns N_O Theano
+            vars.
+
+    Returns:
+        A function which accepts two arguments, `b_in` and `b_grad`.
+
+        `b_in` must be a list of N_I Theano batch variables representing inputs
+        to the subgraph G. (Each element of `b_in` has a leading batch axis and
+        is thus one dimension larger than its corresponding element of `g_in`).
+
+        `b_grad` must be a list of N_O Theano batch variables representing
+        cost gradients w.r.t. each of the graph outputs. Again, each element of
+        the list has a leading batch axis and is thus one dimension larger than
+        its corresponding output from `f_g_out`.
+
+        The function returns `(d_wrt, d_in)`, where
+
+        - `d_wrt` is a list of batch cost gradients with respect to each of the
+          corresponding elements of `wrt`. Each element of `d_wrt` has a
+          leading batch axis, and is thus one dimension larger than its
+          corresponding `wrt` element.
+        - `d_in` is a list of batch cost gradients with respect to each of the
+          corresponding elements of `g_in`. Each element of `d_in` has a
+          leading batch axis, and is thus one dimension larger than its
+          corresponding `g_in` element.
+    """
+
+    # Prepare graph inputs.
+    g_in = [in_i if isinstance(in_i, T.TensorVariable)
+            else tensorx("%s/in_%i" % (name, i), in_i)
+            for i, in_i in enumerate(g_in)]
+
+    # Build feedforward graph.
+    g_out = f_g_out(*g_in)
+    # Make sure it's a list of outputs.
+    g_out = [g_out] if not isinstance(g_out, (list, tuple)) else g_out
+
+    # Prepare symbolic gradient variables for each of the graph outputs.
+    grads_above = [tensorx("%s/grad_%s" % (name, out_i.name), out_i.ndim)
+                   for out_i in g_out]
+
+    # Compute gradients of subgraph beginning at `g_in` and ending at `g_out`,
+    # where the cost gradient w.r.t. each `g_out` is given by the corresponding
+    # entry in `grads_above`.
+    d_wrt, d_in = theano.gradient.subgraph_grad(
+            wrt, g_in, dict(zip(g_out, grads_above)))
+
+    # Strip any GPU<->host transfers that might have crept into this
+    # automatically constructed graph.
+    d_wrt = map(cuda_util.strip_transfer, d_wrt)
+    d_in = map(cuda_util.strip_transfer, d_in)
+
+    n_in, n_grad = len(g_in), len(grads_above)
+
+    def batch_gradients(b_in, b_grad):
+        """
+        Compute `d_wrt` and `d_in` for the given batch of inputs and gradients.
+
+        This method computes a scan over the batch. This may be inefficient for
+        some simple gradients.
+
+        For full spec, see documentation of containing function
+        `batch_subgraph_gradients`.
+        """
+        for b_in_j, g_in_j in zip(b_in, g_in):
+            assert b_in_j.ndim == g_in_j.ndim + 1, \
+                "Batch inputs must conform with expected graph input dimensionality."
+        for b_grad_j, grad_j in zip(b_grad, grads_above):
+            assert b_grad_j.ndim == grad_j.ndim + 1, \
+                "Batch gradients must conform with expected graph gradient dimensionality."
+
+        def gradients_i(*inputs):
+            """Compute all gradients for example `i`."""
+            in_i, grad_i = inputs[:n_in], inputs[n_in:]
+            assert len(grad_i) == n_grad # DEV
+
+            # Build a clone of the subgradient graph with the actual batch
+            # inputs and gradients.
+            replace = {g_in_j: in_ij for g_in_j, in_ij in zip(g_in, in_i)}
+            replace.update({grads_above_j: grad_ij for grads_above_j, grad_ij
+                            in zip(grads_above, grad_i)})
+
+            # Clone each of the `j` gradient expressions for this example `i`.
+            d_in_ij = [theano.clone(d_in_j, replace=replace)
+                       for d_in_j in d_in]
+            d_wrt_ij = [theano.clone(d_wrt_j, replace=replace)
+                        for d_wrt_j in d_wrt]
+
+            return d_in_ij + d_wrt_ij
+
+        # Calculate gradients independently for each example.
+        ds = theano.scan(gradients_i, sequences=b_in + b_grad,
+                         outputs_info=[None] * (n_in + len(wrt)))[0]
+        return ds[:n_in], ds[n_in:]
+
+    return batch_gradients
+
+
 def TrimDataset(dataset, seq_length, eval_mode=False, sentence_pair_data=False):
     """Avoid using excessively long training examples."""
     if eval_mode:

@@ -10,6 +10,19 @@ from theano.sandbox.cuda.opt import register_opt, local_optimizer
 from theano.sandbox.cuda.type import CudaNdarrayType
 
 
+def strip_transfer(variable):
+    """
+    Forcefully strip off a GPU<->host transfer from the given variable.
+
+    If `variable` is not directly the result of a GPU<->host transfer, this
+    function returns `variable` unchanged.
+    """
+
+    if isinstance(variable.owner.op, (GpuFromHost, HostFromGpu)):
+        return variable.owner.inputs[0]
+    return variable
+
+
 class AdvancedSubtensor1Floats(T.subtensor.AdvancedSubtensor1):
     """
     Dummy class which supports subtensor indexing with float indices.
