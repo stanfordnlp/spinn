@@ -9,6 +9,8 @@ import theano
 from theano import tensor as T
 from theano.sandbox.rng_mrg import MRG_RandomStreams
 
+from rembed import cuda_util
+
 numpy_random = np.random.RandomState(1234)
 theano_random = MRG_RandomStreams(numpy_random.randint(999999))
 
@@ -78,22 +80,22 @@ def DoubleIdentityInitializer(range):
 
 def BatchNorm(x, input_dim, vs, name, training_mode, axes=[0], momentum=0.9):
     """Apply simple batch normalization.
-    This requires introducing new learned scale parameters, so it's 
-    important to use unique names unless you're sure you want to share 
+    This requires introducing new learned scale parameters, so it's
+    important to use unique names unless you're sure you want to share
     these parameters.
     """
 
     # Create the trained gamma and beta parameters.
-    g = vs.add_param("%s_bn_g" % name, (input_dim), 
+    g = vs.add_param("%s_bn_g" % name, (input_dim),
         initializer=OneInitializer())
-    b = vs.add_param("%s_bn_b" % name, (input_dim), 
+    b = vs.add_param("%s_bn_b" % name, (input_dim),
         initializer=ZeroInitializer())
 
     # Create the training set moving averages for test time use.
-    tracking_std = vs.add_param("%s_bn_ts" % name, (input_dim), 
+    tracking_std = vs.add_param("%s_bn_ts" % name, (input_dim),
         initializer=OneInitializer(),
         trainable=False)
-    tracking_mean = vs.add_param("%s_bn_tm" % name, (input_dim), 
+    tracking_mean = vs.add_param("%s_bn_tm" % name, (input_dim),
         initializer=ZeroInitializer(),
         trainable=False)
 

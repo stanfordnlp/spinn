@@ -69,8 +69,6 @@ class HardStackTestCase(unittest.TestCase):
 
         self.stack.scan_fn(X, transitions, 1.0, 1)
         ret = self.stack.stack.get_value()
-        print ret
-        print expected
         np.testing.assert_almost_equal(ret, expected)
 
     def test_with_cropped_data(self):
