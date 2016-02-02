@@ -383,7 +383,7 @@ class HardStack(object):
             self.transitions_pred = scan_ret[0][-1].dimshuffle(1, 0, 2)
         if self.use_attention and self.premise_stack_tops is None:
             # store the stack top at each step as an attribute
-            stack_tops = T.concatenate([sc[stack_ind][-1][:, 0] for sc in scan_ret])
+            stack_tops = scan_ret[0][stack_ind][:][:,0]
             self.stack_tops = stack_tops.reshape([-1, self.model_dim])
 
 class Model0(HardStack):
