@@ -401,9 +401,10 @@ class HardStack(object):
                 non_sequences=[buffer_t, self.ground_truth_transitions_visible],
                 outputs_info=outputs_info)
 
-        self.final_buf = scan_ret[0][-1]
-        self.stack_2_ptrs = scan_ret[1]
-        self.buf_ptrs = scan_ret[0]
+        ret_shift = 0 if self.interpolate else 1
+        self.final_buf = scan_ret[ret_shift + 0][-1]
+        self.stack_2_ptrs = scan_ret[ret_shift + 2]
+        self.buf_ptrs = scan_ret[ret_shift + 0]
 
         self.final_stack = self.scan_updates[self.stack]
 
@@ -484,7 +485,8 @@ class HardStack(object):
                 assert accum_delta.ndim == delta.ndim - 1, delta.ndim
                 mask_i = masks[delta.ndim - 1]
                 # TODO: Is this at all efficient? (Bring back GPURowSwitch?)
-                new_accum_deltas.append(accum_delta + (mask * delta).sum(axis=0))
+                delta = (mask * delta).sum(axis=0)
+                new_accum_deltas.append(accum_delta + delta)
 
             dE = T.inc_subtensor(dE[buffer_ids_t], (1. - masks[1]) * dE_push)
 
