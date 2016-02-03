@@ -151,7 +151,9 @@ class ThinStackBackpropTestCase(unittest.TestCase):
             IdentityLayer, 0.0, 1.0, VariableStore(),
             X=self.X,
             transitions=self.transitions,
-            initial_embeddings=embeddings)
+            initial_embeddings=embeddings,
+            use_input_batch_norm=False,
+            use_input_dropout=False)
 
     def _fake_stack_ff(self):
         """Fake a stack feedforward S S M S M with the given data."""
