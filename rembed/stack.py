@@ -238,10 +238,18 @@ class HardStack(object):
         else:
             buffer_top_t = cuda_util.AdvancedSubtensor1Floats()(buffer, idxs)
 
+        # Fetch top two stack elements.
+        stack_1 = cuda_util.AdvancedSubtensor1Floats()(self.stack, (t - 1) * self.batch_size + self._stack_shift)
+        # Get pointers into stack for second-to-top element.
+        stack_2_ptrs = cuda_util.AdvancedSubtensor1Floats()(self.queue, self.cursors - 1.0 + self._queue_shift)
+        stack_2_ptrs = stack_2_ptrs * batch_size + self._stack_shift
+        # Retrieve second-to-top element.
+        stack_2 = cuda_util.AdvancedSubtensor1Floats()(self.stack, stack_2_ptrs)
+
         if self._prediction_and_tracking_network is not None:
             # We are predicting our own stack operations.
             predict_inp = T.concatenate(
-                [stack_t[:, 0], stack_t[:, 1], buffer_top_t], axis=1)
+                [stack_1, stack_2, buffer_top_t], axis=1)
 
             if self.use_tracking_lstm:
                 # Update the hidden state and obtain predicted actions.
@@ -274,14 +282,6 @@ class HardStack(object):
         else:
             # Model 0 case
             mask = transitions_t_f
-
-        # Fetch top two stack elements.
-        stack_1 = cuda_util.AdvancedSubtensor1Floats()(self.stack, (t - 1) * self.batch_size + self._stack_shift)
-        # Get pointers into stack for second-to-top element.
-        stack_2_ptrs = cuda_util.AdvancedSubtensor1Floats()(self.queue, self.cursors - 1.0 + self._queue_shift)
-        stack_2_ptrs = stack_2_ptrs * batch_size + self._stack_shift
-        # Retrieve second-to-top element.
-        stack_2 = cuda_util.AdvancedSubtensor1Floats()(self.stack, stack_2_ptrs)
 
         # Now update the stack: first precompute merge results.
         merge_items = T.concatenate([stack_1, stack_2], axis=1)
