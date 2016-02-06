@@ -179,6 +179,7 @@ class HardStack(object):
             self.scan_fn = theano.function([self.X, self.transitions, self.training_mode,
                                             self.ground_truth_transitions_visible],
                                            self.stack, updates=self.scan_updates,
+                                           accept_inplace=True,
                                            on_unused_input="warn")
 
     def _make_params(self):
