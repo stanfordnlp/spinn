@@ -200,6 +200,11 @@ class HardStack(object):
         self._stack_orig = theano.shared(stack_init, borrow=False, name="stack_orig")
         self.stack = theano.shared(stack_init, borrow=False, name="stack")
 
+        # TODO: don't fix model_dim
+        aux_stack_init = np.zeros((self.stack_size * self.batch_size, self.model_dim), dtype=np.float32)
+        self._aux_stack_orig = theano.shared(aux_stack_init, borrow=False, name="aux_stack_orig")
+        self.aux_stack = theano.shared(aux_stack_init, borrow=False, name="aux_stack")
+
         cursors_init = np.zeros((self.batch_size,)).astype(np.float32)
         self._cursors_orig = theano.shared(cursors_init, borrow=False, name="cursors_orig")
         self.cursors = theano.shared(cursors_init, borrow=False, name="cursors")
@@ -210,6 +215,7 @@ class HardStack(object):
 
         zero_updates = {
                 self.stack: self._stack_orig,
+                self.aux_stack: self._aux_stack_orig,
                 self.cursors: self._cursors_orig,
                 self.queue: self._queue_orig
         }
@@ -303,6 +309,10 @@ class HardStack(object):
         # should increment each buffer cursor by 1 - mask.
         buffer_cur_next = buffer_cur_t + (1 - transitions_t_f)
 
+        # Update auxiliary stacks. (DEV)
+        aux_stack_next = cuda_util.AdvancedIncSubtensor1Floats(set_instead_of_inc=True)(
+                self.aux_stack, tracking_hidden, t_f * self.batch_size + self._stack_shift)
+
         if self._predict_transitions:
             ret_val = buffer_cur_next, tracking_hidden, actions_t
         else:
@@ -314,6 +324,7 @@ class HardStack(object):
 
         updates = {
             self.stack: stack_next,
+            self.aux_stack: aux_stack_next,
             self.queue: merge_queue_next,
             self.cursors: merge_cursors_next
         }
@@ -408,13 +419,14 @@ class HardStack(object):
         self.buf_ptrs = scan_ret[ret_shift + 0]
 
         self.final_stack = self.scan_updates[self.stack]
+        self.final_aux_stack = self.scan_updates[self.aux_stack]
 
         self.transitions_pred = None
         if self._predict_transitions:
             self.transitions_pred = scan_ret[-1].dimshuffle(1, 0, 2)
 
 
-    def make_backprop_scan(self, error_signal, f_delta, grad_shapes):
+    def make_backprop_scan(self, extra_inputs, error_signal, f_delta, grad_shapes):
         """
         Args:
             error_signal: Theano batch of batch_size * model_dim
@@ -423,9 +435,6 @@ class HardStack(object):
         if not hasattr(self, "stack_2_ptrs"):
             raise RuntimeError("self._make_scan (forward pass) must be defined "
                                "before self.make_backprop_scan is called")
-
-        ## Backprop scan ##
-        # defined for simple RNN case, where each merge is ([c1; c2] * W)
 
         stack_bwd_init = T.zeros((self.stack_size * self.batch_size, self.model_dim))
         stack_bwd_init = T.set_subtensor(stack_bwd_init[-self.batch_size:], error_signal)
@@ -457,9 +466,14 @@ class HardStack(object):
             c1 = cuda_util.AdvancedSubtensor1Floats()(stack_final, t_c1)
             c2 = cuda_util.AdvancedSubtensor1Floats()(stack_final, t_c2)
 
+            # Retrieve extra inputs from auxiliary stack.
+            extra_inps_t = [cuda_util.AdvancedSubtensor1Floats()(aux_stack_i, t_c1)
+                            for aux_stack_i in extra_inputs]
+
             # Calculate deltas for this timestep.
-            delta, d_compose = f_delta((c1, c2), (err_prev,))
-            # TODO support multiple graph inputs
+            delta, d_compose = f_delta((c1, c2) + tuple(extra_inps_t),
+                                       (err_prev,))
+            # TODO calc gradients on multiple graph inputs
             delta = delta[0]
 
             # Calculate deltas of dE for each element.
