@@ -385,7 +385,7 @@ if (cudaGetLastError() != cudaSuccess) {
                                  """ % locals()
 
 
-@register_opt()
+@register_opt("fast_compile")
 @local_optimizer([gpu_from_host, AdvancedSubtensor1Floats])
 def local_gpu_advanced_subtensor1_floats(node):
     if isinstance(node.op, GpuFromHost):
@@ -742,7 +742,7 @@ class GpuAdvancedIncSubtensor1Floats_scal_dev20(AdvancedIncSubtensor1Floats, Gpu
         """ % locals()
 
 
-@register_opt()
+@register_opt("fast_compile")
 @local_optimizer([gpu_from_host, AdvancedIncSubtensor1Floats])
 def local_gpu_advanced_incsubtensor1_scal_floats(node):
     supported_dims = {
@@ -969,7 +969,7 @@ class GpuJoinUnsafe(GpuJoin):
         return (1,)
 
 
-@register_opt()
+@register_opt("fast_compile")
 @local_optimizer([JoinUnsafe])
 def local_gpu_join_unsafe(node):
     """
