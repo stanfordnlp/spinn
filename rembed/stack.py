@@ -232,18 +232,17 @@ class HardStack(object):
 
         # Extract top buffer values.
         idxs = buffer_cur_t + self._buffer_shift
+        buffer_top_t = cuda_util.AdvancedSubtensor1Floats()(buffer, idxs)
 
         if self.context_sensitive_shift:
             # Combine with the hidden state from previous unit.
             tracking_h_t = tracking_hidden[:, :self.tracking_lstm_hidden_dim]
-            context_comb_input_t = T.concatenate([tracking_h_t, buffer[idxs]], axis=1)
+            context_comb_input_t = T.concatenate([tracking_h_t, buffer_top_t], axis=1)
             context_comb_input_dim = self.word_embedding_dim + self.tracking_lstm_hidden_dim
             comb_layer = util.ReLULayer if self.context_sensitive_use_relu else util.Linear
             buffer_top_t = comb_layer(context_comb_input_t, context_comb_input_dim, self.model_dim,
                                 self._vs, name="context_comb_unit", use_bias=True,
                                 initializer=util.HeKaimingInitializer())
-        else:
-            buffer_top_t = cuda_util.AdvancedSubtensor1Floats()(buffer, idxs)
 
         # Fetch top two stack elements.
         stack_1 = cuda_util.AdvancedSubtensor1Floats()(self.stack, (t - 1) * self.batch_size + self._stack_shift)
