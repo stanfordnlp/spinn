@@ -339,21 +339,15 @@ def AttentionUnit(attention_state_prev, current_lstm_state, premise_stack_tops, 
     W_t = vs.add_param("%s_W_t" % name, (model_dim, model_dim), initializer=initializer)
     w = vs.add_param("%s_w" % name, (model_dim,), initializer=initializer)
 
-    dot1 = T.dot(current_lstm_state, W_h)
-    megadot1 = dot1
-    #megadot1 = theano.scan(fn=lambda A, B: T.concatenate([A,B]), outputs_info=dot1, non_sequences=dot1, n_steps=num_transitions)[0][-1]
-    #megadot1 = T.stack([dot1 for _ in T.arange(num_transitions)])
-    #for i in T.arange(num_transitions-1):
-    #    megadot1 = T.concatenate(megadot1, dot1)
-    dot2 = T.dot(attention_state_prev, W_r)
-    megadot2 = dot2
+    W_h__h_t = T.dot(current_lstm_state, W_h)
+    W_r__r_t_prev = T.dot(attention_state_prev, W_r)
     # Shape: L x B x k
-    M_t = T.tanh(T.dot(premise_stack_tops, W_y) + (megadot1 + megadot2))
+    M_t = T.tanh(T.dot(premise_stack_tops, W_y) + (W_h__h_t + W_r__r_t_prev))
     # Shape: B x L
     alpha_t = T.nnet.softmax(T.dot(M_t, w).T)
     # Shape B x k
-    Y_alpha_t = T.sum(premise_stack_tops * alpha_t.T, axis=0) 
-    r_t = Y_alpha_t + T.tanh(T.dot(attention_state_prev, W_t))
+    Y__alpha_t = T.sum(premise_stack_tops * alpha_t.T[:, :, np.newaxis], axis=0) 
+    r_t = Y__alpha_t + T.tanh(T.dot(attention_state_prev, W_t))
     return r_t
 
 def MLP(inp, inp_dim, outp_dim, vs, layer=ReLULayer, hidden_dims=None,
