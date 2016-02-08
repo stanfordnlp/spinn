@@ -387,7 +387,7 @@ class HardStack(object):
 
         buffer_cur_init = T.zeros((batch_size,), theano.config.floatX)
 
-        DUMMY = T.zeros((2,)) # a dummy tensor used as a place-holder
+        DUMMY = T.zeros((2, 2)) # a dummy tensor used as a place-holder
 
         # Dimshuffle inputs to seq_len * batch_size for scanning
         transitions = self.transitions.dimshuffle(1, 0)
