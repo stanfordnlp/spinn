@@ -213,6 +213,11 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
     mlp_input = T.concatenate([premise_vector, hypothesis_vector], axis=1)
     mlp_input_dim = 2 * FLAGS.model_dim
 
+    # Use the attention weighted representation
+    if FLAGS.use_attention:
+        mlp_input = hypothesis_model.final_weighed_representation.reshape((-1, FLAGS.model_dim))
+        mlp_input_dim = FLAGS.model_dim
+
     if FLAGS.use_difference_feature:
         mlp_input = T.concatenate([mlp_input, premise_vector - hypothesis_vector], axis=1)
         mlp_input_dim += FLAGS.model_dim

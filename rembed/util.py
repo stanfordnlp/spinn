@@ -326,7 +326,7 @@ def TrackingUnit(state_prev, inp, inp_dim, hidden_dim, vs, name="track_unit", ma
     return state, logits
 
 def AttentionUnit(attention_state_prev, current_lstm_state, premise_stack_tops, model_dim, 
-            num_transitions, vs, name="attention_unit", initializer=None):
+                    vs, name="attention_unit", initializer=None):
     """
     Dimension notation:
     B : Batch size
@@ -349,6 +349,12 @@ def AttentionUnit(attention_state_prev, current_lstm_state, premise_stack_tops, 
     Y__alpha_t = T.sum(premise_stack_tops * alpha_t.T[:, :, np.newaxis], axis=0) 
     r_t = Y__alpha_t + T.tanh(T.dot(attention_state_prev, W_t))
     return r_t
+
+def AttentionUnitFinalRepresentation(final_attention_state, final_stack_top, model_dim, vs, initializer=None, name="attention_unit_final"):
+    W_p = vs.add_param("%s_W_p" % "attention_unit_end", (model_dim, model_dim), initializer=initializer)
+    W_x = vs.add_param("%s_W_x" % "attention_unit_end", (model_dim, model_dim), initializer=initializer)
+    h_final = T.tanh(T.dot(final_attention_state, W_p) + T.dot(final_stack_top, W_x))
+    return h_final
 
 def MLP(inp, inp_dim, outp_dim, vs, layer=ReLULayer, hidden_dims=None,
         name="mlp", initializer=None):
