@@ -520,7 +520,8 @@ class HardStack(object):
                 delta = (mask * delta).sum(axis=0)
                 new_accum_deltas.append(accum_delta + delta)
 
-            dE = T.inc_subtensor(dE[buffer_ids_t], (1. - masks[1]) * dE_push)
+            dE = cuda_util.AdvancedIncSubtensor1Floats()(
+                    dE, (1. - masks[1]) * dE_push, buffer_ids_t)
 
             # Update backward-pass stack structure.
             # For each example:
@@ -544,7 +545,7 @@ class HardStack(object):
         ts_f = T.cast(T.arange(transitions_f.shape[0]), dtype=theano.config.floatX)
 
         # Representation of buffer using embedding indices rather than values
-        id_buffer = self.X.flatten()
+        id_buffer = T.cast(self.X.flatten(), theano.config.floatX)
         # Build sequence of buffer pointers, where buf_ptrs[i] indicates the
         # buffer pointer values *before* computation at timestep *i* proceeds.
         # (This means we need to slice off the last actual buf_ptr output and
