@@ -15,6 +15,7 @@ echo Device: $DEVICE
 echo $PBS_JOBID - `hostname` - $DEVICE - at `git log --pretty=format:'%h' -n 1` - $REMBED_FLAGS >> ~/rembed_machine_assignments.txt
 
 # Use Jon's Theano install.
-source /scr/jgauthie/tmp/env-common/bin/activate
+source /u/nlp/packages/anaconda/bin/activate conda-common
+export PYTHONPATH=/scr/jgauthie/theano-nshrdlu:$PYTHONPATH
 
 THEANO_FLAGS=allow_gc=False,cuda.root=/usr/bin/cuda,warn_float64=warn,device=$DEVICE,floatX=float32 python -m rembed.models.classifier $REMBED_FLAGS
