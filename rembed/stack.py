@@ -4,6 +4,7 @@ from functools import partial
 
 import numpy as np
 import theano
+from theano.ifelse import ifelse
 
 from theano import tensor as T
 from rembed import cuda_util, util
@@ -35,6 +36,9 @@ def update_hard_stack(t, t_f, stack_t, push_value, merge_value, merge_queue_t,
     cursors_next = merge_cursors_t + (mask * -1 + (1 - mask) * 1)
     queue_next = cuda_util.AdvancedIncSubtensor1Floats(set_instead_of_inc=True, inplace=True)(
             merge_queue_t, t_f, cursors_shift + cursors_next)
+    # DEV super hacky: don't update queue unless we have valid cursors
+    # TODO necessary?
+    queue_next = ifelse(cursors_next.min() < 0, merge_queue_t + 0.0, queue_next)
 
     return stack_next, queue_next, cursors_next
 
@@ -205,7 +209,7 @@ class HardStack(object):
         self._aux_stack_orig = theano.shared(aux_stack_init, borrow=False, name="aux_stack_orig")
         self.aux_stack = theano.shared(aux_stack_init, borrow=False, name="aux_stack")
 
-        cursors_init = np.zeros((self.batch_size,)).astype(np.float32)
+        cursors_init = np.zeros((self.batch_size,)).astype(np.float32) - 1.0
         self._cursors_orig = theano.shared(cursors_init, borrow=False, name="cursors_orig")
         self.cursors = theano.shared(cursors_init, borrow=False, name="cursors")
 
@@ -247,10 +251,24 @@ class HardStack(object):
         # Fetch top two stack elements.
         stack_1 = cuda_util.AdvancedSubtensor1Floats()(self.stack, (t - 1) * self.batch_size + self._stack_shift)
         # Get pointers into stack for second-to-top element.
-        stack_2_ptrs = cuda_util.AdvancedSubtensor1Floats()(self.queue, self.cursors - 1.0 + self._queue_shift)
+        cursors = self.cursors - 1.0
+        stack_2_ptrs = cuda_util.AdvancedSubtensor1Floats()(queue, cursors + self._queue_shift)
         stack_2_ptrs = stack_2_ptrs * batch_size + self._stack_shift
         # Retrieve second-to-top element.
         stack_2 = cuda_util.AdvancedSubtensor1Floats()(self.stack, stack_2_ptrs)
+
+        # Zero out stack_2 elements which are invalid (i.e., were drawn with
+        # negative cursor values)
+        #
+        # TODO: Probably incurs H<->D because of bool mask. Do on the GPU.
+        #
+        # TODO: Factor out this zeros constant and the one in the next ifelse
+        # op
+        stack_2_mask = (cursors < 0).dimshuffle(0, "x")
+        stack_2 = stack_2_mask * T.zeros((self.batch_size, self.model_dim)) + (1 - stack_2_mask) * stack_2
+
+        # stack_2 values are not valid unless we are on t >= 1 (TODO?)
+        stack_2 = ifelse(t <= 1, T.zeros((self.batch_size, self.model_dim)), stack_2)
 
         if self._prediction_and_tracking_network is not None:
             # We are predicting our own stack operations.
