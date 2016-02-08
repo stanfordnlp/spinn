@@ -252,7 +252,7 @@ class HardStack(object):
         stack_1 = cuda_util.AdvancedSubtensor1Floats()(self.stack, (t - 1) * self.batch_size + self._stack_shift)
         # Get pointers into stack for second-to-top element.
         cursors = self.cursors - 1.0
-        stack_2_ptrs = cuda_util.AdvancedSubtensor1Floats()(queue, cursors + self._queue_shift)
+        stack_2_ptrs = cuda_util.AdvancedSubtensor1Floats()(self.queue, cursors + self._queue_shift)
         stack_2_ptrs = stack_2_ptrs * batch_size + self._stack_shift
         # Retrieve second-to-top element.
         stack_2 = cuda_util.AdvancedSubtensor1Floats()(self.stack, stack_2_ptrs)
