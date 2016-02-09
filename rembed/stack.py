@@ -444,7 +444,8 @@ class HardStack(object):
             self.transitions_pred = scan_ret[-1].dimshuffle(1, 0, 2)
 
 
-    def make_backprop_scan(self, extra_inputs, error_signal, f_delta, grad_shapes):
+    def make_backprop_scan(self, extra_inputs, error_signal,
+                           f_push_delta, f_merge_delta, grad_shapes):
         """
         Args:
             error_signal: Theano batch of batch_size * model_dim
@@ -467,18 +468,19 @@ class HardStack(object):
         def step_b(# sequences
                    t_f, transitions_t_f, stack_2_ptrs_t, buffer_cur_t,
                    # outputs_info (inplace update is okay)
-                   stack_bwd_t, dE,
+                   stack_bwd_t, extra_bwd_t, dE,
                    # rest
                    *accum_and_non_sequences):
-            accum_deltas = accum_and_non_sequences[:-3]
-            id_buffer, extra_bwd_t, stack_final = accum_and_non_sequences[-3:]
+            accum_deltas = accum_and_non_sequences[:-2]
+            id_buffer, stack_final = accum_and_non_sequences[-2:]
 
+            t_f = theano.printing.Print("==================================")(t_f)
             err_prev = cuda_util.AdvancedSubtensor1Floats("B_errprev")(
                 stack_bwd_t, t_f * batch_size + stack_shift)
 
-            # TODO assumes one
             extra_grad = cuda_util.AdvancedSubtensor1Floats("B_extragrad")(
                 extra_bwd_t, t_f * batch_size + stack_shift)
+            extra_grad = theano.printing.Print("extra_grad")(extra_grad)
 
             # Find the timesteps of the two elements involved in the potential
             # merge at this timestep.
@@ -497,10 +499,15 @@ class HardStack(object):
             # Retrieve extra inputs from auxiliary stack.
             extra_inps_t = [cuda_util.AdvancedSubtensor1Floats("B_extra_inp")(aux_stack_i, t_c1)
                             for aux_stack_i in extra_inputs]
+#            extra_inps_t[0] = theano.printing.Print("extra_inps_t[0]")(extra_inps_t[0])
 
             # Calculate deltas for this timestep.
-            delta_inputs, d_compose = f_delta((c1, c2, buffer_top_t) + tuple(extra_inps_t),
-                                              (err_prev, extra_grad))
+            inp = (c1, c2, buffer_top_t) + tuple(extra_inps_t)
+            grad = (err_prev, extra_grad)
+            m_delta_inp, m_delta_wrt = f_merge_delta(inp, grad)
+            p_delta_inp, p_delta_wrt = f_push_delta(inp, grad)
+            assert len(m_delta_inp) == len(p_delta_inp), "%i %i" % (len(m_delta_inp), len(p_delta_inp))
+            assert len(m_delta_wrt) == len(p_delta_wrt)
 
             # Calculate deltas of dE for each element.
             dE_push = err_prev
@@ -508,8 +515,9 @@ class HardStack(object):
                     id_buffer, buffer_cur_t + buffer_shift)
 
             # Calculate delta vectors d(cost)/d(stack_val) for preceding
-            # timestep.
-            err_c1, err_c2 = delta_inputs[:2]
+            # timestep in merge op.
+            err_c1, err_c2 = m_delta_inp[:2]
+            err_c1 = theano.printing.Print("err_c1")(err_c1)
 
             ## Switch between two cases.
             # TODO: Record actual transitions (e.g. for model 1S and higher)
@@ -518,13 +526,16 @@ class HardStack(object):
             masks = [mask, mask.dimshuffle(0, "x"),
                      mask.dimshuffle(0, "x", "x")]
 
-            # TODO: Is this at all efficient? (Bring back GPURowSwitch?)
+            # Accumulate wrt deltas, switching over push/merge decision.
             new_accum_deltas = []
-            for accum_delta, delta in zip(accum_deltas, d_compose):
-                assert accum_delta.ndim == delta.ndim - 1, delta.ndim
-                mask_i = masks[delta.ndim - 1]
+            for accum_delta, m_delta, p_delta in zip(accum_deltas, m_delta_wrt, p_delta_wrt):
+                print accum_delta.ndim, m_delta.ndim
+                assert accum_delta.ndim == m_delta.ndim - 1, "%i %i" % (accum_delta.ndim, m_delta.ndim)
+                assert accum_delta.ndim == p_delta.ndim - 1, "%i %i" % (accum_delta.ndim, p_delta.ndim)
+
+                mask_i = masks[m_delta.ndim - 1]
                 # TODO: Is this at all efficient? (Bring back GPURowSwitch?)
-                delta = (mask * delta).sum(axis=0)
+                delta = (mask * m_delta + (1. - mask) * p_delta).sum(axis=0)
                 new_accum_deltas.append(accum_delta + delta)
 
             dE = cuda_util.AdvancedIncSubtensor1Floats()(
@@ -542,7 +553,12 @@ class HardStack(object):
             stack_bwd_next = cuda_util.AdvancedIncSubtensor1Floats()(#), inplace=True)(
                     stack_bwd_next, masks[1] * err_c2, t_c2)
 
-            return [stack_bwd_next, dE] + new_accum_deltas
+            extra_bwd_t = theano.printing.Print("extra_bwd_t")(extra_bwd_t)
+            extra_bwd_next = extra_bwd_t
+            # extra_bwd_next = cuda_util.AdvancedIncSubtensor1Floats()(
+            #         extra_bwd_t, masks[1] * m_delta_inp[2] + (1. - masks[1]) * p_delta_inp[1], t_c1)
+
+            return [stack_bwd_next, extra_bwd_next, dE] + new_accum_deltas
 
         # TODO: These should come from forward pass -- not fixed -- in model
         # 1S, etc.
@@ -559,20 +575,21 @@ class HardStack(object):
         # prepend a dummy.)
         buf_ptrs = T.concatenate([T.zeros((1, batch_size,)),
                                   self.buf_ptrs[:-1]], axis=0)
+        print buf_ptrs.dtype
 
-        outputs_info = [stack_bwd_init, T.zeros_like(self.embeddings)]
+        outputs_info = [stack_bwd_init, extra_bwd_init, T.zeros_like(self.embeddings)]
         outputs_info += [T.zeros(shape) for shape in grad_shapes]
 
         bscan_ret, _ = theano.scan(
                 step_b,
                 sequences=[ts_f, transitions_f, self.stack_2_ptrs, buf_ptrs],
                 outputs_info=outputs_info,
-                non_sequences=[id_buffer, extra_bwd_init, self.final_stack],
+                non_sequences=[id_buffer, self.final_stack],
                 go_backwards=True,
                 name="bwd")
 
-        stack_bwd, dE = bscan_ret[:2]
-        self.deltas = [deltas[-1] for deltas in bscan_ret[2:]]
+        stack_bwd, _, dE = bscan_ret[:3]
+        self.deltas = [deltas[-1] for deltas in bscan_ret[3:]]
         self.dE = dE[-1]
 
 
