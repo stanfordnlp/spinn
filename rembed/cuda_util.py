@@ -84,7 +84,7 @@ class GpuAdvancedSubtensor1Floats(AdvancedSubtensor1Floats, GpuOp):
         raise NotImplementedError("AdvancedSubtensor1FloatsGPU is GPU only")
 
     def c_code_cache_version(self):
-        return 17
+        return 19
 
     def c_support_code(self):
         return """
@@ -212,23 +212,12 @@ TakeFrom_Float(CudaNdarray *self, CudaNdarray *indices, long axis,
     k3 = k_take_3_float<CPY>;
 
     // Create the memory place that will store the error information.
-    if (err_var == NULL) {
-        err_var = (int*)device_malloc(sizeof(int));
-        if (!err_var) { // PyErr set by device_malloc
-            Py_DECREF(indices);
-            Py_DECREF(out);
-            return NULL;
-        }
-        cudaError_t err = cudaMemset((void*)err_var, 0, sizeof(int));
-        if (cudaSuccess != err) {
-            PyErr_Format(PyExc_RuntimeError,
-                         "Error setting device error code to 0. %s",
-                         cudaGetErrorString(err));
-            Py_DECREF(indices);
-            Py_DECREF(out);
-            return NULL;
-        }
+    if (init_err_var() != 0) {
+        Py_DECREF(indices);
+        Py_DECREF(out);
+        return NULL;
     }
+
     dim3 n_blocks(std::min(CudaNdarray_HOST_DIMS(out)[0],65535),1,1);
     switch (self->nd) {
         case 1:
@@ -322,41 +311,12 @@ TakeFrom_Float(CudaNdarray *self, CudaNdarray *indices, long axis,
         Py_DECREF(out);
         return NULL;
     }
-    //-10 could be any value different then 0.
-    int cpu_err_var=-10;
 
     // Unsafe: don't copy back to CPU for error checking
-    /*err = cudaMemcpy(&cpu_err_var, err_var, sizeof(int),
-                     cudaMemcpyDeviceToHost);
-    if (cudaSuccess != err) {
-        PyErr_Format(
-            PyExc_RuntimeError,
-            "Cuda error: %s: %s when trying to get the error value.\\n",
-            "CudaNdarray_TakeFrom",
-            cudaGetErrorString(err));
+    /*if (check_err_var() != 0) {
         Py_DECREF(indices);
         Py_DECREF(out);
         return NULL;
-    }
-
-    if (cpu_err_var != 0) {
-        PyErr_Format(
-            PyExc_IndexError,
-            "Cuda error: %s: The error code on the gpu is %i.\\n",
-            "CudaNdarray_TakeFrom",
-            cpu_err_var);
-        // Must reset it to 0 to don't reset it before each use.
-        err = cudaMemset((void*)err_var, 0, sizeof(int));
-        if (cudaSuccess != err) {
-            PyErr_Format(PyExc_MemoryError, "Error setting device error code to 0 after having an index error. %s", cudaGetErrorString(err));
-            Py_DECREF(indices);
-            Py_DECREF(out);
-            return NULL;
-        }
-        Py_DECREF(indices);
-        Py_DECREF(out);
-        return NULL;
-
     }*/
 
     if (verbose) printf("TAKE SUCCEDED\\n");
@@ -494,7 +454,7 @@ class GpuAdvancedIncSubtensor1Floats_dev20(AdvancedIncSubtensor1Floats, GpuOp):
         raise NotImplementedError("GpuAdvancedIncSubtensor1Floats_dev20 supports GPU only")
 
     def c_code_cache_version(self):
-        return 3
+        return 7
 
     def c_code(self, node, name, inputs, outputs, sub):
         x, y, ind = inputs
@@ -597,7 +557,7 @@ class GpuAdvancedIncSubtensor1Floats_dev20(AdvancedIncSubtensor1Floats, GpuOp):
                 err_var
             );
 
-            // This induces a DtoH transfer. Only enable for dev and the like.
+            // Unsafe: This induces a DtoH transfer. Only enable for dev and the like.
             //int index_err = check_err_var();
             //if(index_err != 0) return -1;
 
@@ -725,9 +685,9 @@ class GpuAdvancedIncSubtensor1Floats_scal_dev20(AdvancedIncSubtensor1Floats, Gpu
                 CudaNdarray_DEV_DATA(py_indices),
                 size, set_instead_of_inc, err_var);
 
-            // This induces a DtoH transfer. Only enable for dev and the like.
-            //int index_err = check_err_var();
-            //if(index_err != 0) return -1;
+            // Unsafe: This induces a DtoH transfer. Only enable for dev and the like.
+            /*int index_err = check_err_var();
+            if(index_err != 0) return -1;*/
 
             err = cudaGetLastError();
             if(err != cudaSuccess){
