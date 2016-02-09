@@ -425,16 +425,16 @@ def batch_subgraph_gradients(g_in, wrt, f_g_out, name="batch_subgraph_grad"):
         the list has a leading batch axis and is thus one dimension larger than
         its corresponding output from `f_g_out`.
 
-        The function returns `(d_wrt, d_in)`, where
+        The function returns `(d_in, d_wrt)`, where
 
-        - `d_wrt` is a list of batch cost gradients with respect to each of the
-          corresponding elements of `wrt`. Each element of `d_wrt` has a
-          leading batch axis, and is thus one dimension larger than its
-          corresponding `wrt` element.
         - `d_in` is a list of batch cost gradients with respect to each of the
           corresponding elements of `g_in`. Each element of `d_in` has a
           leading batch axis, and is thus one dimension larger than its
           corresponding `g_in` element.
+        - `d_wrt` is a list of batch cost gradients with respect to each of the
+          corresponding elements of `wrt`. Each element of `d_wrt` has a
+          leading batch axis, and is thus one dimension larger than its
+          corresponding `wrt` element.
     """
 
     # Prepare graph inputs.
@@ -474,12 +474,14 @@ def batch_subgraph_gradients(g_in, wrt, f_g_out, name="batch_subgraph_grad"):
         For full spec, see documentation of containing function
         `batch_subgraph_gradients`.
         """
-        for b_in_j, g_in_j in zip(b_in, g_in):
+        for j, (b_in_j, g_in_j) in enumerate(zip(b_in, g_in)):
             assert b_in_j.ndim == g_in_j.ndim + 1, \
-                "Batch inputs must conform with expected graph input dimensionality."
-        for b_grad_j, grad_j in zip(b_grad, grads_above):
+                ("Batch inputs must conform with expected graph input dimensionality."
+                 " (#%i: batch %i, sym %i)" % (j, b_in_j.ndim, g_in_j.ndim))
+        for j, (b_grad_j, grad_j) in enumerate(zip(b_grad, grads_above)):
             assert b_grad_j.ndim == grad_j.ndim + 1, \
-                "Batch gradients must conform with expected graph gradient dimensionality."
+                ("Batch gradients must conform with expected graph gradient dimensionality."
+                 " (#%i: batch %i, sym %i)" % (j, b_grad_j.ndim, grad_j.ndim))
 
         def gradients_i(*inputs):
             """Compute all gradients for example `i`."""

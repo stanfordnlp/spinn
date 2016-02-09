@@ -529,7 +529,6 @@ class HardStack(object):
             # Accumulate wrt deltas, switching over push/merge decision.
             new_accum_deltas = []
             for accum_delta, m_delta, p_delta in zip(accum_deltas, m_delta_wrt, p_delta_wrt):
-                print accum_delta.ndim, m_delta.ndim
                 assert accum_delta.ndim == m_delta.ndim - 1, "%i %i" % (accum_delta.ndim, m_delta.ndim)
                 assert accum_delta.ndim == p_delta.ndim - 1, "%i %i" % (accum_delta.ndim, p_delta.ndim)
 
@@ -554,9 +553,9 @@ class HardStack(object):
                     stack_bwd_next, masks[1] * err_c2, t_c2)
 
             extra_bwd_t = theano.printing.Print("extra_bwd_t")(extra_bwd_t)
-            extra_bwd_next = extra_bwd_t
-            # extra_bwd_next = cuda_util.AdvancedIncSubtensor1Floats()(
-            #         extra_bwd_t, masks[1] * m_delta_inp[2] + (1. - masks[1]) * p_delta_inp[1], t_c1)
+            # extra_bwd_next = extra_bwd_t
+            extra_bwd_next = cuda_util.AdvancedIncSubtensor1Floats()(
+                    extra_bwd_t, masks[1] * m_delta_inp[2] + (1. - masks[1]) * p_delta_inp[1], t_c1)
 
             return [stack_bwd_next, extra_bwd_next, dE] + new_accum_deltas
 
