@@ -205,7 +205,7 @@ class HardStack(object):
         self.stack = theano.shared(stack_init, borrow=False, name="stack")
 
         # TODO: don't fix model_dim
-        aux_stack_init = np.zeros((self.stack_size * self.batch_size, self.model_dim), dtype=np.float32)
+        aux_stack_init = np.zeros((self.stack_size * self.batch_size, self.tracking_lstm_hidden_dim * 2), dtype=np.float32)
         self._aux_stack_orig = theano.shared(aux_stack_init, borrow=False, name="aux_stack_orig")
         self.aux_stack = theano.shared(aux_stack_init, borrow=False, name="aux_stack")
 
@@ -236,7 +236,7 @@ class HardStack(object):
 
         # Extract top buffer values.
         idxs = buffer_cur_t + self._buffer_shift
-        buffer_top_t = cuda_util.AdvancedSubtensor1Floats()(buffer, idxs)
+        buffer_top_t = cuda_util.AdvancedSubtensor1Floats("F_buffer_top")(buffer, idxs)
 
         if self.context_sensitive_shift:
             # Combine with the hidden state from previous unit.
@@ -249,13 +249,13 @@ class HardStack(object):
                                 initializer=util.HeKaimingInitializer())
 
         # Fetch top two stack elements.
-        stack_1 = cuda_util.AdvancedSubtensor1Floats()(self.stack, (t - 1) * self.batch_size + self._stack_shift)
+        stack_1 = cuda_util.AdvancedSubtensor1Floats("F_stack1")(self.stack, (t - 1) * self.batch_size + self._stack_shift)
         # Get pointers into stack for second-to-top element.
         cursors = self.cursors - 1.0
-        stack_2_ptrs = cuda_util.AdvancedSubtensor1Floats()(self.queue, cursors + self._queue_shift)
+        stack_2_ptrs = cuda_util.AdvancedSubtensor1Floats("F_stack2_ptrs")(self.queue, cursors + self._queue_shift)
         stack_2_ptrs = stack_2_ptrs * batch_size + self._stack_shift
         # Retrieve second-to-top element.
-        stack_2 = cuda_util.AdvancedSubtensor1Floats()(self.stack, stack_2_ptrs)
+        stack_2 = cuda_util.AdvancedSubtensor1Floats("F_stack2")(self.stack, stack_2_ptrs)
 
         # Zero out stack_2 elements which are invalid (i.e., were drawn with
         # negative cursor values)
@@ -383,7 +383,7 @@ class HardStack(object):
             buffer_emb_dim = self.model_dim
 
         # Collapse buffer to (batch_size * buffer_size) * emb_dim for fast indexing.
-        buffer_t = buffer_t.reshape((-1, buffer_emb_dim))
+        self.buffer_t = buffer_t = buffer_t.reshape((-1, buffer_emb_dim))
 
         buffer_cur_init = T.zeros((batch_size,), theano.config.floatX)
 
@@ -457,6 +457,8 @@ class HardStack(object):
         stack_bwd_init = T.zeros((self.stack_size * self.batch_size, self.model_dim))
         stack_bwd_init = T.set_subtensor(stack_bwd_init[-self.batch_size:], error_signal)
 
+        extra_bwd_init = T.zeros((self.stack_size * self.batch_size, self.tracking_lstm_hidden_dim * 2))
+
         batch_size = self.batch_size
         batch_range = T.arange(batch_size)
         stack_shift = T.cast(batch_range, theano.config.floatX)
@@ -468,11 +470,15 @@ class HardStack(object):
                    stack_bwd_t, dE,
                    # rest
                    *accum_and_non_sequences):
-            accum_deltas, stack_final = accum_and_non_sequences[:-1], \
-                accum_and_non_sequences[-1]
+            accum_deltas = accum_and_non_sequences[:-3]
+            id_buffer, extra_bwd_t, stack_final = accum_and_non_sequences[-3:]
 
-            err_prev = cuda_util.AdvancedSubtensor1Floats()(
+            err_prev = cuda_util.AdvancedSubtensor1Floats("B_errprev")(
                 stack_bwd_t, t_f * batch_size + stack_shift)
+
+            # TODO assumes one
+            extra_grad = cuda_util.AdvancedSubtensor1Floats("B_extragrad")(
+                extra_bwd_t, t_f * batch_size + stack_shift)
 
             # Find the timesteps of the two elements involved in the potential
             # merge at this timestep.
@@ -481,29 +487,29 @@ class HardStack(object):
 
             # Find the two elements involved in the merge.
             # batch_size * model_dim
-            c1 = cuda_util.AdvancedSubtensor1Floats()(stack_final, t_c1)
-            c2 = cuda_util.AdvancedSubtensor1Floats()(stack_final, t_c2)
+            c1 = cuda_util.AdvancedSubtensor1Floats("B_stack1")(stack_final, t_c1)
+            c2 = cuda_util.AdvancedSubtensor1Floats("B_stack2")(stack_final, t_c2)
+
+            # Find buffer top.
+            buffer_top_t = cuda_util.AdvancedSubtensor1Floats("B_buffer_top")(
+                self.buffer_t, buffer_cur_t + buffer_shift)
 
             # Retrieve extra inputs from auxiliary stack.
-            extra_inps_t = [cuda_util.AdvancedSubtensor1Floats()(aux_stack_i, t_c1)
+            extra_inps_t = [cuda_util.AdvancedSubtensor1Floats("B_extra_inp")(aux_stack_i, t_c1)
                             for aux_stack_i in extra_inputs]
 
             # Calculate deltas for this timestep.
-            delta, d_compose = f_delta((c1, c2) + tuple(extra_inps_t),
-                                       (err_prev,))
-            # TODO calc gradients on multiple graph inputs
-            delta = delta[0]
+            delta_inputs, d_compose = f_delta((c1, c2, buffer_top_t) + tuple(extra_inps_t),
+                                              (err_prev, extra_grad))
 
             # Calculate deltas of dE for each element.
             dE_push = err_prev
-            buffer_ids_t = cuda_util.AdvancedSubtensor1Floats()(
+            buffer_ids_t = cuda_util.AdvancedSubtensor1Floats("B_buffer_ids")(
                     id_buffer, buffer_cur_t + buffer_shift)
 
             # Calculate delta vectors d(cost)/d(stack_val) for preceding
             # timestep.
-            # 2 * batch_size * model_dim
-            err_c1 = delta[:, :self.model_dim]
-            err_c2 = delta[:, self.model_dim:]
+            err_c1, err_c2 = delta_inputs[:2]
 
             ## Switch between two cases.
             # TODO: Record actual transitions (e.g. for model 1S and higher)
@@ -561,7 +567,7 @@ class HardStack(object):
                 step_b,
                 sequences=[ts_f, transitions_f, self.stack_2_ptrs, buf_ptrs],
                 outputs_info=outputs_info,
-                non_sequences=[id_buffer, self.final_stack],
+                non_sequences=[id_buffer, extra_bwd_init, self.final_stack],
                 go_backwards=True,
                 name="bwd")
 

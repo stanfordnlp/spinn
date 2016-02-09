@@ -261,8 +261,23 @@ class ThinStackTrackingBackpropTestCase(unittest.TestCase):
             logits = 0.0
             return state, logits
 
+        def ghost_compose_net(c1, c2, buf_top, hidden):
+            if c1.ndim == 1: c1 = c1[np.newaxis, :]
+            if c2.ndim == 1: c2 = c2[np.newaxis, :]
+            if buf_top.ndim == 1: buf_top = buf_top[np.newaxis, :]
+            if hidden.ndim == 1: hidden = hidden[np.newaxis, :]
+
+            inp_state = T.concatenate([c1, c2, buf_top], axis=1)
+            hidden_next, _ = track_network(hidden, inp_state)
+
+            comp = compose_network(T.concatenate([c1, c2], axis=1), hidden_next[:, self.model_dim / 2])
+
+            return comp.squeeze(), hidden_next.squeeze()
+
+
         self.compose_network = compose_network
         self.track_network = track_network
+        self.ghost_compose_net = ghost_compose_net
 
         self.X = T.imatrix("X")
         self.transitions = T.imatrix("transitions")
@@ -345,17 +360,16 @@ class ThinStackTrackingBackpropTestCase(unittest.TestCase):
         error_signal = T.grad(cost, top)
 
         # Build composition gradient subgraph.
-        f_delta1 = batch_subgraph_gradients([1, 1], [self.W, self.b], self.compose_network)
-        f_delta = lambda (c1, c2, hidden), (grad,): f_delta1([T.concatenate([c1, c2], axis=1), hidden[:, :self.model_dim / 2]], [grad])
+        f_delta = batch_subgraph_gradients([1, 1, 1, 1], [self.W, self.b, self.W_track], self.ghost_compose_net)
 
         # Now build backprop, passing in our composition gradient.
-        self.stack.final_aux_stack = theano.printing.Print("aux_stack", ("shape",))(self.stack.final_aux_stack)
         self.stack.make_backprop_scan(
             [self.stack.final_aux_stack], error_signal, f_delta,
             [self.W.get_value().shape, self.b.get_value().shape])
         f = theano.function(
             [self.X, self.transitions, self.y],
             (cost, self.stack.deltas[0], self.stack.deltas[1]))
+        #theano.printing.debugprint(f.maker.fgraph.outputs[1])
 
         #print T.grad(simulated_cost, self.t5)
 

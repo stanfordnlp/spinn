@@ -31,6 +31,10 @@ class AdvancedSubtensor1Floats(T.subtensor.AdvancedSubtensor1):
     float32 GPU shared variable.
     """
 
+    def __init__(self, tag=None):
+        super(AdvancedSubtensor1Floats, self).__init__()
+        self._tag = tag
+
     def make_node(self, x, ilist):
         # copy-paste of super.make_node, but without the int type constraint
         x_ = T.as_tensor_variable(x)
@@ -59,6 +63,12 @@ class AdvancedSubtensor1Floats(T.subtensor.AdvancedSubtensor1):
 
 
 class GpuAdvancedSubtensor1Floats(AdvancedSubtensor1Floats, GpuOp):
+
+    def __init__(self, tag=None):
+        self._tag = tag
+
+    def __str__(self):
+        return "GpuAdvancedSubtensor1Floats(%s)" % self._tag
 
     def make_node(self, x, ilist):
         x_ = as_cuda_ndarray_variable(x)
@@ -354,15 +364,16 @@ def local_gpu_advanced_subtensor1_floats(node):
            host_input.owner.op.__class__ is AdvancedSubtensor1Floats:
             x = host_input.owner.inputs[0]
             coords = host_input.owner.inputs[1:]
-            return [GpuAdvancedSubtensor1Floats()(as_cuda_ndarray_variable(x),
+            return [GpuAdvancedSubtensor1Floats(host_input.owner.op._tag)(as_cuda_ndarray_variable(x),
                                                   *coords)]
     if node.op.__class__ is AdvancedSubtensor1Floats:
         x = node.inputs[0]
         coords = node.inputs[1:]
+        print x.owner.op, x.type, node.op._tag
         if (x.owner and isinstance(x.owner.op, HostFromGpu) and
                 x.dtype == "float32"):
             gpu_x, = x.owner.inputs
-            return [host_from_gpu(GpuAdvancedSubtensor1Floats()(gpu_x, *coords))]
+            return [host_from_gpu(GpuAdvancedSubtensor1Floats(node.op._tag)(gpu_x, *coords))]
     return False
 
 
