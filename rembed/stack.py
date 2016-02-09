@@ -428,7 +428,8 @@ class HardStack(object):
                 self._step,
                 sequences=sequences,
                 non_sequences=[buffer_t, self.ground_truth_transitions_visible],
-                outputs_info=outputs_info)
+                outputs_info=outputs_info,
+                name="fwd")
 
         ret_shift = 0 if self.interpolate else 1
         self.final_buf = scan_ret[ret_shift + 0][-1]
@@ -560,8 +561,9 @@ class HardStack(object):
                 step_b,
                 sequences=[ts_f, transitions_f, self.stack_2_ptrs, buf_ptrs],
                 outputs_info=outputs_info,
-                non_sequences=[self.final_stack],
-                go_backwards=True)
+                non_sequences=[id_buffer, self.final_stack],
+                go_backwards=True,
+                name="bwd")
 
         stack_bwd, dE = bscan_ret[:2]
         self.deltas = [deltas[-1] for deltas in bscan_ret[2:]]

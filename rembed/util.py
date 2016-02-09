@@ -502,7 +502,8 @@ def batch_subgraph_gradients(g_in, wrt, f_g_out, name="batch_subgraph_grad"):
 
         # Calculate gradients independently for each example.
         ds = theano.scan(gradients_i, sequences=b_in + b_grad,
-                         outputs_info=[None] * (n_in + len(wrt)))[0]
+                         outputs_info=[None] * (n_in + len(wrt)),
+                         name="%s/scan" % name)[0]
         return ds[:n_in], ds[n_in:]
 
     return batch_gradients
