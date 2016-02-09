@@ -432,7 +432,7 @@ class Model0(HardStack):
         kwargs["train_with_predicted_transitions"] = False
         kwargs["interpolate"] = False
 
-        use_attention = kwargs.get("use_tracking_lstm", False)
+        use_attention = kwargs.get("use_attention", False)
         if use_attention:
             kwargs["attention_unit"] = util.AttentionUnit
         else:
@@ -453,7 +453,7 @@ class Model1(HardStack):
         kwargs["predict_transitions"] = True
         kwargs["train_with_predicted_transitions"] = False
         kwargs["interpolate"] = False
-        use_attention = kwargs.get("use_tracking_lstm", False)
+        use_attention = kwargs.get("use_attention", False)
         if use_attention:
             kwargs["attention_unit"] = util.AttentionUnit
         else:
@@ -474,7 +474,7 @@ class Model2(HardStack):
         kwargs["predict_transitions"] = True
         kwargs["train_with_predicted_transitions"] = True
         kwargs["interpolate"] = False
-        use_attention = kwargs.get("use_tracking_lstm", False)
+        use_attention = kwargs.get("use_attention", False)
         if use_attention:
             kwargs["attention_unit"] = util.AttentionUnit
         else:
@@ -494,7 +494,7 @@ class Model2S(HardStack):
         kwargs["predict_transitions"] = True
         kwargs["train_with_predicted_transitions"] = True
         kwargs["interpolate"] = True
-        use_attention = kwargs.get("use_tracking_lstm", False)
+        use_attention = kwargs.get("use_attention", False)
         if use_attention:
             kwargs["attention_unit"] = util.AttentionUnit
         else:
