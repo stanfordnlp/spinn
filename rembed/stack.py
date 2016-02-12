@@ -478,6 +478,7 @@ class HardStack(object):
             err_prev = cuda_util.AdvancedSubtensor1Floats("B_errprev")(
                 stack_bwd_t, t_f * batch_size + stack_shift)
 
+            # Retrieve gradient of cost w.r.t. "extra" output
             extra_grad = cuda_util.AdvancedSubtensor1Floats("B_extragrad")(
                 extra_bwd_t, t_f * batch_size + stack_shift)
             extra_grad = theano.printing.Print("extra_grad")(extra_grad)
@@ -492,6 +493,9 @@ class HardStack(object):
             c1 = cuda_util.AdvancedSubtensor1Floats("B_stack1")(stack_final, t_c1)
             c2 = cuda_util.AdvancedSubtensor1Floats("B_stack2")(stack_final, t_c2)
 
+            c1 = ifelse(T.eq(t_f, 0.0), T.zeros((self.batch_size, self.model_dim)), c1)
+            c2 = ifelse(t_f <= 1.0, T.zeros((self.batch_size, self.model_dim)), c2)
+
             # Find buffer top.
             buffer_top_t = cuda_util.AdvancedSubtensor1Floats("B_buffer_top")(
                 self.buffer_t, buffer_cur_t + buffer_shift)
@@ -499,15 +503,23 @@ class HardStack(object):
             # Retrieve extra inputs from auxiliary stack.
             extra_inps_t = [cuda_util.AdvancedSubtensor1Floats("B_extra_inp")(aux_stack_i, t_c1)
                             for aux_stack_i in extra_inputs]
+            extra_inps_t = [ifelse(T.eq(t_f, 0.0), T.zeros((self.batch_size, self.tracking_lstm_hidden_dim * 2)), extra_inp_i)
+                            for extra_inp_i in extra_inps_t]
 #            extra_inps_t[0] = theano.printing.Print("extra_inps_t[0]")(extra_inps_t[0])
 
             # Calculate deltas for this timestep.
             inp = (c1, c2, buffer_top_t) + tuple(extra_inps_t)
             grad = (err_prev, extra_grad)
-            m_delta_inp, m_delta_wrt = f_merge_delta(inp, grad)
-            p_delta_inp, p_delta_wrt = f_push_delta(inp, grad)
+            m_delta_inp, m_delta_wrt = f_merge_delta(inp, (err_prev,))#grad)
+            p_delta_inp, p_delta_wrt = f_push_delta(inp, (extra_grad,))#grad)
             assert len(m_delta_inp) == len(p_delta_inp), "%i %i" % (len(m_delta_inp), len(p_delta_inp))
             assert len(m_delta_wrt) == len(p_delta_wrt)
+            # m_delta_inp = [theano.printing.Print("m_delta_inp[%i]" % i)(m_delta_inp[i])
+            #                for i in range(len(m_delta_inp))]
+            # p_delta_inp = [theano.printing.Print("p_delta_inp[%i]" % i)(p_delta_inp[i])
+            #                for i in range(len(p_delta_inp))]
+            # m_delta_wrt = [theano.printing.Print("m_delta_wrt[%i]" % i)(m_delta_wrt[i])
+            #                for i in range(len(m_delta_wrt))]
 
             # Calculate deltas of dE for each element.
             dE_push = err_prev
@@ -555,7 +567,7 @@ class HardStack(object):
             extra_bwd_t = theano.printing.Print("extra_bwd_t")(extra_bwd_t)
             # extra_bwd_next = extra_bwd_t
             extra_bwd_next = cuda_util.AdvancedIncSubtensor1Floats()(
-                    extra_bwd_t, masks[1] * m_delta_inp[2] + (1. - masks[1]) * p_delta_inp[1], t_c1)
+                    extra_bwd_t, masks[1] * m_delta_inp[3] + (1. - masks[1]) * p_delta_inp[3], t_c1)
 
             return [stack_bwd_next, extra_bwd_next, dE] + new_accum_deltas
 
@@ -574,7 +586,6 @@ class HardStack(object):
         # prepend a dummy.)
         buf_ptrs = T.concatenate([T.zeros((1, batch_size,)),
                                   self.buf_ptrs[:-1]], axis=0)
-        print buf_ptrs.dtype
 
         outputs_info = [stack_bwd_init, extra_bwd_init, T.zeros_like(self.embeddings)]
         outputs_info += [T.zeros(shape) for shape in grad_shapes]

@@ -4,6 +4,7 @@ import numpy as np
 import theano
 from theano import tensor as T
 
+from rembed import cuda_util
 from rembed.stack import HardStack
 from rembed.util import VariableStore, CropAndPad, IdentityLayer, batch_subgraph_gradients
 
@@ -227,7 +228,7 @@ class ThinStackTrackingBackpropTestCase(unittest.TestCase):
 
         self.embedding_dim = self.model_dim = 2
         self.vocab_size = 5
-        self.seq_length = 5
+        self.seq_length = 3
         self.batch_size = 2
         self.num_classes = 2
 
@@ -238,8 +239,8 @@ class ThinStackTrackingBackpropTestCase(unittest.TestCase):
                                     [ 0.78306797,  0.81535813],
                                     [ 0.86703663,  0.04581873],
                                     [ 0.80502693,  0.08334766]],
-                                   dtype=np.float32))
-        b = theano.shared(np.array([1.0, 1.0], dtype=np.float32))
+                                   dtype=np.float32), name="W")
+        b = theano.shared(np.array([1.0, 1.0], dtype=np.float32), name="b")
         W_track = theano.shared(np.array([[ 0.77254916,  0.42812964],
                                           [ 0.88963778,  0.44141495],
                                           [ 0.04797265,  0.26553046],
@@ -248,7 +249,7 @@ class ThinStackTrackingBackpropTestCase(unittest.TestCase):
                                           [ 0.30494943,  0.19745198],
                                           [ 0.46857447,  0.21550114],
                                           [ 0.20011235,  0.5682324 ]],
-                                         dtype=np.float32))
+                                         dtype=np.float32), name="W_track")
         self.embeddings = embeddings
         self.W = W
         self.b = b
@@ -261,14 +262,14 @@ class ThinStackTrackingBackpropTestCase(unittest.TestCase):
                 hidden = hidden[np.newaxis, :]
             # TODO maybe can just change the `axis` flag in the above case?
             conc = T.concatenate([hidden, inp], axis=1)
-            return (T.dot(conc, W) + b).squeeze()
+            return T.dot(conc, W) + b
         def track_network(state, inp, *args, **kwargs):
             conc = T.concatenate([state, inp], axis=1)
             state = T.dot(conc, W_track)
             logits = 0.0
             return state, logits
 
-        def ghost_compose_net(c1, c2, buf_top, hidden):
+        def ghost_compose_net(c1, c2, buf_top, hidden, squeeze=True):
             if c1.ndim == 1: c1 = c1[np.newaxis, :]
             if c2.ndim == 1: c2 = c2[np.newaxis, :]
             if buf_top.ndim == 1: buf_top = buf_top[np.newaxis, :]
@@ -277,11 +278,13 @@ class ThinStackTrackingBackpropTestCase(unittest.TestCase):
             inp_state = T.concatenate([c1, c2, buf_top], axis=1)
             hidden_next, _ = track_network(hidden, inp_state)
 
-            comp = compose_network(T.concatenate([c1, c2], axis=1), hidden_next[:, self.model_dim / 2])
+            comp = compose_network(T.concatenate([c1, c2], axis=1), hidden_next[:, :self.model_dim / 2])
 
-            return comp.squeeze(), hidden_next.squeeze()
+            if squeeze:
+                return comp.squeeze()#, hidden_next.squeeze()
+            return comp
 
-        def ghost_push_net(c1, c2, buf_top, hidden):
+        def ghost_push_net(c1, c2, buf_top, hidden, squeeze=True):
             if c1.ndim == 1: c1 = c1[np.newaxis, :]
             if c2.ndim == 1: c2 = c2[np.newaxis, :]
             if buf_top.ndim == 1: buf_top = buf_top[np.newaxis, :]
@@ -290,7 +293,10 @@ class ThinStackTrackingBackpropTestCase(unittest.TestCase):
             inp_state = T.concatenate([c1, c2, buf_top], axis=1)
             hidden_next, _ = track_network(hidden, inp_state)
 
-            return T.zeros_like(c1.squeeze()), hidden_next.squeeze()
+            #return T.zeros_like(c1.squeeze()), hidden_next.squeeze()
+            if squeeze:
+                return hidden_next.squeeze()
+            return hidden_next
 
 
         self.compose_network = compose_network
@@ -321,40 +327,46 @@ class ThinStackTrackingBackpropTestCase(unittest.TestCase):
 
         # seq_length * batch_size * emb_dim
         X_emb = self.stack.embeddings[self.X].dimshuffle(1, 0, 2)
+        zero = T.zeros((self.batch_size, self.model_dim))
         t0 = T.zeros((self.batch_size, self.model_dim))
 
-        # Shift.
-        tracking_inp = T.concatenate([T.zeros((self.batch_size, self.model_dim)),
-                                      T.zeros((self.batch_size, self.model_dim)),
-                                      X_emb[0]], axis=1)
-        t1, _ = self.track_network(t0, tracking_inp)
+        # # Shift.
+        # tracking_inp = T.concatenate([T.zeros((self.batch_size, self.model_dim)),
+        #                               T.zeros((self.batch_size, self.model_dim)),
+        #                               X_emb[0]], axis=1)
+        # t1, _ = self.track_network(t0, tracking_inp)
+        self.t1 = t1 = self.ghost_push_net(zero, zero, X_emb[0], t0, squeeze=False)
 
-        # Shift.
-        tracking_inp = T.concatenate([X_emb[0],
-                                      T.zeros((self.batch_size, self.model_dim)),
-                                      X_emb[1]], axis=1)
-        t2, _ = self.track_network(t1, tracking_inp)
+        # # Shift.
+        # tracking_inp = T.concatenate([X_emb[0],
+        #                               T.zeros((self.batch_size, self.model_dim)),
+        #                               X_emb[1]], axis=1)
+        # t2, _ = self.track_network(t1, tracking_inp)
+        self.t2 = t2 = self.ghost_push_net(X_emb[0], zero, X_emb[1], t1, squeeze=False)
 
-        # Merge.
+        # # Merge.
         tracking_inp = T.concatenate([X_emb[1], X_emb[0], X_emb[2]], axis=1)
         t3, _ = self.track_network(t2, tracking_inp)
         z3 = T.concatenate([X_emb[1], X_emb[0]], axis=1)
-        c3 = self.compose_network(z3, t3[:, :self.model_dim / 2])
+        self.c3 = c3 = self.compose_network(z3, t3[:, :self.model_dim / 2])
+        # self.c3 = c3 = self.ghost_compose_net(X_emb[1], X_emb[0], X_emb[2], t2, squeeze=False)
 
-        # Shift.
-        tracking_inp = T.concatenate([c3, T.zeros((self.batch_size, self.model_dim)), # TODO are we sure this is the value of stack_2 in thin-stack?
-                                      X_emb[2]], axis=1)
-        t4, _ = self.track_network(t3, tracking_inp)
-        self.t4 = t4
+        # # Shift.
+        # tracking_inp = T.concatenate([c3, T.zeros((self.batch_size, self.model_dim)), # TODO are we sure this is the value of stack_2 in thin-stack?
+        #                               X_emb[2]], axis=1)
+        # t4, _ = self.track_network(t3, tracking_inp)
+        # self.t4 = t4
+        t4 = self.ghost_push_net(c3, zero, X_emb[2], t3, squeeze=False)
 
-        # Merge.
-        tracking_inp = T.concatenate([X_emb[2], c3, X_emb[3]], axis=1)
-        t5, _ = self.track_network(t4, tracking_inp)
-        self.t5 = t5
-        z5 = T.concatenate([X_emb[2], c3], axis=1)
-        c5 = self.compose_network(z5, t5[:, :self.model_dim / 2])
+        # # Merge.
+        # tracking_inp = T.concatenate([X_emb[2], c3, X_emb[3]], axis=1)
+        # t5, _ = self.track_network(t4, tracking_inp)
+        # self.t5 = t5
+        # z5 = T.concatenate([X_emb[2], c3], axis=1)
+        # c5 = self.compose_network(z5, t5[:, :self.model_dim / 2])
+        c5 = self.ghost_compose_net(X_emb[2], c3, X_emb[3], t4, squeeze=False)
 
-        return c5
+        return c3
 
     def _make_cost(self, stack_top):
         logits = stack_top[:, :self.num_classes]
@@ -364,18 +376,20 @@ class ThinStackTrackingBackpropTestCase(unittest.TestCase):
     def test_backprop(self):
         # Simulate a batch of two token sequences, each with the same
         # transition sequence
-        X = np.array([[0, 1, 2, 3, 1], [2, 1, 3, 0, 1]], dtype=np.int32)
+        # X = np.array([[0, 1, 2, 3, 1], [2, 1, 3, 0, 1]], dtype=np.int32)
+        X = np.array([[0, 1, 2], [2, 1, 3]], dtype=np.int32)
         y = np.array([1, 0], dtype=np.int32)
-        transitions = np.tile([0, 0, 1, 0, 1], (2, 1)).astype(np.int32)
+        # transitions = np.tile([0, 0, 1, 0, 1], (2, 1)).astype(np.int32)
+        transitions = np.tile([0, 0, 1], (2, 1)).astype(np.int32)
 
         simulated_top = self._fake_stack_ff()
         simulated_cost = self._make_cost(simulated_top)
         f_simulated = theano.function(
             [self.X, self.y],
-            (simulated_cost,
+            (simulated_top, simulated_cost,
              T.grad(simulated_cost, self.W_track),
              T.grad(simulated_cost, self.W),
-             T.grad(simulated_cost, self.b), T.grad(simulated_cost, self.t4)))
+             T.grad(simulated_cost, self.b), T.grad(simulated_cost, self.t1)))
 
         top = self.stack.final_stack[-self.batch_size:]
         cost = self._make_cost(top)
@@ -391,14 +405,15 @@ class ThinStackTrackingBackpropTestCase(unittest.TestCase):
             [self.W_track.get_value().shape, self.W.get_value().shape, self.b.get_value().shape])
         f = theano.function(
             [self.X, self.transitions, self.y],
-            [cost] + self.stack.deltas)
+            [top, cost] + self.stack.deltas)
         #theano.printing.debugprint(f.maker.fgraph.outputs[1])
 
         #print T.grad(simulated_cost, self.t5)
 
-        b_cost_sim, b_dW_track_sim, b_dW_sim, b_db_sim, dt4 = f_simulated(X, y)
-        b_cost, b_dW_track, b_dW, b_db = f(X, transitions, y)
+        b_top_sim, b_cost_sim, b_dW_track_sim, b_dW_sim, b_db_sim, dt4 = f_simulated(X, y)
+        b_top, b_cost, b_dW_track, b_dW, b_db = f(X, transitions, y)
 
+        np.testing.assert_almost_equal(b_top_sim, b_top)
         np.testing.assert_almost_equal(b_cost_sim, b_cost)
         np.testing.assert_almost_equal(b_dW_track_sim, b_dW_track)
         np.testing.assert_almost_equal(b_dW_sim, b_dW)
