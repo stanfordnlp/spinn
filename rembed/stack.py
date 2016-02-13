@@ -264,8 +264,12 @@ class HardStack(object):
         #
         # TODO: Factor out this zeros constant and the one in the next ifelse
         # op
-        stack_2_mask = (cursors < 0).dimshuffle(0, "x")
-        stack_2 = stack_2_mask * T.zeros((self.batch_size, self.model_dim)) + (1 - stack_2_mask) * stack_2
+        stack_2_mask = cursors < 0
+        stack_2_mask2 = stack_2_mask.dimshuffle(0, "x")
+        stack_2 = stack_2_mask2 * T.zeros((self.batch_size, self.model_dim)) + (1. - stack_2_mask2) * stack_2
+        # Also update stack_2_ptrs for backprop pass. Set -1 sentinel, which
+        # indicates that stack_2 is empty.
+        stack_2_ptrs = stack_2_mask * (-1. * T.ones((self.batch_size,))) + (1. - stack_2_mask) * stack_2_ptrs
 
         # stack_2 values are not valid unless we are on t >= 1 (TODO?)
         stack_2 = ifelse(t <= 1, T.zeros((self.batch_size, self.model_dim)), stack_2)
@@ -493,6 +497,10 @@ class HardStack(object):
             c1 = cuda_util.AdvancedSubtensor1Floats("B_stack1")(stack_final, t_c1)
             c2 = cuda_util.AdvancedSubtensor1Floats("B_stack2")(stack_final, t_c2)
 
+            # Mask over examples which have invalid c2 cursors.
+            c2_mask = (t_c2 < 0).dimshuffle(0, "x")
+            c2 = c2_mask * T.zeros((self.batch_size, self.model_dim)) + (1. - c2_mask) * c2
+
             c1 = ifelse(T.eq(t_f, 0.0), T.zeros((self.batch_size, self.model_dim)), c1)
             c2 = ifelse(t_f <= 1.0, T.zeros((self.batch_size, self.model_dim)), c2)
 
@@ -505,7 +513,7 @@ class HardStack(object):
                             for aux_stack_i in extra_inputs]
             extra_inps_t = [ifelse(T.eq(t_f, 0.0), T.zeros((self.batch_size, self.tracking_lstm_hidden_dim * 2)), extra_inp_i)
                             for extra_inp_i in extra_inps_t]
-#            extra_inps_t[0] = theano.printing.Print("extra_inps_t[0]")(extra_inps_t[0])
+            # extra_inps_t[0] = theano.printing.Print("extra_inps_t[0]")(extra_inps_t[0])
 
             # Calculate deltas for this timestep.
             inp = (c1, c2, buffer_top_t) + tuple(extra_inps_t)
