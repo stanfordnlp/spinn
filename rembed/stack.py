@@ -534,17 +534,18 @@ class HardStack(object):
             buffer_ids_t = cuda_util.AdvancedSubtensor1Floats("B_buffer_ids")(
                     id_buffer, buffer_cur_t + buffer_shift)
 
-            # Calculate delta vectors d(cost)/d(stack_val) for preceding
-            # timestep in merge op.
-            err_c1, err_c2 = m_delta_inp[:2]
-            err_c1 = theano.printing.Print("err_c1")(err_c1)
-
             ## Switch between two cases.
             # TODO: Record actual transitions (e.g. for model 1S and higher)
             # and repeat those here
             mask = transitions_t_f
             masks = [mask, mask.dimshuffle(0, "x"),
                      mask.dimshuffle(0, "x", "x")]
+
+            # Calculate delta vectors d(cost)/d(stack_val) for preceding
+            # timestep in merge op.
+            err_c1 = masks[1] * m_delta_inp[0] + (1. - masks[1]) * p_delta_inp[0]
+            err_c2 = masks[1] * m_delta_inp[1] + (1. - masks[1]) * p_delta_inp[1]
+            err_c1 = theano.printing.Print("err_c1")(err_c1)
 
             # Accumulate wrt deltas, switching over push/merge decision.
             new_accum_deltas = []
