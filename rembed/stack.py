@@ -578,13 +578,12 @@ class HardStack(object):
             #   If we pushed: leave these positions unchanged
             # DEV: Can't force inplace until we update Theano internals to
             # admit inplace updates on stack_bwd_t
+            # stack_bwd_t = theano.printing.Print("stack_bwd_t")(stack_bwd_t)
             stack_bwd_next = cuda_util.AdvancedIncSubtensor1Floats()(#, inplace=True)(
-                    stack_bwd_t, masks[1] * err_c1, t_c1)
+                    stack_bwd_t, err_c1, t_c1)
             stack_bwd_next = cuda_util.AdvancedIncSubtensor1Floats()(#), inplace=True)(
-                    stack_bwd_next, masks[1] * err_c2, t_c2)
+                    stack_bwd_next, err_c2, t_c2)
 
-            extra_bwd_t = theano.printing.Print("extra_bwd_t")(extra_bwd_t)
-            # extra_bwd_next = extra_bwd_t
             extra_bwd_next = cuda_util.AdvancedIncSubtensor1Floats()(
                     extra_bwd_t, masks[1] * m_delta_inp[3] + (1. - masks[1]) * p_delta_inp[3], t_c1)
 
