@@ -546,12 +546,30 @@ class HardStack(object):
             masks = [mask, mask.dimshuffle(0, "x"),
                      mask.dimshuffle(0, "x", "x")]
 
-            # Calculate delta vectors d(cost)/d(stack_val) for preceding
-            # timestep in merge op.
-            err_c1 = masks[1] * m_delta_inp[0] + (1. - masks[1]) * p_delta_inp[0]
-            err_c2 = masks[1] * m_delta_inp[1] + (1. - masks[1]) * p_delta_inp[1]
-            err_c1 = theano.printing.Print("err_c1")(err_c1)
-            err_c2 = theano.printing.Print("err_c2")(err_c2)
+            # Accumulate inp deltas, switching over push/merge decision.
+            # TODO: these all should be inplace updates on shared variables!
+            # TODO: Remove all these magic helpers
+            stacks = [stack_bwd_t, stack_bwd_t, None, extra_bwd_t]
+            new_stacks = {}
+            cursors = [t_c1, t_c2, None, t_c1]
+            pull = [False, True, False, True] # DEV HACKY
+            pulled = []
+            for stack, cursor, m_delta, p_delta, do_pull in zip(stacks, cursors, m_delta_inp, p_delta_inp, pull):
+                if stack is None:
+                    continue
+                base = new_stacks.get(stack, stack)
+
+                mask_i = masks[m_delta.ndim - 1]
+                delta = mask * m_delta + (1. - mask) * p_delta
+
+                # Run subtensor update on associated stack using the current
+                # cursor.
+                new_stack = cuda_util.AdvancedIncSubtensor1Floats()(
+                    base, delta, cursor)
+                new_stacks[base] = new_stack
+                if do_pull:
+                    pulled.append(new_stack)
+            stack_bwd_next, extra_bwd_next = pulled
 
             # Accumulate wrt deltas, switching over push/merge decision.
             new_accum_deltas = []
@@ -570,22 +588,6 @@ class HardStack(object):
 
             stack_bwd_t = theano.printing.Print("stack_bwd_t")(stack_bwd_t)
             extra_bwd_t = theano.printing.Print("extra_bwd_t")(extra_bwd_t)
-
-            # Update backward-pass stack structure.
-            # For each example:
-            #   Retrieve positions of potential merge elements (t_c1, t_c2)
-            #   If we merged: backprop error signals to these positions
-            #   If we pushed: leave these positions unchanged
-            # DEV: Can't force inplace until we update Theano internals to
-            # admit inplace updates on stack_bwd_t
-            # stack_bwd_t = theano.printing.Print("stack_bwd_t")(stack_bwd_t)
-            stack_bwd_next = cuda_util.AdvancedIncSubtensor1Floats()(#, inplace=True)(
-                    stack_bwd_t, err_c1, t_c1)
-            stack_bwd_next = cuda_util.AdvancedIncSubtensor1Floats()(#), inplace=True)(
-                    stack_bwd_next, err_c2, t_c2)
-
-            extra_bwd_next = cuda_util.AdvancedIncSubtensor1Floats()(
-                    extra_bwd_t, masks[1] * m_delta_inp[3] + (1. - masks[1]) * p_delta_inp[3], t_c1)
 
             return [stack_bwd_next, extra_bwd_next, dE] + new_accum_deltas
 
