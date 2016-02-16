@@ -268,7 +268,7 @@ class ThinStackTrackingBackpropTestCase(unittest.TestCase):
             logits = 0.0
             return state, logits
 
-        def ghost_compose_net(c1, c2, buf_top, hidden, squeeze=True, ret_hidden=False):
+        def ghost_compose_net(c1, c2, buf_top, hidden, squeeze=True, ret_hidden=True):
             if c1.ndim == 1: c1 = c1[np.newaxis, :]
             if c2.ndim == 1: c2 = c2[np.newaxis, :]
             if buf_top.ndim == 1: buf_top = buf_top[np.newaxis, :]
@@ -350,7 +350,7 @@ class ThinStackTrackingBackpropTestCase(unittest.TestCase):
         self.t4 = t4 = self.ghost_push_net(c3, zero, X_emb[2], t3, squeeze=False)
 
         # Merge.
-        c5 = self.ghost_compose_net(X_emb[2], c3, X_emb[3], t4, squeeze=False)
+        c5, _ = self.ghost_compose_net(X_emb[2], c3, X_emb[3], t4, squeeze=False)
 
         return locals()
 
@@ -390,7 +390,8 @@ class ThinStackTrackingBackpropTestCase(unittest.TestCase):
         real = f(X, transitions, y)
 
         for check, sim_i, real_i in zip(checks, sim, real):
-            np.testing.assert_almost_equal(sim_i, real_i, err_msg=check)
+            np.testing.assert_almost_equal(sim_i, real_i, err_msg=check,
+                                           decimal=4, verbose=True)
 
     def test_backprop_3(self):
         """Check a valid 3-transition S S M sequence."""

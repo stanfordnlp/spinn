@@ -518,7 +518,7 @@ class HardStack(object):
             # Calculate deltas for this timestep.
             inp = (c1, c2, buffer_top_t) + tuple(extra_inps_t)
             grad = (err_prev, extra_grad)
-            m_delta_inp, m_delta_wrt = f_merge_delta(inp, (err_prev,))#grad)
+            m_delta_inp, m_delta_wrt = f_merge_delta(inp, (err_prev, extra_grad))#grad)
             p_delta_inp, p_delta_wrt = f_push_delta(inp, (extra_grad,))#grad)
             assert len(m_delta_inp) == len(p_delta_inp), "%i %i" % (len(m_delta_inp), len(p_delta_inp))
             assert len(m_delta_wrt) == len(p_delta_wrt)
