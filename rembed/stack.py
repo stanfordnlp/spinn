@@ -464,6 +464,10 @@ class HardStack(object):
 
         extra_bwd_init = T.zeros((self.stack_size * self.batch_size, self.tracking_lstm_hidden_dim * 2))
 
+        # Useful batch zero-constants.
+        zero_stack = T.zeros((self.batch_size, self.model_dim))
+        zero_extra = T.zeros((self.batch_size, self.tracking_lstm_hidden_dim * 2))
+
         batch_size = self.batch_size
         batch_range = T.arange(batch_size)
         stack_shift = T.cast(batch_range, theano.config.floatX)
@@ -499,10 +503,10 @@ class HardStack(object):
 
             # Mask over examples which have invalid c2 cursors.
             c2_mask = (t_c2 < 0).dimshuffle(0, "x")
-            c2 = c2_mask * T.zeros((self.batch_size, self.model_dim)) + (1. - c2_mask) * c2
+            c2 = c2_mask * zero_stack + (1. - c2_mask) * c2
 
-            c1 = ifelse(T.eq(t_f, 0.0), T.zeros((self.batch_size, self.model_dim)), c1)
-            c2 = ifelse(t_f <= 1.0, T.zeros((self.batch_size, self.model_dim)), c2)
+            c1 = ifelse(T.eq(t_f, 0.0), zero_stack, c1)
+            c2 = ifelse(t_f <= 1.0, zero_stack, c2)
 
             # Find buffer top.
             buffer_top_t = cuda_util.AdvancedSubtensor1Floats("B_buffer_top")(
@@ -511,15 +515,14 @@ class HardStack(object):
             # Retrieve extra inputs from auxiliary stack.
             extra_inps_t = [cuda_util.AdvancedSubtensor1Floats("B_extra_inp")(aux_stack_i, t_c1)
                             for aux_stack_i in extra_inputs]
-            extra_inps_t = [ifelse(T.eq(t_f, 0.0), T.zeros((self.batch_size, self.tracking_lstm_hidden_dim * 2)), extra_inp_i)
+            extra_inps_t = [ifelse(T.eq(t_f, 0.0), zero_extra, extra_inp_i)
                             for extra_inp_i in extra_inps_t]
             # extra_inps_t[0] = theano.printing.Print("extra_inps_t[0]")(extra_inps_t[0])
 
             # Calculate deltas for this timestep.
             inp = (c1, c2, buffer_top_t) + tuple(extra_inps_t)
-            grad = (err_prev, extra_grad)
-            m_delta_inp, m_delta_wrt = f_merge_delta(inp, (err_prev, extra_grad))#grad)
-            p_delta_inp, p_delta_wrt = f_push_delta(inp, (extra_grad,))#grad)
+            m_delta_inp, m_delta_wrt = f_merge_delta(inp, (err_prev, extra_grad))
+            p_delta_inp, p_delta_wrt = f_push_delta(inp, (extra_grad,))
             assert len(m_delta_inp) == len(p_delta_inp), "%i %i" % (len(m_delta_inp), len(p_delta_inp))
             assert len(m_delta_wrt) == len(p_delta_wrt)
             # m_delta_inp = [theano.printing.Print("m_delta_inp[%i]" % i)(m_delta_inp[i])

@@ -371,9 +371,11 @@ class ThinStackTrackingBackpropTestCase(unittest.TestCase):
         cost = self._make_cost(top)
         error_signal = T.grad(cost, top)
 
-        # Build composition gradient subgraph.
-        m_delta = batch_subgraph_gradients([1, 1, 1, 1], [self.W_track, self.W, self.b], self.ghost_compose_net)
-        p_delta = batch_subgraph_gradients([1, 1, 1, 1], [self.W_track, self.W, self.b], self.ghost_push_net)
+        # Build step gradient subgraph.
+        inputs = [1, 1, 1, 1] # 4 inputs, each of ndim 1
+        wrt = [self.W_track, self.W, self.b]
+        m_delta = batch_subgraph_gradients(inputs, wrt, self.ghost_compose_net)
+        p_delta = batch_subgraph_gradients(inputs, wrt, self.ghost_push_net)
 
         # Now build backprop, passing in our composition gradient.
         stack.make_backprop_scan([stack.final_aux_stack], error_signal,
