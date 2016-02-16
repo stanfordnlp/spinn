@@ -486,7 +486,7 @@ def batch_subgraph_gradients(g_in, wrt, f_g_out, name="batch_subgraph_grad"):
         def gradients_i(*inputs):
             """Compute all gradients for example `i`."""
             in_i, grad_i = inputs[:n_in], inputs[n_in:]
-            assert len(grad_i) == n_grad # DEV
+            assert len(grad_i) == n_grad, "%i %i" % (len(grad_i), n_grad) # DEV
 
             # Build a clone of the subgradient graph with the actual batch
             # inputs and gradients.

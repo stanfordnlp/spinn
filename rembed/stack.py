@@ -495,6 +495,8 @@ class HardStack(object):
             # merge at this timestep.
             t_c1 = (t_f - 1.0) * batch_size + stack_shift
             t_c2 = stack_2_ptrs_t
+            t_c1 = theano.printing.Print("t_c1")(t_c1)
+            t_c2 = theano.printing.Print("t_c2")(t_c2)
 
             # Find the two elements involved in the merge.
             # batch_size * model_dim
@@ -549,20 +551,25 @@ class HardStack(object):
             err_c1 = masks[1] * m_delta_inp[0] + (1. - masks[1]) * p_delta_inp[0]
             err_c2 = masks[1] * m_delta_inp[1] + (1. - masks[1]) * p_delta_inp[1]
             err_c1 = theano.printing.Print("err_c1")(err_c1)
+            err_c2 = theano.printing.Print("err_c2")(err_c2)
 
             # Accumulate wrt deltas, switching over push/merge decision.
             new_accum_deltas = []
-            for accum_delta, m_delta, p_delta in zip(accum_deltas, m_delta_wrt, p_delta_wrt):
+            for i, (accum_delta, m_delta, p_delta) in enumerate(zip(accum_deltas, m_delta_wrt, p_delta_wrt)):
                 assert accum_delta.ndim == m_delta.ndim - 1, "%i %i" % (accum_delta.ndim, m_delta.ndim)
                 assert accum_delta.ndim == p_delta.ndim - 1, "%i %i" % (accum_delta.ndim, p_delta.ndim)
 
                 mask_i = masks[m_delta.ndim - 1]
                 # TODO: Is this at all efficient? (Bring back GPURowSwitch?)
                 delta = (mask * m_delta + (1. - mask) * p_delta).sum(axis=0)
+                delta = theano.printing.Print("delta_wrt[%i]" % i)(delta)
                 new_accum_deltas.append(accum_delta + delta)
 
             dE = cuda_util.AdvancedIncSubtensor1Floats()(
                     dE, (1. - masks[1]) * dE_push, buffer_ids_t)
+
+            stack_bwd_t = theano.printing.Print("stack_bwd_t")(stack_bwd_t)
+            extra_bwd_t = theano.printing.Print("extra_bwd_t")(extra_bwd_t)
 
             # Update backward-pass stack structure.
             # For each example:
