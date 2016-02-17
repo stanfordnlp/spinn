@@ -677,7 +677,12 @@ class HardStack(object):
                                   self.buf_ptrs[:-1]], axis=0)
 
         outputs_info = [stack_bwd_init, T.zeros_like(self.embeddings)]
-        outputs_info += [T.zeros(shape) for shape in wrt_shapes]
+
+        # The `patternbroadcast` call below prevents any of the alloc axes from
+        # being broadcastable. (Trust the client -- they should give us the
+        # parameter shapes exactly, of course!)
+        outputs_info += [T.patternbroadcast(T.zeros(shape), (False,) * len(shape))
+                         for shape in wrt_shapes]
 
         bscan_ret, _ = theano.scan(
                 step_b,
@@ -685,7 +690,7 @@ class HardStack(object):
                 outputs_info=outputs_info,
                 non_sequences=extra_bwd_init + [id_buffer, self.final_stack],
                 go_backwards=True,
-                name="bwd")
+                name="stack_bwd")
 
         stack_bwd, dE = bscan_ret[:2]
         self.deltas = [deltas[-1] for deltas in bscan_ret[2:]]
