@@ -516,6 +516,92 @@ class ThinStackTrackingLSTMBackpropTestCase(ThinStackTrackingBackpropTestCase):
         return locals()
 
 
+class ThinStackTreeLSTMTrackingLSTMBackpropTestCase(ThinStackTrackingBackpropTestCase):
+
+    def setUp(self):
+        if 'gpu' not in theano.config.device:
+            raise RuntimeError("Thin stack only defined for GPU usage")
+
+        self.embedding_dim = self.model_dim = 2
+        self.vocab_size = 5
+        self.batch_size = 2
+        self.num_classes = 2
+
+        self.vs = VariableStore()
+
+        def compose_network(inp, hidden, *args, **kwargs):
+            if inp.ndim == 1:
+                inp = inp[np.newaxis, :]
+            if hidden.ndim == 1:
+                hidden = hidden[np.newaxis, :]
+            # TODO maybe can just change the `axis` flag in the above case?
+            conc = T.concatenate([hidden, inp], axis=1)
+
+            return util.TreeLSTMLayer(inp, hidden, self.model_dim, self.vs, external_state_dim=self.model_dim / 2)
+
+        def track_network(state, inp, *args, **kwargs):
+            if state.ndim == 1:
+                state = state[np.newaxis, :]
+            if inp.ndim == 1:
+                inp = inp[np.newaxis, :]
+            return util.TrackingUnit(state, inp, self.model_dim * 3,
+                                     self.model_dim / 2, self.vs, make_logits=False)
+
+        self.compose_network = compose_network
+        self.track_network = track_network
+        self.ghost_compose_net = self._make_ghost_compose_net(track_network, compose_network)
+        self.ghost_push_net = self._make_ghost_push_net(track_network)
+
+        self.X = T.imatrix("X")
+        self.transitions = T.imatrix("transitions")
+        self.y = T.ivector("y")
+
+    def _fake_stack_ff(self, stack):
+        """Fake a stack feedforward S S M S M S S S M M M with the given data."""
+
+        # seq_length * batch_size * emb_dim
+        X_emb = stack.embeddings[self.X].dimshuffle(1, 0, 2)
+        zero = T.zeros((self.batch_size, self.model_dim))
+        t0 = T.zeros((self.batch_size, self.model_dim))
+
+        # Shift.
+        self.t1 = t1 = self.ghost_push_net(zero, zero, X_emb[0], t0, squeeze=False)
+
+        # Shift.
+        self.t2 = t2 = self.ghost_push_net(X_emb[0], zero, X_emb[1], t1, squeeze=False)
+
+        # Merge.
+        #t2 = theano.gradient.consider_constant(t2)
+        c3, t3 = self.ghost_compose_net(X_emb[1], X_emb[0], X_emb[2], t2, squeeze=False,
+                                        ret_hidden=True)
+        self.c3 = c3
+        if stack.seq_length <= 3:
+            return locals()
+
+        # Shift.
+        self.t4 = t4 = self.ghost_push_net(c3, zero, X_emb[2], t3, squeeze=False)
+
+        # Merge.
+        c5, t5 = self.ghost_compose_net(X_emb[2], c3, X_emb[3], t4, squeeze=False)
+        if stack.seq_length <= 5:
+            return locals()
+
+        t6 = self.ghost_push_net(c5, zero, X_emb[3], t5, squeeze=False)
+
+        t7 = self.ghost_push_net(X_emb[3], c5, X_emb[4], t6, squeeze=False)
+
+        t8 = self.ghost_push_net(X_emb[4], X_emb[3], X_emb[5], t7, squeeze=False)
+
+        c9, t9 = self.ghost_compose_net(X_emb[5], X_emb[4], X_emb[6], t8, squeeze=False)
+
+        c10, t10 = self.ghost_compose_net(c9, X_emb[3], X_emb[6], t9, squeeze=False)
+
+        c11, t11 = self.ghost_compose_net(c10, c5, X_emb[6], t10, squeeze=False)
+
+        return locals()
+
+
+
 
 if __name__ == '__main__':
     unittest.main()
