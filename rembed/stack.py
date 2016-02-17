@@ -448,7 +448,7 @@ class HardStack(object):
             self.transitions_pred = scan_ret[-1].dimshuffle(1, 0, 2)
 
 
-    def make_backprop_scan(self, extra_inputs, error_signal,
+    def make_backprop_scan(self, extra_inputs, extra_outputs, error_signal,
                            f_push_delta, f_merge_delta, grad_shapes):
         """
         Args:
@@ -462,13 +462,14 @@ class HardStack(object):
         stack_bwd_init = T.zeros((self.stack_size * self.batch_size, self.model_dim))
         stack_bwd_init = T.set_subtensor(stack_bwd_init[-self.batch_size:], error_signal)
 
-        extra_bwd = [T.zeros((self.stack_size * self.batch_size, dim))
-                     for _, dim in extra_inputs]
-        extra_bwd_init = T.zeros((self.stack_size * self.batch_size, self.tracking_lstm_hidden_dim * 2))
+        extra_bwd_init = [theano.shared(np.zeros((self.stack_size * self.batch_size, dim), dtype=np.float32),
+                                        borrow=False, name="bprop/bwd/%i" % i)
+                          for i, dim in enumerate(extra_outputs)]
+        # TODO add to zero fn
 
         # Useful batch zero-constants.
         zero_stack = T.zeros((self.batch_size, self.model_dim))
-        zero_extras = [T.zeros((self.batch_size, dim)) for _, dim in extra_inputs]
+        zero_extra_inps = [T.zeros((self.batch_size, inp.shape[1])) for inp in extra_inputs]
 
         batch_size = self.batch_size
         batch_range = T.arange(batch_size)
@@ -478,10 +479,12 @@ class HardStack(object):
         def step_b(# sequences
                    t_f, transitions_t_f, stack_2_ptrs_t, buffer_cur_t,
                    # outputs_info (inplace update is okay)
-                   stack_bwd_t, extra_bwd_t, dE,
+                   stack_bwd_t, dE,
                    # rest
                    *accum_and_non_sequences):
-            accum_deltas = accum_and_non_sequences[:-2]
+            n_extras = len(extra_bwd_init)
+            accum_deltas = accum_and_non_sequences[:-2 - n_extras]
+            extra_bwd = accum_and_non_sequences[-2 - n_extras:-2]
             id_buffer, stack_final = accum_and_non_sequences[-2:]
 
             t_f = theano.printing.Print("==================================")(t_f)
@@ -489,14 +492,10 @@ class HardStack(object):
                 stack_bwd_t, t_f * batch_size + stack_shift)
 
             # Retrieve gradient of cost w.r.t. "extra" output
-            # TODO support multiple
-            extra_bwd = [extra_bwd_t]
-            extra_grads = [
+            extra_grads = tuple([
                 cuda_util.AdvancedSubtensor1Floats("B_extragrad_%i" % i)(
                     extra_bwd_i, t_f * batch_size + stack_shift)
-                for i, extra_bwd_i in enumerate(extra_bwd)]
-            extra_grad = extra_grads[0]
-            extra_grad = theano.printing.Print("extra_grad")(extra_grad)
+                for i, extra_bwd_i in enumerate(extra_bwd)])
 
             # Find the timesteps of the two elements involved in the potential
             # merge at this timestep.
@@ -522,16 +521,16 @@ class HardStack(object):
                 self.buffer_t, buffer_cur_t + buffer_shift)
 
             # Retrieve extra inputs from auxiliary stack.
-            extra_inps_t = [cuda_util.AdvancedSubtensor1Floats("B_extra_inp")(aux_stack_i, t_c1)
-                            for aux_stack_i, _ in extra_inputs]
+            extra_inps_t = [cuda_util.AdvancedSubtensor1Floats("B_extra_inp")(extra_inp_i, t_c1)
+                            for extra_inp_i in extra_inputs]
             extra_inps_t = [ifelse(T.eq(t_f, 0.0), zero_extra, extra_inp_i)
-                            for extra_inp_i, zero_extra in zip(extra_inps_t, zero_extras)]
+                            for extra_inp_i, zero_extra in zip(extra_inps_t, zero_extra_inps)]
             # extra_inps_t[0] = theano.printing.Print("extra_inps_t[0]")(extra_inps_t[0])
 
             # Calculate deltas for this timestep.
             inp = (c1, c2, buffer_top_t) + tuple(extra_inps_t)
-            m_delta_inp, m_delta_wrt = f_merge_delta(inp, (err_prev, extra_grad))
-            p_delta_inp, p_delta_wrt = f_push_delta(inp, (extra_grad,))
+            m_delta_inp, m_delta_wrt = f_merge_delta(inp, (err_prev,) + extra_grads)
+            p_delta_inp, p_delta_wrt = f_push_delta(inp, extra_grads)
             assert len(m_delta_inp) == len(p_delta_inp), "%i %i" % (len(m_delta_inp), len(p_delta_inp))
             assert len(m_delta_wrt) == len(p_delta_wrt)
             # m_delta_inp = [theano.printing.Print("m_delta_inp[%i]" % i)(m_delta_inp[i])
@@ -556,12 +555,10 @@ class HardStack(object):
             # Accumulate inp deltas, switching over push/merge decision.
             # TODO: these all should be inplace updates on shared variables!
             # TODO: Remove all these magic helpers
-            stacks = [stack_bwd_t, stack_bwd_t, None, extra_bwd_t]
+            stacks = (stack_bwd_t, stack_bwd_t, None) + extra_bwd
             new_stacks = {}
-            cursors = [t_c1, t_c2, None, t_c1]
-            pull = [False, True, False, True] # DEV HACKY
-            pulled = []
-            for stack, cursor, m_delta, p_delta, do_pull in zip(stacks, cursors, m_delta_inp, p_delta_inp, pull):
+            cursors = (t_c1, t_c2, None) + ((t_c1,) * len(extra_bwd))
+            for stack, cursor, m_delta, p_delta in zip(stacks, cursors, m_delta_inp, p_delta_inp):
                 if stack is None:
                     continue
                 base = new_stacks.get(stack, stack)
@@ -574,7 +571,6 @@ class HardStack(object):
                 new_stack = cuda_util.AdvancedIncSubtensor1Floats()(
                     base, delta, cursor)
                 new_stacks[stack] = new_stack
-            stack_bwd_next, extra_bwd_next = new_stacks[stack_bwd_t], new_stacks[extra_bwd_t]
 
             # Accumulate wrt deltas, switching over push/merge decision.
             new_accum_deltas = []
@@ -591,10 +587,10 @@ class HardStack(object):
             dE = cuda_util.AdvancedIncSubtensor1Floats()(
                     dE, (1. - masks[1]) * dE_push, buffer_ids_t)
 
-            stack_bwd_t = theano.printing.Print("stack_bwd_t")(stack_bwd_t)
-            extra_bwd_t = theano.printing.Print("extra_bwd_t")(extra_bwd_t)
-
-            return [stack_bwd_next, extra_bwd_next, dE] + new_accum_deltas
+            stack_bwd_next = new_stacks[stack_bwd_t]
+            updates = new_stacks
+            del updates[stack_bwd_t]
+            return [stack_bwd_next, dE] + new_accum_deltas, updates
 
         # TODO: These should come from forward pass -- not fixed -- in model
         # 1S, etc.
@@ -612,19 +608,19 @@ class HardStack(object):
         buf_ptrs = T.concatenate([T.zeros((1, batch_size,)),
                                   self.buf_ptrs[:-1]], axis=0)
 
-        outputs_info = [stack_bwd_init, extra_bwd_init, T.zeros_like(self.embeddings)]
+        outputs_info = [stack_bwd_init, T.zeros_like(self.embeddings)]
         outputs_info += [T.zeros(shape) for shape in grad_shapes]
 
         bscan_ret, _ = theano.scan(
                 step_b,
                 sequences=[ts_f, transitions_f, self.stack_2_ptrs, buf_ptrs],
                 outputs_info=outputs_info,
-                non_sequences=[id_buffer, self.final_stack],
+                non_sequences=extra_bwd_init + [id_buffer, self.final_stack],
                 go_backwards=True,
                 name="bwd")
 
-        stack_bwd, _, dE = bscan_ret[:3]
-        self.deltas = [deltas[-1] for deltas in bscan_ret[3:]]
+        stack_bwd, dE = bscan_ret[:2]
+        self.deltas = [deltas[-1] for deltas in bscan_ret[2:]]
         self.dE = dE[-1]
 
 

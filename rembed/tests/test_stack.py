@@ -378,7 +378,7 @@ class ThinStackTrackingBackpropTestCase(unittest.TestCase):
         p_delta = batch_subgraph_gradients(inputs, wrt, self.ghost_push_net)
 
         # Now build backprop, passing in our composition gradient.
-        stack.make_backprop_scan([(stack.final_aux_stack, self.model_dim)],
+        stack.make_backprop_scan([stack.final_aux_stack], [self.model_dim],
                                  error_signal,
                                  p_delta, m_delta,
                                  [self.W_track.get_value().shape,
