@@ -555,7 +555,6 @@ class HardStack(object):
             extra_bwd = accum_and_non_sequences[-2 - n_extras:-2]
             id_buffer, stack_final = accum_and_non_sequences[-2:]
 
-            t_f = theano.printing.Print("==================================")(t_f)
             err_prev = cuda_util.AdvancedSubtensor1Floats("B_errprev")(
                 stack_bwd_t, t_f * batch_size + stack_shift)
 
@@ -569,8 +568,6 @@ class HardStack(object):
             # merge at this timestep.
             t_c1 = (t_f - 1.0) * batch_size + stack_shift
             t_c2 = stack_2_ptrs_t
-            t_c1 = theano.printing.Print("t_c1")(t_c1)
-            t_c2 = theano.printing.Print("t_c2")(t_c2)
 
             # Find the two elements involved in the merge.
             # batch_size * model_dim
@@ -593,7 +590,6 @@ class HardStack(object):
                             for extra_inp_i in extra_inputs]
             extra_inps_t = [ifelse(T.eq(t_f, 0.0), zero_extra, extra_inp_i)
                             for extra_inp_i, zero_extra in zip(extra_inps_t, zero_extra_inps)]
-            # extra_inps_t[0] = theano.printing.Print("extra_inps_t[0]")(extra_inps_t[0])
 
             # Calculate deltas for this timestep.
             inp = (c1, c2, buffer_top_t) + tuple(extra_inps_t)
@@ -601,12 +597,6 @@ class HardStack(object):
             p_delta_inp, p_delta_wrt = f_push_delta(inp, extra_grads)
             assert len(m_delta_inp) == len(p_delta_inp), "%i %i" % (len(m_delta_inp), len(p_delta_inp))
             assert len(m_delta_wrt) == len(p_delta_wrt)
-            # m_delta_inp = [theano.printing.Print("m_delta_inp[%i]" % i)(m_delta_inp[i])
-            #                for i in range(len(m_delta_inp))]
-            # p_delta_inp = [theano.printing.Print("p_delta_inp[%i]" % i)(p_delta_inp[i])
-            #                for i in range(len(p_delta_inp))]
-            # m_delta_wrt = [theano.printing.Print("m_delta_wrt[%i]" % i)(m_delta_wrt[i])
-            #                for i in range(len(m_delta_wrt))]
 
             # Calculate deltas of dE for each element.
             dE_push = err_prev
@@ -649,7 +639,6 @@ class HardStack(object):
                 mask_i = masks[m_delta.ndim - 1]
                 # TODO: Is this at all efficient? (Bring back GPURowSwitch?)
                 delta = (mask_i * m_delta + (1. - mask_i) * p_delta).sum(axis=0)
-                delta = theano.printing.Print("delta_wrt[%i]" % i)(delta)
                 new_accum_deltas.append(accum_delta + delta)
 
             dE = cuda_util.AdvancedIncSubtensor1Floats()(
