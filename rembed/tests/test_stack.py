@@ -327,7 +327,7 @@ class ThinStackTrackingBackpropTestCase(unittest.TestCase):
             use_input_dropout=False)
 
     def _fake_stack_ff(self, stack):
-        """Fake a stack feedforward S S M S M with the given data."""
+        """Fake a stack feedforward S S M S M S S S M M M with the given data."""
 
         # seq_length * batch_size * emb_dim
         X_emb = stack.embeddings[self.X].dimshuffle(1, 0, 2)
@@ -345,12 +345,28 @@ class ThinStackTrackingBackpropTestCase(unittest.TestCase):
         c3, t3 = self.ghost_compose_net(X_emb[1], X_emb[0], X_emb[2], t2, squeeze=False,
                                         ret_hidden=True)
         self.c3 = c3
+        if stack.seq_length <= 3:
+            return locals()
 
         # Shift.
         self.t4 = t4 = self.ghost_push_net(c3, zero, X_emb[2], t3, squeeze=False)
 
         # Merge.
-        c5, _ = self.ghost_compose_net(X_emb[2], c3, X_emb[3], t4, squeeze=False)
+        c5, t5 = self.ghost_compose_net(X_emb[2], c3, X_emb[3], t4, squeeze=False)
+        if stack.seq_length <= 5:
+            return locals()
+
+        t6 = self.ghost_push_net(c5, zero, X_emb[3], t5, squeeze=False)
+
+        t7 = self.ghost_push_net(X_emb[3], c5, X_emb[4], t6, squeeze=False)
+
+        t8 = self.ghost_push_net(X_emb[4], X_emb[3], X_emb[5], t7, squeeze=False)
+
+        c9, t9 = self.ghost_compose_net(X_emb[5], X_emb[4], X_emb[6], t8, squeeze=False)
+
+        c10, t10 = self.ghost_compose_net(c9, X_emb[3], X_emb[6], t9, squeeze=False)
+
+        c11, t11 = self.ghost_compose_net(c10, c5, X_emb[6], t10, squeeze=False)
 
         return locals()
 
@@ -407,7 +423,7 @@ class ThinStackTrackingBackpropTestCase(unittest.TestCase):
 
         self._test_backprop(simulated_top, stack, X, transitions, y)
 
-    def test_backprop5(self):
+    def test_backprop_5(self):
         # Simulate a batch of two token sequences, each with the same
         # transition sequence
         X = np.array([[0, 1, 2, 3, 1], [2, 1, 3, 0, 1]], dtype=np.int32)
@@ -416,6 +432,18 @@ class ThinStackTrackingBackpropTestCase(unittest.TestCase):
 
         stack = self._build(5)
         simulated_top = self._fake_stack_ff(stack)["c5"]
+
+        self._test_backprop(simulated_top, stack, X, transitions, y)
+
+    def test_backprop_11(self):
+        """Check a valid 11-transition S S M S M S S S M M M sequence."""
+        X = np.array([[0, 1, 2, 3, 1, 3, 1, 0, 2, 2, 3],
+                      [2, 1, 0, 2, 2, 1, 0, 3, 1, 0, 2]], dtype=np.int32)
+        y = np.array([1, 0], dtype=np.int32)
+        transitions = np.tile([0, 0, 1, 0, 1, 0, 0, 0, 1, 1, 1], (2, 1)).astype(np.int32)
+
+        stack = self._build(11)
+        simulated_top = self._fake_stack_ff(stack)["c11"]
 
         self._test_backprop(simulated_top, stack, X, transitions, y)
 
