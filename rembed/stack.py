@@ -648,7 +648,7 @@ class HardStack(object):
 
                 mask_i = masks[m_delta.ndim - 1]
                 # TODO: Is this at all efficient? (Bring back GPURowSwitch?)
-                delta = (mask * m_delta + (1. - mask) * p_delta).sum(axis=0)
+                delta = (mask_i * m_delta + (1. - mask_i) * p_delta).sum(axis=0)
                 delta = theano.printing.Print("delta_wrt[%i]" % i)(delta)
                 new_accum_deltas.append(accum_delta + delta)
 
