@@ -462,11 +462,13 @@ class HardStack(object):
         stack_bwd_init = T.zeros((self.stack_size * self.batch_size, self.model_dim))
         stack_bwd_init = T.set_subtensor(stack_bwd_init[-self.batch_size:], error_signal)
 
+        extra_bwd = [T.zeros((self.stack_size * self.batch_size, dim))
+                     for _, dim in extra_inputs]
         extra_bwd_init = T.zeros((self.stack_size * self.batch_size, self.tracking_lstm_hidden_dim * 2))
 
         # Useful batch zero-constants.
         zero_stack = T.zeros((self.batch_size, self.model_dim))
-        zero_extra = T.zeros((self.batch_size, self.tracking_lstm_hidden_dim * 2))
+        zero_extras = [T.zeros((self.batch_size, dim)) for _, dim in extra_inputs]
 
         batch_size = self.batch_size
         batch_range = T.arange(batch_size)
@@ -487,8 +489,13 @@ class HardStack(object):
                 stack_bwd_t, t_f * batch_size + stack_shift)
 
             # Retrieve gradient of cost w.r.t. "extra" output
-            extra_grad = cuda_util.AdvancedSubtensor1Floats("B_extragrad")(
-                extra_bwd_t, t_f * batch_size + stack_shift)
+            # TODO support multiple
+            extra_bwd = [extra_bwd_t]
+            extra_grads = [
+                cuda_util.AdvancedSubtensor1Floats("B_extragrad_%i" % i)(
+                    extra_bwd_i, t_f * batch_size + stack_shift)
+                for i, extra_bwd_i in enumerate(extra_bwd)]
+            extra_grad = extra_grads[0]
             extra_grad = theano.printing.Print("extra_grad")(extra_grad)
 
             # Find the timesteps of the two elements involved in the potential
@@ -516,9 +523,9 @@ class HardStack(object):
 
             # Retrieve extra inputs from auxiliary stack.
             extra_inps_t = [cuda_util.AdvancedSubtensor1Floats("B_extra_inp")(aux_stack_i, t_c1)
-                            for aux_stack_i in extra_inputs]
+                            for aux_stack_i, _ in extra_inputs]
             extra_inps_t = [ifelse(T.eq(t_f, 0.0), zero_extra, extra_inp_i)
-                            for extra_inp_i in extra_inps_t]
+                            for extra_inp_i, zero_extra in zip(extra_inps_t, zero_extras)]
             # extra_inps_t[0] = theano.printing.Print("extra_inps_t[0]")(extra_inps_t[0])
 
             # Calculate deltas for this timestep.
@@ -566,10 +573,8 @@ class HardStack(object):
                 # cursor.
                 new_stack = cuda_util.AdvancedIncSubtensor1Floats()(
                     base, delta, cursor)
-                new_stacks[base] = new_stack
-                if do_pull:
-                    pulled.append(new_stack)
-            stack_bwd_next, extra_bwd_next = pulled
+                new_stacks[stack] = new_stack
+            stack_bwd_next, extra_bwd_next = new_stacks[stack_bwd_t], new_stacks[extra_bwd_t]
 
             # Accumulate wrt deltas, switching over push/merge decision.
             new_accum_deltas = []
