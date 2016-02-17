@@ -460,20 +460,6 @@ class ThinStackTrackingLSTMBackpropTestCase(unittest.TestCase):
         self.batch_size = 2
         self.num_classes = 2
 
-        embeddings = (np.arange(self.vocab_size)[:, np.newaxis]
-                .repeat(self.embedding_dim, axis=1).astype(np.float32) + 1.0)
-        W = theano.shared((np.array([[ 0.81020794,  0.39202386],
-                                    [ 0.04252092,  0.12962219],
-                                    [ 0.78306797,  0.81535813],
-                                    [ 0.86703663,  0.04581873],
-                                    [ 0.80502693,  0.08334766]],
-                                   dtype=np.float32) * 10).round() / 10., name="W")
-        b = theano.shared(np.array([1.0, 1.0], dtype=np.float32), name="b")
-
-        self.embeddings = embeddings
-        self.W = W
-        self.b = b
-
         self.vs = VariableStore()
 
         def compose_network(inp, hidden, *args, **kwargs):
@@ -483,14 +469,16 @@ class ThinStackTrackingLSTMBackpropTestCase(unittest.TestCase):
                 hidden = hidden[np.newaxis, :]
             # TODO maybe can just change the `axis` flag in the above case?
             conc = T.concatenate([hidden, inp], axis=1)
+
+            W = self.vs.add_param("W", (self.model_dim / 2 + self.model_dim * 2, self.model_dim))
+            b = self.vs.add_param("b", (self.model_dim,),
+                                  initializer=util.ZeroInitializer())
             return T.dot(conc, W) + b
         def track_network(state, inp, *args, **kwargs):
             if state.ndim == 1:
                 state = state[np.newaxis, :]
             if inp.ndim == 1:
                 inp = inp[np.newaxis, :]
-            state = theano.printing.Print("state", ("shape",))(state)
-            inp = theano.printing.Print("inp", ("shape",))(inp)
             return util.TrackingUnit(state, inp, self.model_dim * 3,
                                      self.model_dim / 2, self.vs, make_logits=False)
 
@@ -548,7 +536,6 @@ class ThinStackTrackingLSTMBackpropTestCase(unittest.TestCase):
             connect_tracking_comp=True,
             X=self.X,
             transitions=self.transitions,
-            initial_embeddings=self.embeddings,
             use_input_batch_norm=False,
             use_input_dropout=False)
 
