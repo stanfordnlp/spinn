@@ -201,11 +201,12 @@ class ThinStackBackpropTestCase(unittest.TestCase):
 
         # Build composition gradient subgraph.
         m_delta1 = batch_subgraph_gradients([1, 1], [self.W, self.b], self.ghost_compose_net)
-        m_delta = lambda (c1, c2, buffer_top), (grad, _): m_delta1([c1, c2], [grad])
-        p_delta = lambda inps, grads: (grads, [T.zeros((self.batch_size, 1, self.model_dim)), T.zeros((self.batch_size, 1))])
+        m_delta = lambda (c1, c2, buffer_top), (grad,): m_delta1([c1, c2], [grad])
+        p_delta = lambda inps, grads: ([T.zeros((self.batch_size, self.model_dim))] * 2,
+                                       [T.zeros((self.batch_size, 1, self.model_dim)), T.zeros((self.batch_size, 1))])
 
         # Now build backprop, passing in our composition gradient.
-        self.stack.make_backprop_scan([], error_signal, p_delta, m_delta,
+        self.stack.make_backprop_scan([], [], error_signal, p_delta, m_delta,
                                       [self.W.get_value().shape,
                                        self.b.get_value().shape])
         f = theano.function(
