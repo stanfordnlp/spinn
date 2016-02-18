@@ -150,7 +150,7 @@ class ThinStackBackpropTestCase(unittest.TestCase, BackpropTestMixin):
 
         self.compose_network = lambda inp, *args, **kwargs: T.dot(inp, W) + b
 
-        def ghost_compose_net(c1, c2):
+        def ghost_compose_net(c1, c2, buf_top):
             if c1.ndim == 1: c1 = c1[np.newaxis, :]
             if c2.ndim == 1: c2 = c2[np.newaxis, :]
             return self.compose_network(T.concatenate([c1, c2], axis=1)).squeeze()
@@ -196,16 +196,16 @@ class ThinStackBackpropTestCase(unittest.TestCase, BackpropTestMixin):
         f_simulated = theano.function(
             [self.X, self.y],
             (simulated_cost, T.grad(simulated_cost, self.W),
-             T.grad(simulated_cost, self.b)))
+             T.grad(simulated_cost, self.b),
+             T.grad(simulated_cost, self.stack.embeddings)))
 
         top = self.stack.final_stack[-self.batch_size:]
         cost = self._make_cost(top)
         error_signal = T.grad(cost, top)
 
         # Build composition gradient subgraph.
-        m_delta1 = batch_subgraph_gradients([1, 1], [self.W, self.b], self.ghost_compose_net)
-        m_delta = lambda (c1, c2, buffer_top), (grad,): m_delta1([c1, c2], [grad])
-        p_delta = lambda inps, grads: ([T.zeros((self.batch_size, self.model_dim))] * 2,
+        m_delta = batch_subgraph_gradients([1, 1, 1], [self.W, self.b], self.ghost_compose_net)
+        p_delta = lambda inps, grads: ([T.zeros((self.batch_size, self.model_dim))] * 3,
                                        [T.zeros((self.batch_size, 1, self.model_dim)), T.zeros((self.batch_size, 1))])
 
         # Now build backprop, passing in our composition gradient.
