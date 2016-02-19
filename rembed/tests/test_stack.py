@@ -214,14 +214,15 @@ class ThinStackBackpropTestCase(unittest.TestCase, BackpropTestMixin):
                                        self.b.get_value().shape])
         f = theano.function(
             [self.X, self.transitions, self.y],
-            (cost, self.stack.deltas[0], self.stack.deltas[1]))
+            (cost, self.stack.deltas[0], self.stack.deltas[1], self.stack.dE))
 
-        b_cost_sim, b_dW_sim, b_db_sim = f_simulated(X, y)
-        b_cost, b_dW, b_db = f(X, transitions, y)
+        b_cost_sim, b_dW_sim, b_db_sim, b_dE_sim = f_simulated(X, y)
+        b_cost, b_dW, b_db, b_dE = f(X, transitions, y)
 
         np.testing.assert_almost_equal(b_cost_sim, b_cost)
         np.testing.assert_almost_equal(b_dW_sim, b_dW)
         np.testing.assert_almost_equal(b_db_sim, b_db)
+        np.testing.assert_almost_equal(b_dE_sim, b_dE)
 
 
 class ThinStackTrackingBackpropTestCase(unittest.TestCase, BackpropTestMixin):
@@ -323,21 +324,19 @@ class ThinStackTrackingBackpropTestCase(unittest.TestCase, BackpropTestMixin):
         t0 = T.zeros((self.batch_size, self.model_dim))
 
         # Shift.
-        self.t1 = t1 = self.ghost_push_net(zero, zero, X_emb[0], t0, squeeze=False)
+        t1 = self.ghost_push_net(zero, zero, X_emb[0], t0, squeeze=False)
 
         # Shift.
-        self.t2 = t2 = self.ghost_push_net(X_emb[0], zero, X_emb[1], t1, squeeze=False)
+        t2 = self.ghost_push_net(X_emb[0], zero, X_emb[1], t1, squeeze=False)
 
         # Merge.
-        #t2 = theano.gradient.consider_constant(t2)
-        c3, t3 = self.ghost_compose_net(X_emb[1], X_emb[0], X_emb[2], t2, squeeze=False,
-                                        ret_hidden=True)
+        c3, t3 = self.ghost_compose_net(X_emb[1], X_emb[0], X_emb[2], t2, squeeze=False)
         self.c3 = c3
         if stack.seq_length <= 3:
             return locals()
 
         # Shift.
-        self.t4 = t4 = self.ghost_push_net(c3, zero, X_emb[2], t3, squeeze=False)
+        t4 = self.ghost_push_net(c3, zero, X_emb[2], t3, squeeze=False)
 
         # Merge.
         c5, t5 = self.ghost_compose_net(X_emb[2], c3, X_emb[3], t4, squeeze=False)
@@ -359,13 +358,14 @@ class ThinStackTrackingBackpropTestCase(unittest.TestCase, BackpropTestMixin):
         return locals()
 
     def _test_backprop(self, sim_top, stack, X, transitions, y):
-        all_params = [var for name, var in self.vs.vars.iteritems()
-                      if name != "embeddings"]
-        all_names = [name for name in self.vs.vars if name != "embeddings"]
+        rel_vars = [(name, var) for name, var in self.vs.vars.iteritems()
+                    if name != "embeddings"]
 
         sim_cost = self._make_cost(sim_top)
-        all_grads = [T.grad(sim_cost, var) for var in all_params]
-        f_sim = theano.function([self.X, self.y], [sim_top, sim_cost] + all_grads)
+        all_grads = [T.grad(sim_cost, var) for _, var in rel_vars]
+        f_sim = theano.function(
+            [self.X, self.y],
+            [sim_top, sim_cost, T.grad(sim_cost, stack.embeddings)] + all_grads)
 
         top = stack.final_stack[-self.batch_size:]
         cost = self._make_cost(top)
@@ -373,19 +373,20 @@ class ThinStackTrackingBackpropTestCase(unittest.TestCase, BackpropTestMixin):
 
         # Build step gradient subgraph.
         inputs = [1, 1, 1, 1] # 4 inputs, each of ndim 1
-        wrt = all_params
+        wrt = [var for _, var in rel_vars]
         m_delta = batch_subgraph_gradients(inputs, wrt, self.ghost_compose_net)
         p_delta = batch_subgraph_gradients(inputs, wrt, self.ghost_push_net)
 
         # Now build backprop, passing in our composition gradient.
         stack.make_backprop_scan([stack.final_aux_stack], [self.model_dim],
                                  error_signal, p_delta, m_delta,
-                                 [param.get_value().shape for param in all_params])
+                                 [param.get_value().shape for _, param in rel_vars])
         f = theano.function(
             [self.X, self.transitions, self.y],
-            [top, cost] + stack.deltas)
+            [top, cost, stack.dE] + stack.deltas,
+            updates=stack.bscan_updates)
 
-        checks = ["top", "cost"] + ["d/%s" % name for name in all_names]
+        checks = ["top", "cost", "d/embeddings"] + ["d/%s" % name for name, _ in rel_vars]
         sim = f_sim(X, y)
         real = f(X, transitions, y)
 

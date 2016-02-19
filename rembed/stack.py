@@ -550,6 +550,7 @@ class HardStack(object):
                    stack_bwd_t, dE,
                    # rest
                    *accum_and_non_sequences):
+            # Separate the accum arguments from the non-sequence arguments.
             n_extras = len(extra_bwd_init)
             accum_deltas = accum_and_non_sequences[:-2 - n_extras]
             extra_bwd = accum_and_non_sequences[-2 - n_extras:-2]
@@ -641,8 +642,10 @@ class HardStack(object):
                 delta = (mask_i * m_delta + (1. - mask_i) * p_delta).sum(axis=0)
                 new_accum_deltas.append(accum_delta + delta)
 
+            # Save gradients w.r.t. buffer top.
+            # TODO unify with treatment of inputs above
             dE = cuda_util.AdvancedIncSubtensor1Floats()(
-                    dE, (1. - masks[1]) * dE_push, buffer_ids_t)
+                dE, masks[1] * m_delta_inp[2] + (1. - masks[1]) * (p_delta_inp[2] + dE_push), buffer_ids_t)
 
             stack_bwd_next = new_stacks[stack_bwd_t]
             updates = new_stacks
@@ -673,7 +676,7 @@ class HardStack(object):
         outputs_info += [T.patternbroadcast(T.zeros(shape), (False,) * len(shape))
                          for shape in wrt_shapes]
 
-        bscan_ret, _ = theano.scan(
+        bscan_ret, self.bscan_updates = theano.scan(
                 step_b,
                 sequences=[ts_f, transitions_f, self.stack_2_ptrs, buf_ptrs],
                 outputs_info=outputs_info,
