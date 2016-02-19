@@ -369,7 +369,7 @@ def local_gpu_advanced_subtensor1_floats(node):
     if node.op.__class__ is AdvancedSubtensor1Floats:
         x = node.inputs[0]
         coords = node.inputs[1:]
-        print x.owner.op, x.type, node.op._tag
+        # print x.owner.op, x.type, node.op._tag # DEV
         if (x.owner and isinstance(x.owner.op, HostFromGpu) and
                 x.dtype == "float32"):
             gpu_x, = x.owner.inputs
