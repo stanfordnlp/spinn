@@ -82,7 +82,9 @@ class SharedRecurrenceMixin(object):
         inp = T.concatenate([tracking_hidden, buffer_top], axis=1)
         inp_dim = self._spec.word_embedding_dim + self.tracking_lstm_hidden_dim
         layer = util.ReLULayer if self.context_sensitive_use_relu else util.Linear
-        return layer(inp, inp_dim, self._spec.model_dim, self._vs)
+        return layer(inp, inp_dim, self._spec.model_dim, self._vs,
+                     name="context_comb_unit", use_bias=True,
+                     initializer=util.HeKaimingInitializer())
 
     def _tracking_lstm_predict(self, inputs, network):
         c1, c2, buffer_top, tracking_hidden = inputs[:4]
