@@ -586,7 +586,9 @@ class HardStack(object):
             c2_mask = (t_c2 < 0).dimshuffle(0, "x")
             c2 = c2_mask * zero_stack + (1. - c2_mask) * c2
 
+            # Guard against more indexing edge cases.
             c1 = ifelse(T.eq(t_f, 0.0), zero_stack, c1)
+            # TODO is this one covered by c2_mask above? Think so.
             c2 = ifelse(t_f <= 1.0, zero_stack, c2)
 
             # Find buffer top.
@@ -603,8 +605,12 @@ class HardStack(object):
             inp = (c1, c2, buffer_top_t) + tuple(extra_inps_t)
             m_delta_inp, m_delta_wrt = f_merge_delta(inp, (err_prev,) + extra_grads)
             p_delta_inp, p_delta_wrt = f_push_delta(inp, extra_grads)
-            assert len(m_delta_inp) == len(p_delta_inp), "%i %i" % (len(m_delta_inp), len(p_delta_inp))
-            assert len(m_delta_wrt) == len(p_delta_wrt)
+
+            # Check that delta function outputs match (at least in number).
+            assert len(m_delta_inp) == len(p_delta_inp), \
+                "%i %i" % (len(m_delta_inp), len(p_delta_inp))
+            assert len(m_delta_wrt) == len(p_delta_wrt), \
+                "%i %i" % (len(m_delta_wrt), len(p_delta_wrt))
 
             # Calculate deltas of dE for each element.
             dE_push = err_prev
@@ -624,8 +630,6 @@ class HardStack(object):
             new_stacks = {}
             cursors = (t_c1, t_c2, buffer_ids_t) + ((t_c1,) * len(extra_bwd))
             for stack, cursor, m_delta, p_delta in zip(stacks, cursors, m_delta_inp, p_delta_inp):
-                if stack is None:
-                    continue
                 base = new_stacks.get(stack, stack)
 
                 mask_i = masks[m_delta.ndim - 1]
@@ -640,8 +644,12 @@ class HardStack(object):
             # Accumulate wrt deltas, switching over push/merge decision.
             new_accum_deltas = []
             for i, (accum_delta, m_delta, p_delta) in enumerate(zip(accum_deltas, m_delta_wrt, p_delta_wrt)):
-                assert accum_delta.ndim == m_delta.ndim - 1, "%i %i" % (accum_delta.ndim, m_delta.ndim)
-                assert accum_delta.ndim == p_delta.ndim - 1, "%i %i" % (accum_delta.ndim, p_delta.ndim)
+                # Check that tensors returned by delta functions match shape
+                # expectations.
+                assert accum_delta.ndim == m_delta.ndim - 1, \
+                    "%i %i" % (accum_delta.ndim, m_delta.ndim)
+                assert accum_delta.ndim == p_delta.ndim - 1, \
+                    "%i %i" % (accum_delta.ndim, p_delta.ndim)
 
                 mask_i = masks[m_delta.ndim - 1]
                 # TODO: Is this at all efficient? (Bring back GPURowSwitch?)
