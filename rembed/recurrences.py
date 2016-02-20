@@ -26,6 +26,7 @@ class Recurrence(object):
         self.extra_outputs = []
 
         self.predicts_transitions = False
+        self.uses_transitions = False
 
     def forward(self, inputs, **constants):
         raise NotImplementedError("abstract method")
@@ -133,7 +134,8 @@ class Model1(Recurrence, SharedRecurrenceMixin):
         self.extra_outputs = [1]
         if use_tracking_lstm:
             self.extra_outputs.append(1)
-        self.predicts_transitions = False
+        self.predicts_transitions = True
+        self.uses_transitions = False
 
         self._compose_network = compose_network
         self.use_tracking_lstm = use_tracking_lstm
@@ -170,3 +172,9 @@ class Model1(Recurrence, SharedRecurrenceMixin):
         else:
             return [], [merge_value], actions_t
 
+
+class Model2(Model1, SharedRecurrenceMixin):
+
+    def __init__(self, spec, vs, compose_network, **kwargs):
+        super(Model2, self).__init__(spec, vs, compose_network, **kwargs)
+        self.uses_transitions = True
