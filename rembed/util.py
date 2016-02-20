@@ -6,7 +6,9 @@ import random
 
 import numpy as np
 import theano
-from theano import tensor as T
+from theano import ifelse, tensor as T
+from theano.compile.sharedvalue import SharedVariable
+from theano.sandbox.cuda import HostFromGpu
 from theano.sandbox.rng_mrg import MRG_RandomStreams
 
 from rembed import cuda_util
@@ -509,6 +511,36 @@ def batch_subgraph_gradients(g_in, wrt, f_g_out, name="batch_subgraph_grad"):
         return ds[:n_in], ds[n_in:]
 
     return batch_gradients
+
+
+def prepare_updates_dict(updates):
+    """
+    Prepare a Theano `updates` dictionary.
+
+    Ensure that both keys and values are valid entries.
+    NB, this function is heavily coupled with its clients, and not intended for
+    general use..
+    """
+
+    def prepare_key(key, val):
+        if not isinstance(key, SharedVariable):
+            if isinstance(key.owner.inputs[0], SharedVariable):
+                # Extract shared from Update(shared)
+                return key.owner.inputs[0]
+            elif key.owner.inputs[0].owner.op.__class__ is HostFromGpu:
+                if isinstance(key.owner.inputs[0].owner.inputs[0], SharedVariable):
+                    # Extract shared from Update(HostFromGpu(shared))
+                    return key.owner.inputs[0].owner.inputs[0]
+            elif key.owner.op.__class__ is ifelse.IfElse:
+                # Assume that 'true' condition of ifelse involves the intended
+                # shared variable.
+                return prepare_key(key.owner.inputs[1], val)
+
+            raise ValueError("Invalid updates dict key/value: %s / %s"
+                             % (key, val))
+        return key
+
+    return {prepare_key(key, val): val for key, val in updates.iteritems()}
 
 
 def TrimDataset(dataset, seq_length, eval_mode=False, sentence_pair_data=False):

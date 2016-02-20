@@ -204,6 +204,10 @@ class HardStack(object):
         self._stack_orig = theano.shared(stack_init, borrow=False, name="stack_orig")
         self.stack = theano.shared(stack_init, borrow=False, name="stack")
 
+        stack_bwd_init = np.zeros((self.stack_size * self.batch_size, self.model_dim), dtype=np.float32)
+        self._stack_bwd_orig = theano.shared(stack_bwd_init, borrow=False, name="stack_bwd_orig")
+        self.stack_bwd = theano.shared(stack_bwd_init, borrow=False, name="stack_bwd")
+
         # TODO: don't fix model_dim
         aux_stack_init = np.zeros((self.stack_size * self.batch_size, self.tracking_lstm_hidden_dim * 2), dtype=np.float32)
         self._aux_stack_orig = theano.shared(aux_stack_init, borrow=False, name="aux_stack_orig")
@@ -527,9 +531,6 @@ class HardStack(object):
             raise RuntimeError("self._make_scan (forward pass) must be defined "
                                "before self.make_backprop_scan is called")
 
-        stack_bwd_init = T.zeros((self.stack_size * self.batch_size, self.model_dim))
-        stack_bwd_init = T.set_subtensor(stack_bwd_init[-self.batch_size:], error_signal)
-
         extra_bwd_init = [theano.shared(np.zeros((self.stack_size * self.batch_size, dim), dtype=np.float32),
                                         borrow=False, name="bprop/bwd/%i" % i)
                           for i, dim in enumerate(extra_outputs)]
@@ -547,17 +548,24 @@ class HardStack(object):
         def step_b(# sequences
                    t_f, transitions_t_f, stack_2_ptrs_t, buffer_cur_t,
                    # outputs_info (inplace update is okay)
-                   stack_bwd_t, dE,
+                   dE,
                    # rest
                    *accum_and_non_sequences):
             # Separate the accum arguments from the non-sequence arguments.
             n_extras = len(extra_bwd_init)
-            accum_deltas = accum_and_non_sequences[:-2 - n_extras]
+            accum_deltas = accum_and_non_sequences[:-2 - n_extras - 1]
+            stack_bwd_t = accum_and_non_sequences[-2 - n_extras - 1]
             extra_bwd = accum_and_non_sequences[-2 - n_extras:-2]
             id_buffer, stack_final = accum_and_non_sequences[-2:]
 
+            # At first iteration, drop the external error signal into the main
+            # backward stack.
+            stack_bwd_next = ifelse(T.eq(t_f, self.seq_length - 1),
+                                    T.set_subtensor(stack_bwd_t[-self.batch_size:], error_signal),
+                                    stack_bwd_t)
+
             err_prev = cuda_util.AdvancedSubtensor1Floats("B_errprev")(
-                stack_bwd_t, t_f * batch_size + stack_shift)
+                stack_bwd_next, t_f * batch_size + stack_shift)
 
             # Retrieve gradient of cost w.r.t. "extra" output
             extra_grads = tuple([
@@ -614,7 +622,7 @@ class HardStack(object):
             # Accumulate inp deltas, switching over push/merge decision.
             # TODO: these all should be inplace updates on shared variables!
             # TODO: Remove all these magic helpers
-            stacks = (stack_bwd_t, stack_bwd_t, None) + extra_bwd
+            stacks = (stack_bwd_next, stack_bwd_next, None) + extra_bwd
             new_stacks = {}
             cursors = (t_c1, t_c2, None) + ((t_c1,) * len(extra_bwd))
             for stack, cursor, m_delta, p_delta in zip(stacks, cursors, m_delta_inp, p_delta_inp):
@@ -644,13 +652,11 @@ class HardStack(object):
 
             # Save gradients w.r.t. buffer top.
             # TODO unify with treatment of inputs above
-            dE = cuda_util.AdvancedIncSubtensor1Floats()(
-                dE, masks[1] * m_delta_inp[2] + (1. - masks[1]) * (p_delta_inp[2] + dE_push), buffer_ids_t)
+            dE_t = masks[1] * m_delta_inp[2] + (1. - masks[1]) * (p_delta_inp[2] + dE_push)
+            dE = cuda_util.AdvancedIncSubtensor1Floats()(dE, dE_t, buffer_ids_t)
 
-            stack_bwd_next = new_stacks[stack_bwd_t]
-            updates = new_stacks
-            del updates[stack_bwd_t]
-            return [stack_bwd_next, dE] + new_accum_deltas, updates
+            updates = util.prepare_updates_dict(new_stacks)
+            return [dE] + new_accum_deltas, updates
 
         # TODO: These should come from forward pass -- not fixed -- in model
         # 1S, etc.
@@ -668,7 +674,7 @@ class HardStack(object):
         buf_ptrs = T.concatenate([T.zeros((1, batch_size,)),
                                   self.buf_ptrs[:-1]], axis=0)
 
-        outputs_info = [stack_bwd_init, T.zeros_like(self.embeddings)]
+        outputs_info = [T.zeros_like(self.embeddings)]
 
         # The `patternbroadcast` call below prevents any of the alloc axes from
         # being broadcastable. (Trust the client -- they should give us the
@@ -680,13 +686,12 @@ class HardStack(object):
                 step_b,
                 sequences=[ts_f, transitions_f, self.stack_2_ptrs, buf_ptrs],
                 outputs_info=outputs_info,
-                non_sequences=extra_bwd_init + [id_buffer, self.final_stack],
+                non_sequences=[self.stack_bwd] + extra_bwd_init + [id_buffer, self.final_stack],
                 go_backwards=True,
                 name="stack_bwd")
 
-        stack_bwd, dE = bscan_ret[:2]
-        self.deltas = [deltas[-1] for deltas in bscan_ret[2:]]
-        self.dE = dE[-1]
+        self.deltas = [deltas[-1] for deltas in bscan_ret[1:]]
+        self.dE = bscan_ret[0][-1]
 
 
 class Model0(HardStack):
