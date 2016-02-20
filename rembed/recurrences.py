@@ -29,6 +29,37 @@ class Recurrence(object):
         self.uses_transitions = False
 
     def forward(self, inputs, **constants):
+        """
+        Computes push and merge results for a single timestep.
+
+        Args:
+            inputs: A tuple of inputs to the recurrence. At minimum this
+                contains three elements: `(stack_1, stack_2, buffer_top)`.
+                A recurrence which has `N` extra outputs will also receive
+                all `N` outputs from the previous timestep concatenated to
+                this tuple, e.g.
+
+                    (stack_1, stack_2, buffer_top,
+                     prev_output_1, prev_output_2, ...)
+
+                Each input is a batch of values, with batch_size as the leading
+                axis.
+            constants:
+                TBD
+
+        Returns:
+            push_outputs: A list of batch outputs for the case in which the
+                current op is a push. This list should be `self.extra_outputs`
+                long.
+            merge_outputs: A list of batch outputs for the case in which the
+                current op is a merge. This list should be
+                `1 + self.extra_outputs` long. (The first element should be
+                the result of merging the stack top values, a batch tensor of
+                shape `batch_size * self._spec.model_dim`.)
+            actions: (Only necessary if `self.predicts_transitions` is `True`.)
+                A batch of logits over stack actions at this timestep (of shape
+                `batch_size * num_actions`).
+        """
         raise NotImplementedError("abstract method")
 
 
