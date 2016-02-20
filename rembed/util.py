@@ -161,11 +161,21 @@ class VariableStore(object):
             cPickle.dump(var, save_file, -1)
         save_file.close()
 
-    def load_checkpoint(self, filename="vs_ckpt", keys=None, num_extra_vars=0):
+    def load_checkpoint(self, filename="vs_ckpt", keys=None, num_extra_vars=0, skip_saved_unsavables=False):
+        if skip_saved_unsavables:
+            keys = self.vars
+        else:
         if not keys:
             keys = self.savable_vars
         save_file = open(filename)
         for key in keys:
+            if skip_saved_unsavables and key not in self.savable_vars:
+                if self.logger:
+                    full_name = "%s/%s" % (self.prefix, key)
+                    self.logger.Log(
+                        "Not restoring variable " + full_name, level=self.logger.DEBUG)
+                _ = cPickle.load(save_file) # Discard
+            else:
             if self.logger:
                 full_name = "%s/%s" % (self.prefix, key)
                 self.logger.Log(
@@ -319,6 +329,37 @@ def TrackingUnit(state_prev, inp, inp_dim, hidden_dim, vs, name="track_unit", ma
         logits = 0.0
 
     return state, logits
+
+def AttentionUnit(attention_state_prev, current_lstm_state, premise_stack_tops, model_dim, 
+                    vs, name="attention_unit", initializer=None):
+    """
+    Dimension notation:
+    B : Batch size
+    k : Model dim
+    L : num_transitions
+    """
+    W_y = vs.add_param("%s_W_y" % name, (model_dim, model_dim), initializer=initializer)
+    W_h = vs.add_param("%s_W_h" % name, (model_dim, model_dim), initializer=initializer)
+    W_r = vs.add_param("%s_W_r" % name, (model_dim, model_dim), initializer=initializer)
+    W_t = vs.add_param("%s_W_t" % name, (model_dim, model_dim), initializer=initializer)
+    w = vs.add_param("%s_w" % name, (model_dim,), initializer=initializer)
+
+    W_h__h_t = T.dot(current_lstm_state, W_h)
+    W_r__r_t_prev = T.dot(attention_state_prev, W_r)
+    # Shape: L x B x k
+    M_t = T.tanh(T.dot(premise_stack_tops, W_y) + (W_h__h_t + W_r__r_t_prev))
+    # Shape: B x L
+    alpha_t = T.nnet.softmax(T.dot(M_t, w).T)
+    # Shape B x k
+    Y__alpha_t = T.sum(premise_stack_tops * alpha_t.T[:, :, np.newaxis], axis=0) 
+    r_t = Y__alpha_t + T.tanh(T.dot(attention_state_prev, W_t))
+    return r_t
+
+def AttentionUnitFinalRepresentation(final_attention_state, final_stack_top, model_dim, vs, initializer=None, name="attention_unit_final"):
+    W_p = vs.add_param("%s_W_p" % "attention_unit_end", (model_dim, model_dim), initializer=initializer)
+    W_x = vs.add_param("%s_W_x" % "attention_unit_end", (model_dim, model_dim), initializer=initializer)
+    h_final = T.tanh(T.dot(final_attention_state, W_p) + T.dot(final_stack_top, W_x))
+    return h_final
 
 def MLP(inp, inp_dim, outp_dim, vs, layer=ReLULayer, hidden_dims=None,
         name="mlp", initializer=None):
@@ -650,7 +691,7 @@ def MakeEvalIterator(sources, batch_size):
     start = -batch_size
     while True:
         start += batch_size
-        if start > dataset_size:
+        if start >= dataset_size:
             break
         data_iter.append(tuple(source[start:start + batch_size]
                                for source in sources))

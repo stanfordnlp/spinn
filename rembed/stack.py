@@ -77,7 +77,11 @@ class HardStack(object):
                  tracking_lstm_hidden_dim=8,
                  connect_tracking_comp=False,
                  context_sensitive_shift=False,
-                 context_sensitive_use_relu=False):
+                 context_sensitive_use_relu=False,
+                 use_attention=False,
+                 premise_stack_tops=None,
+                 attention_unit=None,
+                 is_hypothesis=False):
         """
         Construct a HardStack.
 
@@ -97,7 +101,7 @@ class HardStack(object):
               with dropout (1.0) or to act as an eval model with rescaling (0.0).
             ground_truth_transitions_visible: A Theano scalar. If set (1.0), allow the model access
               to ground truth transitions. This can be disabled at evaluation time to force Model 1
-              (or 12SS) to evaluate in the Model 2 style with predicted transitions. Has no effect
+              (or 2S) to evaluate in the Model 2 style with predicted transitions. Has no effect
               on Model 0.
             vs: VariableStore instance for parameter storage
             prediction_and_tracking_network: Blocks-like function which either maps values
@@ -127,6 +131,13 @@ class HardStack(object):
                 vector will be used to calculate the vector that will be pushed onto the stack
             context_sensitive_use_relu: If True, a ReLU layer will be used while doing context
                 sensitive shift, otherwise a Linear layer will be used
+            use_attention: Use attention over premise tree nodes to obtain sentence representation (SNLI)
+            premise_stack_tops: Tokens located on the top of premise stack. Used only when use_attention
+                is set to True (SNLI)
+            attention_unit: Function to implement the recurrent attention unit.
+                Takes in the current attention state, current hypothesis stack top, all premise stack tops
+                and returns the next attention state
+            is_hypothesis: Whether we're processing the premise or the hypothesis (for SNLI)
         """
 
         self.model_dim = model_dim
@@ -173,6 +184,14 @@ class HardStack(object):
         assert (use_tracking_lstm or not context_sensitive_shift), \
             "Must use tracking LSTM while doing context sensitive shift"
         self.context_sensitive_use_relu = context_sensitive_use_relu
+        # Use constituent-by-constituent attention - true for both premise and hypothesis stacks
+        self.use_attention = use_attention
+        # Stores premise stack tops; none for the premise stack
+        self.premise_stack_tops = premise_stack_tops
+        # Attention unit
+        self._attention_unit = attention_unit
+        # Check whether we're processing the hypothesis or the premise
+        self.is_hypothesis = is_hypothesis
 
         self._make_params()
         self._make_shared()
@@ -194,7 +213,8 @@ class HardStack(object):
             self.embeddings = self._vs.add_param(
                     "embeddings", (self.vocab_size, self.word_embedding_dim),
                     initializer=EmbeddingInitializer,
-                    trainable=False)
+                    trainable=False,
+                    savable=False)
         else:
             self.embeddings = self._vs.add_param(
                 "embeddings", (self.vocab_size, self.word_embedding_dim))
@@ -234,8 +254,8 @@ class HardStack(object):
         self.transitions = self.transitions or T.imatrix("transitions")
 
     def _step(self, t, t_f, transitions_t, transitions_t_f, ss_mask_gen_matrix_t,
-              buffer_cur_t, tracking_hidden, buffer,
-              ground_truth_transitions_visible):
+              buffer_cur_t, tracking_hidden, attention_hidden, buffer,
+              ground_truth_transitions_visible, premise_stack_tops):
         batch_size, _ = self.X.shape
 
         # Extract top buffer values.
@@ -330,6 +350,13 @@ class HardStack(object):
             t, t_f, self.stack, buffer_top_t, merge_value, self.queue, self.cursors,
             mask, self.batch_size, self._stack_shift, self._cursors_shift)
 
+        # If attention is to be used and premise_stack_tops is not None i.e.
+        # we're processing the hypothesis- Calculate the attention weighed representation
+        if self.use_attention and self.is_hypothesis:
+            attention_hidden = self._attention_unit(attention_hidden, stack_next[:, 0], premise_stack_tops,
+                self.model_dim, self._vs, name="attention_unit")
+        # premise_stack_tops.shape[0]
+
         # Move buffer cursor as necessary. Since mask == 1 when merge, we
         # should increment each buffer cursor by 1 - mask.
         buffer_cur_next = buffer_cur_t + (1 - transitions_t_f)
@@ -339,9 +366,9 @@ class HardStack(object):
                 self.aux_stack, tracking_hidden, t_f * self.batch_size + self._stack_shift)
 
         if self._predict_transitions:
-            ret_val = buffer_cur_next, tracking_hidden, actions_t
+            ret_val = buffer_cur_next, tracking_hidden, attention_hidden, actions_t
         else:
-            ret_val = buffer_cur_next, tracking_hidden, stack_2_ptrs
+            ret_val = buffer_cur_next, tracking_hidden, attention_hidden, stack_2_ptrs
 
         if not self.interpolate:
             # Use ss_mask as a redundant return value.
@@ -410,11 +437,18 @@ class HardStack(object):
         else:
             hidden_init = DUMMY
 
-        # Set up the output list for scanning over _step().
-        if self._predict_transitions:
-            outputs_info = [stack_init, buffer_cur_init, hidden_init, None]
+        # Initialize the attention representation if needed
+        if self.use_attention:
+            attention_init = T.zeros((batch_size, self.model_dim))
         else:
-            outputs_info = [buffer_cur_init, hidden_init, None]
+            attention_init = DUMMY
+
+        # Set up the output list for scanning over _step().
+        # Final `None` entry is for accumulating `stack_2_ptr` values.
+        if self._predict_transitions:
+            outputs_info = [stack_init, buffer_cur_init, hidden_init, attention_init, None]
+        else:
+            outputs_info = [buffer_cur_init, hidden_init, attention_init, None]
 
         # Prepare data to scan over.
         sequences = [T.arange(transitions.shape[0]),
@@ -431,6 +465,12 @@ class HardStack(object):
             # Take in the RV sequqnce as a dummy output. This is
             # done to avaid defining another step function.
             outputs_info = [DUMMY] + outputs_info
+
+        non_sequences = [buffer_t, self.ground_truth_transitions_visible]
+        if self.use_attention and self.is_hypothesis:
+            non_sequences = non_sequences + [self.premise_stack_tops]
+        else:
+            non_sequences = non_sequences + [DUMMY]
 
         scan_ret, self.scan_updates = theano.scan(
                 self._step,
@@ -449,7 +489,14 @@ class HardStack(object):
 
         self.transitions_pred = None
         if self._predict_transitions:
-            self.transitions_pred = scan_ret[-1].dimshuffle(1, 0, 2)
+            self.transitions_pred = scan_ret[0][-1].dimshuffle(1, 0, 2)
+
+        # TODO(Raghav): update to work with new stack representation
+        if self.use_attention and not self.is_hypothesis:
+            # store the stack top at each step as an attribute
+            self.stack_tops = scan_ret[0][stack_ind][:,:,0,:].reshape((max_stack_size, batch_size, self.model_dim))
+        if self.use_attention and self.is_hypothesis:
+            self.final_weighed_representation = util.AttentionUnitFinalRepresentation(scan_ret[0][stack_ind+3][-1], self.embeddings, self.model_dim, self._vs)
 
 
     def make_backprop_scan(self, extra_inputs, extra_outputs, error_signal,
@@ -738,6 +785,12 @@ class Model0(HardStack):
         kwargs["predict_transitions"] = False
         kwargs["train_with_predicted_transitions"] = False
         kwargs["interpolate"] = False
+
+        use_attention = kwargs.get("use_attention", False)
+        if use_attention:
+            kwargs["attention_unit"] = util.AttentionUnit
+        else:
+            kwargs["attention_unit"] = None
         super(Model0, self).__init__(*args, **kwargs)
 
 
@@ -754,6 +807,11 @@ class Model1(HardStack):
         kwargs["predict_transitions"] = True
         kwargs["train_with_predicted_transitions"] = False
         kwargs["interpolate"] = False
+        use_attention = kwargs.get("use_attention", False)
+        if use_attention:
+            kwargs["attention_unit"] = util.AttentionUnit
+        else:
+            kwargs["attention_unit"] = None
         super(Model1, self).__init__(*args, **kwargs)
 
 
@@ -770,6 +828,11 @@ class Model2(HardStack):
         kwargs["predict_transitions"] = True
         kwargs["train_with_predicted_transitions"] = True
         kwargs["interpolate"] = False
+        use_attention = kwargs.get("use_attention", False)
+        if use_attention:
+            kwargs["attention_unit"] = util.AttentionUnit
+        else:
+            kwargs["attention_unit"] = None
         super(Model2, self).__init__(*args, **kwargs)
 
 
@@ -785,4 +848,9 @@ class Model2S(HardStack):
         kwargs["predict_transitions"] = True
         kwargs["train_with_predicted_transitions"] = True
         kwargs["interpolate"] = True
+        use_attention = kwargs.get("use_attention", False)
+        if use_attention:
+            kwargs["attention_unit"] = util.AttentionUnit
+        else:
+            kwargs["attention_unit"] = None
         super(Model2S, self).__init__(*args, **kwargs)

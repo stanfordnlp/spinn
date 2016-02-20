@@ -14,3 +14,6 @@
 ./snli-data
 *.parse_log
 *.ckpt_best
+./writing/gist/gist.pdf
+*.fls
+*.fdb_latexmk

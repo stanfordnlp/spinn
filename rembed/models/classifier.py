@@ -179,7 +179,11 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
         ss_prob=ss_prob,
         connect_tracking_comp=FLAGS.connect_tracking_comp,
         context_sensitive_shift=FLAGS.context_sensitive_shift,
-        context_sensitive_use_relu=FLAGS.context_sensitive_use_relu)
+        context_sensitive_use_relu=FLAGS.context_sensitive_use_relu,
+        use_attention=FLAGS.use_attention)
+
+    premise_stack_tops = premise_model.stack_tops if FLAGS.use_attention else None
+
     hypothesis_model = cls(
         FLAGS.model_dim, FLAGS.word_embedding_dim, vocab_size, seq_length,
         compose_network, embedding_projection_network, training_mode, ground_truth_transitions_visible, vs,
@@ -193,7 +197,10 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
         ss_prob=ss_prob,
         connect_tracking_comp=FLAGS.connect_tracking_comp,
         context_sensitive_shift=FLAGS.context_sensitive_shift,
-        context_sensitive_use_relu=FLAGS.context_sensitive_use_relu)
+        context_sensitive_use_relu=FLAGS.context_sensitive_use_relu,
+        use_attention=FLAGS.use_attention,
+        premise_stack_tops=premise_stack_tops,
+        is_hypothesis=True)
 
     # Extract top element of final stack timestep.
     premise_embeddings = premise_model.embeddings
@@ -205,6 +212,11 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
     # Create MLP features
     mlp_input = T.concatenate([premise_vector, hypothesis_vector], axis=1)
     mlp_input_dim = 2 * FLAGS.model_dim
+
+    # Use the attention weighted representation
+    if FLAGS.use_attention:
+        mlp_input = hypothesis_model.final_weighed_representation.reshape((-1, FLAGS.model_dim))
+        mlp_input_dim = FLAGS.model_dim
 
     if FLAGS.use_difference_feature:
         mlp_input = T.concatenate([mlp_input, premise_vector - hypothesis_vector], axis=1)
@@ -547,7 +559,8 @@ def run(only_forward=False):
         checkpoint_path = os.path.join(FLAGS.ckpt_path, FLAGS.experiment_name + ".ckpt")
     if os.path.isfile(checkpoint_path):
         logger.Log("Found checkpoint, restoring.")
-        step, best_dev_error = vs.load_checkpoint(checkpoint_path, num_extra_vars=2)
+        step, best_dev_error = vs.load_checkpoint(checkpoint_path, num_extra_vars=2, 
+                                                  skip_saved_unsavables=FLAGS.skip_saved_unsavables) 
     else:
         assert not only_forward, "Can't run an eval-only run without a checkpoint. Supply a checkpoint."
         step = 0
@@ -615,6 +628,14 @@ def run(only_forward=False):
 
         # Main training loop.
         for step in range(step, FLAGS.training_steps):
+            if step % FLAGS.eval_interval_steps == 0:
+                for index, eval_set in enumerate(eval_iterators):
+                    acc = evaluate(eval_fn, eval_set, logger, step)
+                    if FLAGS.ckpt_on_best_dev_error and index == 0 and (1 - acc) < 0.99 * best_dev_error and step > 1000:
+                        best_dev_error = 1 - acc
+                        logger.Log("Checkpointing with new best dev accuracy of %f" % acc)
+                        vs.save_checkpoint(checkpoint_path + "_best", extra_vars=[step, best_dev_error])
+
             X_batch, transitions_batch, y_batch, num_transitions_batch = training_data_iter.next()
             ret = update_fn(X_batch, transitions_batch, y_batch, num_transitions_batch,
                             FLAGS.learning_rate, 1.0, 1.0, np.exp(step*np.log(FLAGS.scheduled_sampling_exponent_base)))
@@ -625,14 +646,6 @@ def run(only_forward=False):
                     "Step: %i\tAcc: %f\t%f\tCost: %5f %5f %5f %5f"
                     % (step, acc_val, action_acc_val, total_cost_val, xent_cost_val, transition_cost_val,
                        l2_cost_val))
-
-            if step % FLAGS.eval_interval_steps == 0:
-                for index, eval_set in enumerate(eval_iterators):
-                    acc = evaluate(eval_fn, eval_set, logger, step)
-                    if FLAGS.ckpt_on_best_dev_error and index == 0 and (1 - acc) < 0.99 * best_dev_error and step > 1000:
-                        best_dev_error = 1 - acc
-                        logger.Log("Checkpointing with new best dev accuracy of %f" % acc)
-                        vs.save_checkpoint(checkpoint_path + "_best", extra_vars=[step, best_dev_error])
 
             if step % FLAGS.ckpt_interval_steps == 0 and step > 0:
                 vs.save_checkpoint(checkpoint_path, extra_vars=[step, best_dev_error])
@@ -675,6 +688,8 @@ if __name__ == '__main__':
     gflags.DEFINE_integer("tracking_lstm_hidden_dim", 4, "")
     gflags.DEFINE_boolean("use_tracking_lstm", True,
                           "Whether to use LSTM in the tracking unit")
+    gflags.DEFINE_boolean("use_attention", False,
+                          "Whether to use word-by-word attention")
     gflags.DEFINE_boolean("context_sensitive_shift", False,
         "Use LSTM hidden state and word embedding to determine the vector to be pushed")
     gflags.DEFINE_boolean("context_sensitive_use_relu", False,
@@ -723,6 +738,9 @@ if __name__ == '__main__':
         "as the number of eval sets.")
     gflags.DEFINE_boolean("write_predicted_label", False,
         "Write the predicted labels in a <eval_output_name>.lbl file.")
+    gflags.DEFINE_boolean("skip_saved_unsavables", False,
+        "Assume that variables marked as not savable will appear in checkpoints anyway, and "
+        "skip them when loading. This should be used only when loading old checkpoints.")
 
     # Parse command line flags.
     FLAGS(sys.argv)
