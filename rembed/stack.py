@@ -545,31 +545,16 @@ class HardStack(object):
         stack_shift = T.cast(batch_range, theano.config.floatX)
         buffer_shift = T.cast(batch_range * self.seq_length, theano.config.floatX)
 
-        def step_b(# sequences
-                   t_f, transitions_t_f, stack_2_ptrs_t, buffer_cur_t,
-                   dE,
-                   # rest (incl. outputs_info, non_sequences)
-                   *accum_and_non_sequences):
-            # Separate the accum arguments from the non-sequence arguments.
-            n_extras = len(extra_bwd_init)
-            accum_deltas = accum_and_non_sequences[:-2 - n_extras - 1]
-            stack_bwd_t = accum_and_non_sequences[-2 - n_extras - 1]
-            extra_bwd = accum_and_non_sequences[-2 - n_extras:-2]
-            id_buffer, stack_final = accum_and_non_sequences[-2:]
+        def lookup(t_f, stack_fwd, stack_2_ptrs_t, buffer_cur_t,
+                  stack_bwd_t, extra_bwd):
+            """Retrieve all relevant bwd inputs/outputs at time `t`."""
 
-            # At first iteration, drop the external error signal into the main
-            # backward stack.
-            stack_bwd_next = ifelse(T.eq(t_f, self.seq_length - 1),
-                                    T.set_subtensor(stack_bwd_t[-self.batch_size:], error_signal),
-                                    stack_bwd_t)
-
-            err_prev = cuda_util.AdvancedSubtensor1Floats("B_errprev")(
-                stack_bwd_next, t_f * batch_size + stack_shift)
-
-            # Retrieve gradient of cost w.r.t. "extra" output
+            grad_cursor = t_f * batch_size + stack_shift
+            main_grad = cuda_util.AdvancedSubtensor1Floats("B_maingrad")(
+                stack_bwd_t, grad_cursor)
             extra_grads = tuple([
                 cuda_util.AdvancedSubtensor1Floats("B_extragrad_%i" % i)(
-                    extra_bwd_i, t_f * batch_size + stack_shift)
+                    extra_bwd_i, grad_cursor)
                 for i, extra_bwd_i in enumerate(extra_bwd)])
 
             # Find the timesteps of the two elements involved in the potential
@@ -577,34 +562,66 @@ class HardStack(object):
             t_c1 = (t_f - 1.0) * batch_size + stack_shift
             t_c2 = stack_2_ptrs_t
 
-            # Find the two elements involved in the merge.
-            # batch_size * model_dim
-            c1 = cuda_util.AdvancedSubtensor1Floats("B_stack1")(stack_final, t_c1)
-            c2 = cuda_util.AdvancedSubtensor1Floats("B_stack2")(stack_final, t_c2)
+            # Find the two elements involved in the potential merge.
+            c1 = cuda_util.AdvancedSubtensor1Floats("B_stack1")(stack_fwd, t_c1)
+            c2 = cuda_util.AdvancedSubtensor1Floats("B_stack2")(stack_fwd, t_c2)
 
             # Mask over examples which have invalid c2 cursors.
             c2_mask = (t_c2 < 0).dimshuffle(0, "x")
             c2 = c2_mask * zero_stack + (1. - c2_mask) * c2
 
-            # Guard against more indexing edge cases.
+            # Guard against indexing edge cases.
             c1 = ifelse(T.eq(t_f, 0.0), zero_stack, c1)
-            # TODO is this one covered by c2_mask above? Think so.
+            # TODO is this one covered by c2_mask above? I think so.
             c2 = ifelse(t_f <= 1.0, zero_stack, c2)
 
-            # Find buffer top.
             buffer_top_t = cuda_util.AdvancedSubtensor1Floats("B_buffer_top")(
                 self.buffer_t, buffer_cur_t + buffer_shift)
 
-            # Retrieve extra inputs from auxiliary stack.
-            extra_inps_t = [cuda_util.AdvancedSubtensor1Floats("B_extra_inp")(extra_inp_i, t_c1)
-                            for extra_inp_i in extra_inputs]
-            extra_inps_t = [ifelse(T.eq(t_f, 0.0), zero_extra, extra_inp_i)
-                            for extra_inp_i, zero_extra in zip(extra_inps_t, zero_extra_inps)]
+            # Retrieve extra inputs from auxiliary stack(s).
+            extra_inps_t = [cuda_util.AdvancedSubtensor1Floats("B_extra_inp_%i" % i)(
+                extra_inp_i, t_c1)
+                for extra_inp_i in extra_inputs]
+            # TODO could avoid the branching by just pegging on an extra zero
+            # row as precomputation
+            extra_inps_t = tuple([
+                ifelse(T.eq(t_f, 0.0), zero_extra, extra_inp_i)
+                for extra_inp_i, zero_extra
+                in zip(extra_inps_t, zero_extra_inps)])
+
+            inputs = (c1, c2, buffer_top_t) + extra_inps_t
+            grads = (main_grad,) + extra_grads
+            return t_c1, t_c2, inputs, grads
+
+        def step_b(# sequences
+                   t_f, transitions_t_f, stack_2_ptrs_t, buffer_cur_t,
+                   dE,
+                   # rest (incl. outputs_info, non_sequences)
+                   *rest):
+            # Separate the accum arguments from the non-sequence arguments.
+            n_wrt, n_extra_bwd = len(wrt_shapes), len(extra_outputs)
+            wrt_deltas = rest[:n_wrt]
+            stack_bwd_t = rest[n_wrt]
+            extra_bwd = rest[n_wrt + 1:n_wrt + 1 + n_extra_bwd]
+            id_buffer, stack_final = \
+                rest[n_wrt + 1 + n_extra_bwd:n_wrt + 1 + n_extra_bwd + 2]
+
+            # At first iteration, drop the external error signal into the main
+            # backward stack.
+            stack_bwd_next = ifelse(T.eq(t_f, self.seq_length - 1),
+                                    T.set_subtensor(stack_bwd_t[-self.batch_size:], error_signal),
+                                    stack_bwd_t)
+
+            # Retrieve all relevant inputs/outputs at this timestep.
+            t_c1, t_c2, inputs, grads = \
+                lookup(t_f, stack_final, stack_2_ptrs_t, buffer_cur_t,
+                       stack_bwd_next, extra_bwd)
+            main_grad = grads[0]
 
             # Calculate deltas for this timestep.
-            inp = (c1, c2, buffer_top_t) + tuple(extra_inps_t)
-            m_delta_inp, m_delta_wrt = f_merge_delta(inp, (err_prev,) + extra_grads)
-            p_delta_inp, p_delta_wrt = f_push_delta(inp, extra_grads)
+            m_delta_inp, m_delta_wrt = f_merge_delta(inputs, grads)
+            # NB: main_grad is not passed to push function.
+            p_delta_inp, p_delta_wrt = f_push_delta(inputs, grads[1:])
 
             # Check that delta function outputs match (at least in number).
             assert len(m_delta_inp) == len(p_delta_inp), \
@@ -612,19 +629,18 @@ class HardStack(object):
             assert len(m_delta_wrt) == len(p_delta_wrt), \
                 "%i %i" % (len(m_delta_wrt), len(p_delta_wrt))
 
-            # Calculate deltas of dE for each element.
-            dE_push = err_prev
+            # Retrieve embedding indices on buffer at this timestep.
+            # (Necessary for sending embedding gradients.)
             buffer_ids_t = cuda_util.AdvancedSubtensor1Floats("B_buffer_ids")(
                     id_buffer, buffer_cur_t + buffer_shift)
 
-            ## Switch between two cases.
+            # Prepare masks for op-wise gradient accumulation.
             # TODO: Record actual transitions (e.g. for model 1S and higher)
             # and repeat those here
             mask = transitions_t_f
             masks = [mask, mask.dimshuffle(0, "x"),
                      mask.dimshuffle(0, "x", "x")]
 
-            # DEV
             # Accumulate inp deltas, switching over push/merge decision.
             stacks = (stack_bwd_next, stack_bwd_next, dE) + extra_bwd
             new_stacks = {}
@@ -642,8 +658,8 @@ class HardStack(object):
                 new_stacks[stack] = new_stack
 
             # Accumulate wrt deltas, switching over push/merge decision.
-            new_accum_deltas = []
-            for i, (accum_delta, m_delta, p_delta) in enumerate(zip(accum_deltas, m_delta_wrt, p_delta_wrt)):
+            new_wrt_deltas = []
+            for i, (accum_delta, m_delta, p_delta) in enumerate(zip(wrt_deltas, m_delta_wrt, p_delta_wrt)):
                 # Check that tensors returned by delta functions match shape
                 # expectations.
                 assert accum_delta.ndim == m_delta.ndim - 1, \
@@ -654,17 +670,17 @@ class HardStack(object):
                 mask_i = masks[m_delta.ndim - 1]
                 # TODO: Is this at all efficient? (Bring back GPURowSwitch?)
                 delta = (mask_i * m_delta + (1. - mask_i) * p_delta).sum(axis=0)
-                new_accum_deltas.append(accum_delta + delta)
+                new_wrt_deltas.append(accum_delta + delta)
 
             # On push ops, backprop the stack_bwd error onto the embedding
             # parameters.
             # TODO make sparse?
             dE_next = new_stacks.pop(dE)
             dE_next = cuda_util.AdvancedIncSubtensor1Floats()(
-                dE_next, (1. - masks[1]) * dE_push, buffer_ids_t)
+                dE_next, (1. - masks[1]) * main_grad, buffer_ids_t)
 
             updates = util.prepare_updates_dict(new_stacks)
-            return [dE_next] + new_accum_deltas, updates
+            return [dE_next] + new_wrt_deltas, updates
 
         # TODO: These should come from forward pass -- not fixed -- in model
         # 1S, etc.
@@ -682,6 +698,7 @@ class HardStack(object):
         buf_ptrs = T.concatenate([T.zeros((1, batch_size,)),
                                   self.buf_ptrs[:-1]], axis=0)
 
+        sequences = [ts_f, transitions_f, self.stack_2_ptrs, buf_ptrs]
         outputs_info = [T.zeros_like(self.embeddings)]
 
         # The `patternbroadcast` call below prevents any of the alloc axes from
@@ -690,12 +707,19 @@ class HardStack(object):
         outputs_info += [T.patternbroadcast(T.zeros(shape), (False,) * len(shape))
                          for shape in wrt_shapes]
 
+        # bwd stacks
+        non_sequences = [self.stack_bwd] + extra_bwd_init
+        # auxiliary data
+        non_sequences += [id_buffer, self.final_stack]
+        # more helpers (not referenced directly in code, but we need to include
+        # them as non-sequences to satisfy scan strict mode)
+        non_sequences += [self.buffer_t] + extra_inputs
+        non_sequences += self._vs.vars.values()
+
         bscan_ret, self.bscan_updates = theano.scan(
-                step_b,
-                sequences=[ts_f, transitions_f, self.stack_2_ptrs, buf_ptrs],
-                outputs_info=outputs_info,
-                non_sequences=[self.stack_bwd] + extra_bwd_init + [id_buffer, self.final_stack],
+                step_b, sequences, outputs_info, non_sequences,
                 go_backwards=True,
+                strict=True,
                 name="stack_bwd")
 
         self.deltas = [deltas[-1] for deltas in bscan_ret[1:]]
