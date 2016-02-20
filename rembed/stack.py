@@ -547,9 +547,8 @@ class HardStack(object):
 
         def step_b(# sequences
                    t_f, transitions_t_f, stack_2_ptrs_t, buffer_cur_t,
-                   # outputs_info (inplace update is okay)
                    dE,
-                   # rest
+                   # rest (incl. outputs_info, non_sequences)
                    *accum_and_non_sequences):
             # Separate the accum arguments from the non-sequence arguments.
             n_extras = len(extra_bwd_init)
@@ -619,12 +618,11 @@ class HardStack(object):
             masks = [mask, mask.dimshuffle(0, "x"),
                      mask.dimshuffle(0, "x", "x")]
 
+            # DEV
             # Accumulate inp deltas, switching over push/merge decision.
-            # TODO: these all should be inplace updates on shared variables!
-            # TODO: Remove all these magic helpers
-            stacks = (stack_bwd_next, stack_bwd_next, None) + extra_bwd
+            stacks = (stack_bwd_next, stack_bwd_next, dE) + extra_bwd
             new_stacks = {}
-            cursors = (t_c1, t_c2, None) + ((t_c1,) * len(extra_bwd))
+            cursors = (t_c1, t_c2, buffer_ids_t) + ((t_c1,) * len(extra_bwd))
             for stack, cursor, m_delta, p_delta in zip(stacks, cursors, m_delta_inp, p_delta_inp):
                 if stack is None:
                     continue
@@ -633,8 +631,8 @@ class HardStack(object):
                 mask_i = masks[m_delta.ndim - 1]
                 delta = mask * m_delta + (1. - mask) * p_delta
 
-                # Run subtensor update on associated stack using the current
-                # cursor.
+                # Run subtensor update on associated structure using the
+                # current cursor.
                 new_stack = cuda_util.AdvancedIncSubtensor1Floats()(
                     base, delta, cursor)
                 new_stacks[stack] = new_stack
@@ -650,13 +648,15 @@ class HardStack(object):
                 delta = (mask_i * m_delta + (1. - mask_i) * p_delta).sum(axis=0)
                 new_accum_deltas.append(accum_delta + delta)
 
-            # Save gradients w.r.t. buffer top.
-            # TODO unify with treatment of inputs above
-            dE_t = masks[1] * m_delta_inp[2] + (1. - masks[1]) * (p_delta_inp[2] + dE_push)
-            dE = cuda_util.AdvancedIncSubtensor1Floats()(dE, dE_t, buffer_ids_t)
+            # On push ops, backprop the stack_bwd error onto the embedding
+            # parameters.
+            # TODO make sparse?
+            dE_next = new_stacks.pop(dE)
+            dE_next = cuda_util.AdvancedIncSubtensor1Floats()(
+                dE_next, (1. - masks[1]) * dE_push, buffer_ids_t)
 
             updates = util.prepare_updates_dict(new_stacks)
-            return [dE] + new_accum_deltas, updates
+            return [dE_next] + new_accum_deltas, updates
 
         # TODO: These should come from forward pass -- not fixed -- in model
         # 1S, etc.
