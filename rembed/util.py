@@ -1,4 +1,4 @@
-from collections import OrderedDict
+from collections import namedtuple, OrderedDict
 import cPickle
 import itertools
 import math
@@ -15,6 +15,9 @@ from rembed import cuda_util
 
 numpy_random = np.random.RandomState(1234)
 theano_random = MRG_RandomStreams(numpy_random.randint(999999))
+
+ModelSpec = namedtuple("ModelSpec", ["model_dim", "word_embedding_dim",
+                                     "batch_size", "vocab_size", "seq_length"])
 
 # With loaded embedding matrix, the padding vector will be initialized to zero
 # and will not be trained. Hopefully this isn't a problem. It seems better than
@@ -330,7 +333,7 @@ def TrackingUnit(state_prev, inp, inp_dim, hidden_dim, vs, name="track_unit", ma
 
     return state, logits
 
-def AttentionUnit(attention_state_prev, current_lstm_state, premise_stack_tops, model_dim, 
+def AttentionUnit(attention_state_prev, current_lstm_state, premise_stack_tops, model_dim,
                     vs, name="attention_unit", initializer=None):
     """
     Dimension notation:
@@ -351,7 +354,7 @@ def AttentionUnit(attention_state_prev, current_lstm_state, premise_stack_tops, 
     # Shape: B x L
     alpha_t = T.nnet.softmax(T.dot(M_t, w).T)
     # Shape B x k
-    Y__alpha_t = T.sum(premise_stack_tops * alpha_t.T[:, :, np.newaxis], axis=0) 
+    Y__alpha_t = T.sum(premise_stack_tops * alpha_t.T[:, :, np.newaxis], axis=0)
     r_t = Y__alpha_t + T.tanh(T.dot(attention_state_prev, W_t))
     return r_t
 
