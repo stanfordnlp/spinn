@@ -155,12 +155,6 @@ class ThinStackBackpropTestCase(unittest.TestCase, BackpropTestMixin):
         self.compose_network = compose_network
         recurrence = Model0(spec, vs, compose_network)
 
-        def ghost_compose_net(c1, c2, buf_top):
-            if c1.ndim == 1: c1 = c1[np.newaxis, :]
-            if c2.ndim == 1: c2 = c2[np.newaxis, :]
-            return self.compose_network(T.concatenate([c1, c2], axis=1)).squeeze()
-        self.ghost_compose_net = ghost_compose_net
-
         self.X = T.imatrix("X")
         self.transitions = T.imatrix("transitions")
         self.y = T.ivector("y")
@@ -234,84 +228,37 @@ class ThinStackTrackingBackpropTestCase(unittest.TestCase, BackpropTestMixin):
         self.vs = VariableStore()
 
         def compose_network(inp, hidden, *args, **kwargs):
-            if inp.ndim == 1:
-                inp = inp[np.newaxis, :]
-            if hidden.ndim == 1:
-                hidden = hidden[np.newaxis, :]
-            # TODO maybe can just change the `axis` flag in the above case?
             conc = T.concatenate([hidden, inp], axis=1)
 
             W = self.vs.add_param("W", (self.model_dim / 2 + self.model_dim * 2, self.model_dim))
             b = self.vs.add_param("b", (self.model_dim,),
                                   initializer=util.ZeroInitializer())
             return T.dot(conc, W) + b
-        def track_network(state, inp, *args, **kwargs):
-            W_track = self.vs.add_param("W_track", (self.model_dim + self.model_dim * 3, self.model_dim))
-            conc = T.concatenate([state, inp], axis=1)
-            state = T.dot(conc, W_track)
-            logits = 0.0
-            return state, logits
 
         self.compose_network = compose_network
-        self.track_network = track_network
-        self.ghost_compose_net = self._make_ghost_compose_net(track_network, compose_network)
-        self.ghost_push_net = self._make_ghost_push_net(track_network)
 
         self.X = T.imatrix("X")
         self.transitions = T.imatrix("transitions")
         self.y = T.ivector("y")
 
     def _build(self, length):
-        return HardStack(
-            self.model_dim, self.embedding_dim, self.batch_size,
-            self.vocab_size, length, self.compose_network,
-            IdentityLayer, 0.0, 1.0, self.vs,
-            prediction_and_tracking_network=self.track_network,
-            use_tracking_lstm=True,
-            tracking_lstm_hidden_dim=1,
-            connect_tracking_comp=True,
-            X=self.X,
-            transitions=self.transitions,
-            use_input_batch_norm=False,
-            use_input_dropout=False)
+        spec = util.ModelSpec(self.model_dim, self.embedding_dim,
+                              self.batch_size, self.vocab_size,
+                              length)
+        recurrence = Model0(spec, self.vs, self.compose_network,
+                            use_tracking_lstm=True, tracking_lstm_hidden_dim=1)
+        stack = ThinStack(spec, recurrence, IdentityLayer, 0.0, 1.0, self.vs,
+                          X=self.X, transitions=self.transitions,
+                          use_input_batch_norm=False,
+                          use_input_dropout=False)
 
-    def _make_ghost_compose_net(self, track_network, compose_network):
-        def ghost_compose_net(c1, c2, buf_top, hidden, squeeze=True, ret_hidden=True):
-            if c1.ndim == 1: c1 = c1[np.newaxis, :]
-            if c2.ndim == 1: c2 = c2[np.newaxis, :]
-            if buf_top.ndim == 1: buf_top = buf_top[np.newaxis, :]
-            if hidden.ndim == 1: hidden = hidden[np.newaxis, :]
-
-            inp_state = T.concatenate([c1, c2, buf_top], axis=1)
-            hidden_next, _ = track_network(hidden, inp_state)
-
-            comp = compose_network(T.concatenate([c1, c2], axis=1), hidden_next[:, :self.model_dim / 2])
-
-            if squeeze:
-                comp = comp.squeeze()
-                hidden_next = hidden_next.squeeze()
-            if ret_hidden:
-                return comp, hidden_next
-            return comp
-        return ghost_compose_net
-
-    def _make_ghost_push_net(self, track_network):
-        def ghost_push_net(c1, c2, buf_top, hidden, squeeze=True):
-            if c1.ndim == 1: c1 = c1[np.newaxis, :]
-            if c2.ndim == 1: c2 = c2[np.newaxis, :]
-            if buf_top.ndim == 1: buf_top = buf_top[np.newaxis, :]
-            if hidden.ndim == 1: hidden = hidden[np.newaxis, :]
-
-            inp_state = T.concatenate([c1, c2, buf_top], axis=1)
-            hidden_next, _ = track_network(hidden, inp_state)
-
-            if squeeze:
-                return hidden_next.squeeze()
-            return hidden_next
-        return ghost_push_net
+        return stack
 
     def _fake_stack_ff(self, stack):
         """Fake a stack feedforward S S M S M S S S M M M with the given data."""
+
+        f_push = lambda *inputs: stack.recurrence(inputs)[0]
+        f_merge = lambda *inputs: stack.recurrence(inputs)[1]
 
         # seq_length * batch_size * emb_dim
         X_emb = stack.embeddings[self.X].dimshuffle(1, 0, 2)
@@ -319,36 +266,36 @@ class ThinStackTrackingBackpropTestCase(unittest.TestCase, BackpropTestMixin):
         t0 = T.zeros((self.batch_size, self.model_dim))
 
         # Shift.
-        t1 = self.ghost_push_net(zero, zero, X_emb[0], t0, squeeze=False)
+        t1, = f_push(zero, zero, X_emb[0], t0)
 
         # Shift.
-        t2 = self.ghost_push_net(X_emb[0], zero, X_emb[1], t1, squeeze=False)
+        t2, = f_push(X_emb[0], zero, X_emb[1], t1)
 
         # Merge.
-        c3, t3 = self.ghost_compose_net(X_emb[1], X_emb[0], X_emb[2], t2, squeeze=False)
+        c3, t3 = f_merge(X_emb[1], X_emb[0], X_emb[2], t2)
         self.c3 = c3
         if stack.seq_length <= 3:
             return locals()
 
         # Shift.
-        t4 = self.ghost_push_net(c3, zero, X_emb[2], t3, squeeze=False)
+        t4, = f_push(c3, zero, X_emb[2], t3)
 
         # Merge.
-        c5, t5 = self.ghost_compose_net(X_emb[2], c3, X_emb[3], t4, squeeze=False)
+        c5, t5 = f_merge(X_emb[2], c3, X_emb[3], t4)
         if stack.seq_length <= 5:
             return locals()
 
-        t6 = self.ghost_push_net(c5, zero, X_emb[3], t5, squeeze=False)
+        t6, = f_push(c5, zero, X_emb[3], t5)
 
-        t7 = self.ghost_push_net(X_emb[3], c5, X_emb[4], t6, squeeze=False)
+        t7, = f_push(X_emb[3], c5, X_emb[4], t6)
 
-        t8 = self.ghost_push_net(X_emb[4], X_emb[3], X_emb[5], t7, squeeze=False)
+        t8, = f_push(X_emb[4], X_emb[3], X_emb[5], t7)
 
-        c9, t9 = self.ghost_compose_net(X_emb[5], X_emb[4], X_emb[6], t8, squeeze=False)
+        c9, t9 = f_merge(X_emb[5], X_emb[4], X_emb[6], t8)
 
-        c10, t10 = self.ghost_compose_net(c9, X_emb[3], X_emb[6], t9, squeeze=False)
+        c10, t10 = f_merge(c9, X_emb[3], X_emb[6], t9)
 
-        c11, t11 = self.ghost_compose_net(c10, c5, X_emb[6], t10, squeeze=False)
+        c11, t11 = f_merge(c10, c5, X_emb[6], t10)
 
         return locals()
 
@@ -366,16 +313,7 @@ class ThinStackTrackingBackpropTestCase(unittest.TestCase, BackpropTestMixin):
         cost = self._make_cost(top)
         error_signal = T.grad(cost, top)
 
-        # Build step gradient subgraph.
-        inputs = [1, 1, 1, 1] # 4 inputs, each of ndim 1
-        wrt = [var for _, var in rel_vars]
-        m_delta = batch_subgraph_gradients(inputs, wrt, self.ghost_compose_net)
-        p_delta = batch_subgraph_gradients(inputs, wrt, self.ghost_push_net)
-
-        # Now build backprop, passing in our composition gradient.
-        stack.make_backprop_scan([stack.final_aux_stack], [self.model_dim],
-                                 error_signal, p_delta, m_delta,
-                                 [param.get_value().shape for _, param in rel_vars])
+        stack.make_backprop_scan(error_signal)
         f = theano.function(
             [self.X, self.transitions, self.y],
             [top, cost, stack.dE] + stack.deltas,
@@ -425,93 +363,6 @@ class ThinStackTrackingBackpropTestCase(unittest.TestCase, BackpropTestMixin):
         self._test_backprop(simulated_top, stack, X, transitions, y)
 
 
-class ThinStackTrackingLSTMBackpropTestCase(ThinStackTrackingBackpropTestCase):
-
-    def setUp(self):
-        if 'gpu' not in theano.config.device:
-            raise RuntimeError("Thin stack only defined for GPU usage")
-
-        self.embedding_dim = self.model_dim = 2
-        self.vocab_size = 5
-        self.batch_size = 2
-        self.num_classes = 2
-
-        self.vs = VariableStore()
-
-        def compose_network(inp, hidden, *args, **kwargs):
-            if inp.ndim == 1:
-                inp = inp[np.newaxis, :]
-            if hidden.ndim == 1:
-                hidden = hidden[np.newaxis, :]
-            # TODO maybe can just change the `axis` flag in the above case?
-            conc = T.concatenate([hidden, inp], axis=1)
-
-            W = self.vs.add_param("W", (self.model_dim / 2 + self.model_dim * 2, self.model_dim))
-            b = self.vs.add_param("b", (self.model_dim,),
-                                  initializer=util.ZeroInitializer())
-            return T.dot(conc, W) + b
-        def track_network(state, inp, *args, **kwargs):
-            if state.ndim == 1:
-                state = state[np.newaxis, :]
-            if inp.ndim == 1:
-                inp = inp[np.newaxis, :]
-            return util.TrackingUnit(state, inp, self.model_dim * 3,
-                                     self.model_dim / 2, self.vs, make_logits=False)
-
-        self.compose_network = compose_network
-        self.track_network = track_network
-        self.ghost_compose_net = self._make_ghost_compose_net(track_network, compose_network)
-        self.ghost_push_net = self._make_ghost_push_net(track_network)
-
-        self.X = T.imatrix("X")
-        self.transitions = T.imatrix("transitions")
-        self.y = T.ivector("y")
-
-    def _fake_stack_ff(self, stack):
-        """Fake a stack feedforward S S M S M S S S M M M with the given data."""
-
-        # seq_length * batch_size * emb_dim
-        X_emb = stack.embeddings[self.X].dimshuffle(1, 0, 2)
-        zero = T.zeros((self.batch_size, self.model_dim))
-        t0 = T.zeros((self.batch_size, self.model_dim))
-
-        # Shift.
-        self.t1 = t1 = self.ghost_push_net(zero, zero, X_emb[0], t0, squeeze=False)
-
-        # Shift.
-        self.t2 = t2 = self.ghost_push_net(X_emb[0], zero, X_emb[1], t1, squeeze=False)
-
-        # Merge.
-        #t2 = theano.gradient.consider_constant(t2)
-        c3, t3 = self.ghost_compose_net(X_emb[1], X_emb[0], X_emb[2], t2, squeeze=False,
-                                        ret_hidden=True)
-        self.c3 = c3
-        if stack.seq_length <= 3:
-            return locals()
-
-        # Shift.
-        self.t4 = t4 = self.ghost_push_net(c3, zero, X_emb[2], t3, squeeze=False)
-
-        # Merge.
-        c5, t5 = self.ghost_compose_net(X_emb[2], c3, X_emb[3], t4, squeeze=False)
-        if stack.seq_length <= 5:
-            return locals()
-
-        t6 = self.ghost_push_net(c5, zero, X_emb[3], t5, squeeze=False)
-
-        t7 = self.ghost_push_net(X_emb[3], c5, X_emb[4], t6, squeeze=False)
-
-        t8 = self.ghost_push_net(X_emb[4], X_emb[3], X_emb[5], t7, squeeze=False)
-
-        c9, t9 = self.ghost_compose_net(X_emb[5], X_emb[4], X_emb[6], t8, squeeze=False)
-
-        c10, t10 = self.ghost_compose_net(c9, X_emb[3], X_emb[6], t9, squeeze=False)
-
-        c11, t11 = self.ghost_compose_net(c10, c5, X_emb[6], t10, squeeze=False)
-
-        return locals()
-
-
 class ThinStackTreeLSTMTrackingLSTMBackpropTestCase(ThinStackTrackingBackpropTestCase):
 
     def setUp(self):
@@ -524,29 +375,7 @@ class ThinStackTreeLSTMTrackingLSTMBackpropTestCase(ThinStackTrackingBackpropTes
         self.num_classes = 2
 
         self.vs = VariableStore()
-
-        def compose_network(inp, hidden, *args, **kwargs):
-            if inp.ndim == 1:
-                inp = inp[np.newaxis, :]
-            if hidden.ndim == 1:
-                hidden = hidden[np.newaxis, :]
-            # TODO maybe can just change the `axis` flag in the above case?
-            conc = T.concatenate([hidden, inp], axis=1)
-
-            return util.TreeLSTMLayer(inp, hidden, self.model_dim, self.vs, external_state_dim=self.model_dim / 2)
-
-        def track_network(state, inp, *args, **kwargs):
-            if state.ndim == 1:
-                state = state[np.newaxis, :]
-            if inp.ndim == 1:
-                inp = inp[np.newaxis, :]
-            return util.TrackingUnit(state, inp, self.model_dim * 3,
-                                     self.model_dim / 2, self.vs, make_logits=False)
-
-        self.compose_network = compose_network
-        self.track_network = track_network
-        self.ghost_compose_net = self._make_ghost_compose_net(track_network, compose_network)
-        self.ghost_push_net = self._make_ghost_push_net(track_network)
+        self.compose_network = util.TreeLSTMLayer
 
         self.X = T.imatrix("X")
         self.transitions = T.imatrix("transitions")
@@ -555,44 +384,45 @@ class ThinStackTreeLSTMTrackingLSTMBackpropTestCase(ThinStackTrackingBackpropTes
     def _fake_stack_ff(self, stack):
         """Fake a stack feedforward S S M S M S S S M M M with the given data."""
 
+        f_push = lambda *inputs: stack.recurrence(inputs)[0]
+        f_merge = lambda *inputs: stack.recurrence(inputs)[1]
+
         # seq_length * batch_size * emb_dim
         X_emb = stack.embeddings[self.X].dimshuffle(1, 0, 2)
         zero = T.zeros((self.batch_size, self.model_dim))
         t0 = T.zeros((self.batch_size, self.model_dim))
 
         # Shift.
-        self.t1 = t1 = self.ghost_push_net(zero, zero, X_emb[0], t0, squeeze=False)
+        t1, = f_push(zero, zero, X_emb[0], t0)
 
         # Shift.
-        self.t2 = t2 = self.ghost_push_net(X_emb[0], zero, X_emb[1], t1, squeeze=False)
+        t2, = f_push(X_emb[0], zero, X_emb[1], t1)
 
         # Merge.
         #t2 = theano.gradient.consider_constant(t2)
-        c3, t3 = self.ghost_compose_net(X_emb[1], X_emb[0], X_emb[2], t2, squeeze=False,
-                                        ret_hidden=True)
-        self.c3 = c3
+        c3, t3 = f_merge(X_emb[1], X_emb[0], X_emb[2], t2)
         if stack.seq_length <= 3:
             return locals()
 
         # Shift.
-        self.t4 = t4 = self.ghost_push_net(c3, zero, X_emb[2], t3, squeeze=False)
+        t4, = f_push(c3, zero, X_emb[2], t3)
 
         # Merge.
-        c5, t5 = self.ghost_compose_net(X_emb[2], c3, X_emb[3], t4, squeeze=False)
+        c5, t5 = f_merge(X_emb[2], c3, X_emb[3], t4)
         if stack.seq_length <= 5:
             return locals()
 
-        t6 = self.ghost_push_net(c5, zero, X_emb[3], t5, squeeze=False)
+        t6, = f_push(c5, zero, X_emb[3], t5)
 
-        t7 = self.ghost_push_net(X_emb[3], c5, X_emb[4], t6, squeeze=False)
+        t7, = f_push(X_emb[3], c5, X_emb[4], t6)
 
-        t8 = self.ghost_push_net(X_emb[4], X_emb[3], X_emb[5], t7, squeeze=False)
+        t8, = f_push(X_emb[4], X_emb[3], X_emb[5], t7)
 
-        c9, t9 = self.ghost_compose_net(X_emb[5], X_emb[4], X_emb[6], t8, squeeze=False)
+        c9, t9 = f_merge(X_emb[5], X_emb[4], X_emb[6], t8)
 
-        c10, t10 = self.ghost_compose_net(c9, X_emb[3], X_emb[6], t9, squeeze=False)
+        c10, t10 = f_merge(c9, X_emb[3], X_emb[6], t9)
 
-        c11, t11 = self.ghost_compose_net(c10, c5, X_emb[6], t10, squeeze=False)
+        c11, t11 = f_merge(c10, c5, X_emb[6], t10)
 
         return locals()
 
