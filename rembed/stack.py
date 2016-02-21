@@ -662,7 +662,7 @@ class ThinStack(object):
                 base = new_stacks.get(stack, stack)
 
                 mask_i = masks[m_delta.ndim - 1]
-                delta = mask * m_delta + (1. - mask) * p_delta
+                delta = mask_i + m_delta + (1. - mask_i) * p_delta
 
                 # Run subtensor update on associated structure using the
                 # current cursor.
