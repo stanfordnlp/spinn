@@ -74,16 +74,9 @@ class ThinStack(object):
         Construct a ThinStack.
 
         Args:
-            model_dim: Dimensionality of token embeddings and stack values
-            word_embedding_dim: dimension of the word embedding
-            vocab_size: Number of unique tokens in vocabulary
-            seq_length: Maximum sequence length which will be processed by this
-              stack
-            compose_network: Blocks-like function which accepts arguments
-              `inp, inp_dim, outp_dim, vs, name` (see e.g. `util.Linear`).
-              Given a Theano batch `inp` of dimension `batch_size * inp_dim`,
-              returns a transformed Theano batch of dimension
-              `batch_size * outp_dim`.
+            spec: `ModelSpec` instance.
+            recurrence: `Recurrence` instance which specifies the stack
+                recurrence to be unfolded over time.
             embedding_projection_network: Same form as `compose_network`.
             training_mode: A Theano scalar indicating whether to act as a training model
               with dropout (1.0) or to act as an eval model with rescaling (0.0).
@@ -92,13 +85,6 @@ class ThinStack(object):
               (or 2S) to evaluate in the Model 2 style with predicted transitions. Has no effect
               on Model 0.
             vs: VariableStore instance for parameter storage
-            prediction_and_tracking_network: Blocks-like function which either maps values
-              `3 * model_dim` to `action_dim` or uses the more complex TrackingUnit template.
-            predict_transitions: If set, predict transitions. If not, the tracking LSTM may still
-              be used for other purposes.
-            train_with_predicted_transitions: If `True`, use the predictions from the model
-              (rather than the ground-truth `transitions`) to perform stack
-              operations
             interpolate: If True, use scheduled sampling while training
             X: Theano batch describing input matrix, or `None` (in which case
               this instance will make its own batch variable).
@@ -111,14 +97,6 @@ class ThinStack(object):
             embedding_dropout_keep_rate: The keep rate for dropout on projected embeddings.
             ss_mask_gen: A theano random stream
             ss_prob: Scheduled sampling probability
-            use_tracking_lstm: If True, LSTM will be used in the tracking unit
-            tracking_lstm_hidden_dim: hidden state dimension of the tracking LSTM
-            connect_tracking_comp: If True, the hidden state of tracking LSTM will be
-                fed to the TreeLSTM in the composition unit
-            context_sensitive_shift: If True, the hidden state of tracking LSTM and the embedding
-                vector will be used to calculate the vector that will be pushed onto the stack
-            context_sensitive_use_relu: If True, a ReLU layer will be used while doing context
-                sensitive shift, otherwise a Linear layer will be used
             use_attention: Use attention over premise tree nodes to obtain sentence representation (SNLI)
             premise_stack_tops: Tokens located on the top of premise stack. Used only when use_attention
                 is set to True (SNLI)
