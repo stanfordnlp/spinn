@@ -308,10 +308,12 @@ class ThinStack(object):
         buffer_cur_next = buffer_cur_t + (1 - transitions_t_f)
 
         # Update auxiliary stacks.
+        # TODO clean this up..
+        mask2 = mask.dimshuffle(0, "x")
         ptr_next = t_f * self.batch_size + self._stack_shift
         # TODO: Allow recurrence to state that output i is the same for push +
         # merge -- then we don't have to mask it
-        aux_outputs = [mask * m_output + (1. - mask) * p_output
+        aux_outputs = [mask2 * m_output + (1. - mask2) * p_output
                        for p_output, m_output in zip(push_ret, merge_ret[1:])]
         aux_stack_updates = {aux_stack: cuda_util.AdvancedIncSubtensor1Floats(set_instead_of_inc=True)(
             aux_stack, aux_output, ptr_next)
