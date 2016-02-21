@@ -43,26 +43,19 @@ def update_hard_stack(t, t_f, stack_t, push_value, merge_value, merge_queue_t,
     return stack_next, queue_next, cursors_next
 
 
-class HardStack(object):
-
+class ThinStack(object):
     """
-    Model 0/1/2 hard stack implementation.
+    Main implementation of the thin-stack algorithm.
 
-    This model scans a sequence using a hard stack. It optionally predicts
+    This model scans a sequence using a hard stack, unrolling the given stack
+    recurrence over the entire sequence. The recurrence can optionally predict
     stack operations using an MLP, and can receive supervision on these
     predictions from some external parser which acts as the "ground truth"
     parser.
-
-    Model 0: prediction_and_tracking_network=None, train_with_predicted_transitions=False
-    Model 1: prediction_and_tracking_network=something, train_with_predicted_transitions=False
-    Model 2: prediction_and_tracking_network=something, train_with_predicted_transitions=True
     """
 
-    def __init__(self, model_dim, word_embedding_dim, batch_size, vocab_size, seq_length, compose_network,
-                 embedding_projection_network, training_mode, ground_truth_transitions_visible, vs,
-                 prediction_and_tracking_network=None,
-                 predict_transitions=False,
-                 train_with_predicted_transitions=False,
+    def __init__(self, spec, recurrence, embedding_projection_network,
+                 training_mode, ground_truth_transitions_visible, vs,
                  interpolate=False,
                  X=None,
                  transitions=None,
@@ -73,17 +66,12 @@ class HardStack(object):
                  embedding_dropout_keep_rate=1.0,
                  ss_mask_gen=None,
                  ss_prob=0.0,
-                 use_tracking_lstm=False,
-                 tracking_lstm_hidden_dim=8,
-                 connect_tracking_comp=False,
-                 context_sensitive_shift=False,
-                 context_sensitive_use_relu=False,
                  use_attention=False,
                  premise_stack_tops=None,
                  attention_unit=None,
                  is_hypothesis=False):
         """
-        Construct a HardStack.
+        Construct a ThinStack.
 
         Args:
             model_dim: Dimensionality of token embeddings and stack values
@@ -140,22 +128,16 @@ class HardStack(object):
             is_hypothesis: Whether we're processing the premise or the hypothesis (for SNLI)
         """
 
-        self.model_dim = model_dim
-        self.word_embedding_dim = word_embedding_dim
-        self.use_tracking_lstm = use_tracking_lstm
-        self.tracking_lstm_hidden_dim = tracking_lstm_hidden_dim
+        self.spec = spec
+        self.recurrence = recurrence
 
-        self.batch_size = batch_size
-        self.vocab_size = vocab_size
-        self.seq_length = seq_length
-        self.stack_size = seq_length
+        self.batch_size = spec.batch_size
+        self.vocab_size = spec.vocab_size
+        self.stack_size = self.seq_length = spec.seq_length
+        self.model_dim = spec.model_dim
+        self.word_embedding_dim = spec.word_embedding_dim
 
-        self._compose_network = compose_network
         self._embedding_projection_network = embedding_projection_network
-        self._prediction_and_tracking_network = prediction_and_tracking_network
-        self._predict_transitions = predict_transitions
-        self.train_with_predicted_transitions = train_with_predicted_transitions
-
         self._vs = vs
 
         self.initial_embeddings = initial_embeddings
@@ -176,14 +158,6 @@ class HardStack(object):
         self.interpolate = interpolate
         # Training step number.
         self.ss_prob = ss_prob
-        # Connect tracking unit and composition unit.
-        self.connect_tracking_comp = connect_tracking_comp
-        assert (use_tracking_lstm or not connect_tracking_comp), \
-            "Must use tracking LSTM if connecting tracking and composition units"
-        self.context_sensitive_shift = context_sensitive_shift
-        assert (use_tracking_lstm or not context_sensitive_shift), \
-            "Must use tracking LSTM while doing context sensitive shift"
-        self.context_sensitive_use_relu = context_sensitive_use_relu
         # Use constituent-by-constituent attention - true for both premise and hypothesis stacks
         self.use_attention = use_attention
         # Stores premise stack tops; none for the premise stack
@@ -220,33 +194,47 @@ class HardStack(object):
                 "embeddings", (self.vocab_size, self.word_embedding_dim))
 
     def _make_shared(self):
-        stack_init = np.zeros((self.stack_size * self.batch_size, self.model_dim), dtype=np.float32)
-        self._stack_orig = theano.shared(stack_init, borrow=False, name="stack_orig")
+        # Build main stack. This stores the push/merge outputs at each
+        # timestep.
+        stack_shape = (self.stack_size * self.batch_size, self.model_dim)
+        stack_init = np.zeros(stack_shape, dtype=np.float32)
         self.stack = theano.shared(stack_init, borrow=False, name="stack")
 
-        stack_bwd_init = np.zeros((self.stack_size * self.batch_size, self.model_dim), dtype=np.float32)
-        self._stack_bwd_orig = theano.shared(stack_bwd_init, borrow=False, name="stack_bwd_orig")
-        self.stack_bwd = theano.shared(stack_bwd_init, borrow=False, name="stack_bwd")
+        # Build backward stack. This stores d(cost)/d(stack value) at each
+        # timestep.
+        stack_bwd_init = np.zeros(stack_shape, dtype=np.float32)
+        self.stack_bwd = theano.shared(stack_bwd_init, borrow=False,
+                                       name="stack_bwd")
 
-        # TODO: don't fix model_dim
-        aux_stack_init = np.zeros((self.stack_size * self.batch_size, self.tracking_lstm_hidden_dim * 2), dtype=np.float32)
-        self._aux_stack_orig = theano.shared(aux_stack_init, borrow=False, name="aux_stack_orig")
-        self.aux_stack = theano.shared(aux_stack_init, borrow=False, name="aux_stack")
+        # Build auxiliary stacks for extra recurrence outputs.
+        aux_stack_shapes = [(self.stack_size * self.batch_size,) + shape
+                            for shape in self.recurrence.extra_outputs]
+        self.aux_stacks = [theano.shared(np.zeros(shape, dtype=np.float32),
+                                         name="aux_stack_%i" % i)
+                           for i, shape in enumerate(aux_stack_shapes)]
 
-        cursors_init = np.zeros((self.batch_size,)).astype(np.float32) - 1.0
-        self._cursors_orig = theano.shared(cursors_init, borrow=False, name="cursors_orig")
-        self.cursors = theano.shared(cursors_init, borrow=False, name="cursors")
+        # Build backward auxiliary stacks. These store d(cost)/d(auxiliary) at
+        # each timestep.
+        self.aux_bwd_stacks = [theano.shared(np.zeros(shape, dtype=np.float32),
+                                             name="aux_bwd_stack_%i" % i)
+                               for i, shape in enumerate(aux_stack_shapes)]
 
-        queue_init = np.zeros((self.batch_size * self.stack_size,)).astype(np.float32)
-        self._queue_orig = theano.shared(queue_init, borrow=False, name="queue_orig")
+        # Build cursor vector.
+        cursors_init = np.zeros((self.batch_size,), dtype=np.float32) - 1.0
+        self.cursors = theano.shared(cursors_init, borrow=False,
+                                     name="cursors")
+
+        # Build queue matrix.
+        queue_init = np.zeros((self.batch_size * self.stack_size,),
+                              dtype=np.float32)
         self.queue = theano.shared(queue_init, borrow=False, name="queue")
 
-        zero_updates = {
-                self.stack: self._stack_orig,
-                self.aux_stack: self._aux_stack_orig,
-                self.cursors: self._cursors_orig,
-                self.queue: self._queue_orig
-        }
+        all_vars = [self.stack, self.stack_bwd, self.cursors, self.queue]
+        all_vars += self.aux_stacks + self.aux_bwd_stacks
+
+        zero_updates = {shared_var: np.zeros(shared_var.get_value().shape,
+                                             dtype=np.float32)
+                        for shared_var in all_vars}
         self.zero = theano.function([], (), updates=zero_updates)
 
     def _make_inputs(self):
@@ -254,26 +242,17 @@ class HardStack(object):
         self.transitions = self.transitions or T.imatrix("transitions")
 
     def _step(self, t, t_f, transitions_t, transitions_t_f, ss_mask_gen_matrix_t,
-              buffer_cur_t, tracking_hidden, attention_hidden, buffer,
-              ground_truth_transitions_visible, premise_stack_tops):
+              buffer_cur_t, attention_hidden, buffer,
+              ground_truth_transitions_visible, premise_stack_tops, *rest):
         batch_size, _ = self.X.shape
 
         # Extract top buffer values.
         idxs = buffer_cur_t + self._buffer_shift
         buffer_top_t = cuda_util.AdvancedSubtensor1Floats("F_buffer_top")(buffer, idxs)
 
-        if self.context_sensitive_shift:
-            # Combine with the hidden state from previous unit.
-            tracking_h_t = tracking_hidden[:, :self.tracking_lstm_hidden_dim]
-            context_comb_input_t = T.concatenate([tracking_h_t, buffer_top_t], axis=1)
-            context_comb_input_dim = self.word_embedding_dim + self.tracking_lstm_hidden_dim
-            comb_layer = util.ReLULayer if self.context_sensitive_use_relu else util.Linear
-            buffer_top_t = comb_layer(context_comb_input_t, context_comb_input_dim, self.model_dim,
-                                self._vs, name="context_comb_unit", use_bias=True,
-                                initializer=util.HeKaimingInitializer())
-
         # Fetch top two stack elements.
-        stack_1 = cuda_util.AdvancedSubtensor1Floats("F_stack1")(self.stack, (t - 1) * self.batch_size + self._stack_shift)
+        stack_1_ptrs = (t - 1) * self.batch_size + self._stack_shift
+        stack_1 = cuda_util.AdvancedSubtensor1Floats("F_stack1")(self.stack, stack_1_ptrs)
         # Get pointers into stack for second-to-top element.
         cursors = self.cursors - 1.0
         stack_2_ptrs = cuda_util.AdvancedSubtensor1Floats("F_stack2_ptrs")(self.queue, cursors + self._queue_shift)
@@ -298,56 +277,44 @@ class HardStack(object):
         # stack_2 values are not valid unless we are on t >= 1 (TODO?)
         stack_2 = ifelse(t <= 1, T.zeros((self.batch_size, self.model_dim)), stack_2)
 
-        if self._prediction_and_tracking_network is not None:
-            # We are predicting our own stack operations.
-            predict_inp = T.concatenate(
-                [stack_1, stack_2, buffer_top_t], axis=1)
+        extra_inputs = tuple([
+            cuda_util.AdvancedSubtensor1Floats("F_extra_inp_%i" % i)(
+                aux_stack, stack_1_ptrs)
+            for i, aux_stack in enumerate(self.aux_stacks)])
+        #########
 
-            if self.use_tracking_lstm:
-                # Update the hidden state and obtain predicted actions.
-                tracking_hidden, actions_t = self._prediction_and_tracking_network(
-                    tracking_hidden, predict_inp, self.model_dim * 3,
-                    self.tracking_lstm_hidden_dim, self._vs,
-                    name="prediction_and_tracking")
-            else:
-                # Obtain predicted actions directly.
-                actions_t = self._prediction_and_tracking_network(
-                    predict_inp, self.model_dim * 3, util.NUM_TRANSITION_TYPES, self._vs,
-                    name="prediction_and_tracking")
+        recurrence_inputs = (stack_1, stack_2, buffer_top_t)
+        recurrence_inputs += extra_inputs # TODO
+        recurrence_ret = self.recurrence(recurrence_inputs)
 
-        if self.train_with_predicted_transitions:
-            # Model 2 case.
-            if self.interpolate:
-                # Only use ground truth transitions if they are marked as visible to the model.
-                effective_ss_mask_gen_matrix_t = ss_mask_gen_matrix_t * ground_truth_transitions_visible
-                # Interpolate between truth and prediction using bernoulli RVs
-                # generated prior to the step.
-                mask = (transitions_t * effective_ss_mask_gen_matrix_t
-                        + actions_t.argmax(axis=1) * (1 - effective_ss_mask_gen_matrix_t))
+        push_ret, merge_ret = recurrence_ret[:2]
+
+        if self.recurrence.predicts_transitions:
+            actions_t = recurrence_ret[2].argmax(axis=1)
+
+            if self.recurrence.uses_predictions:
+                # Model 2 case.
+                if self.interpolate:
+                    # Only use ground truth transitions if they are marked as visible to the model.
+                    effective_ss_mask_gen_matrix_t = ss_mask_gen_matrix_t * ground_truth_transitions_visible
+                    # Interpolate between truth and prediction using bernoulli RVs
+                    # generated prior to the step.
+                    mask = (transitions_t * effective_ss_mask_gen_matrix_t
+                            + actions_t * (1 - effective_ss_mask_gen_matrix_t))
+                else:
+                    # Use predicted actions to build a mask.
+                    mask = actions_t
             else:
-                # Use predicted actions to build a mask.
-                mask = actions_t.argmax(axis=1)
-        elif self._predict_transitions:
-            # Use transitions provided from external parser when not masked out
-            mask = (transitions_t * ground_truth_transitions_visible
-                        + actions_t.argmax(axis=1) * (1 - ground_truth_transitions_visible))
+                # Use transitions provided from external parser when not masked out
+                mask = (transitions_t * ground_truth_transitions_visible
+                        + actions_t * (1 - ground_truth_transitions_visible))
         else:
             # Model 0 case
             mask = transitions_t_f
 
-        # Now update the stack: first precompute merge results.
-        merge_items = T.concatenate([stack_1, stack_2], axis=1)
-        if self.connect_tracking_comp:
-            tracking_h_t = tracking_hidden[:, :self.tracking_lstm_hidden_dim]
-            merge_value = self._compose_network(merge_items, tracking_h_t, self.model_dim,
-                self._vs, name="compose", external_state_dim=self.tracking_lstm_hidden_dim)
-        else:
-            merge_value = self._compose_network(merge_items, self.model_dim * 2, self.model_dim,
-                self._vs, name="compose")
-
         # Compute new stack value.
         stack_next, merge_queue_next, merge_cursors_next = update_hard_stack(
-            t, t_f, self.stack, buffer_top_t, merge_value, self.queue, self.cursors,
+            t, t_f, self.stack, buffer_top_t, merge_ret[0], self.queue, self.cursors,
             mask, self.batch_size, self._stack_shift, self._cursors_shift)
 
         # If attention is to be used and premise_stack_tops is not None i.e.
@@ -361,14 +328,20 @@ class HardStack(object):
         # should increment each buffer cursor by 1 - mask.
         buffer_cur_next = buffer_cur_t + (1 - transitions_t_f)
 
-        # Update auxiliary stacks. (DEV)
-        aux_stack_next = cuda_util.AdvancedIncSubtensor1Floats(set_instead_of_inc=True)(
-                self.aux_stack, tracking_hidden, t_f * self.batch_size + self._stack_shift)
+        # Update auxiliary stacks.
+        ptr_next = t_f * self.batch_size + self._stack_shift
+        # TODO: Allow recurrence to state that output i is the same for push +
+        # merge -- then we don't have to mask it
+        aux_outputs = [mask * m_output + (1. - mask) * p_output
+                       for p_output, m_output in zip(push_ret, merge_ret[1:])]
+        aux_stack_updates = {aux_stack: cuda_util.AdvancedIncSubtensor1Floats(set_instead_of_inc=True)(
+            aux_stack, aux_output, ptr_next)
+            for aux_stack, aux_output in zip(self.aux_stacks, aux_outputs)}
 
-        if self._predict_transitions:
-            ret_val = buffer_cur_next, tracking_hidden, attention_hidden, actions_t
+        if self.recurrence.predicts_transitions:
+            ret_val = buffer_cur_next, attention_hidden, stack_2_ptrs, actions_t
         else:
-            ret_val = buffer_cur_next, tracking_hidden, attention_hidden, stack_2_ptrs
+            ret_val = buffer_cur_next, attention_hidden, stack_2_ptrs
 
         if not self.interpolate:
             # Use ss_mask as a redundant return value.
@@ -376,10 +349,10 @@ class HardStack(object):
 
         updates = {
             self.stack: stack_next,
-            self.aux_stack: aux_stack_next,
             self.queue: merge_queue_next,
             self.cursors: merge_cursors_next
         }
+        updates.update(aux_stack_updates)
 
         return ret_val, updates
 
@@ -400,22 +373,16 @@ class HardStack(object):
         # Look up all of the embeddings that will be used.
         raw_embeddings = self.embeddings[self.X]  # batch_size * seq_length * emb_dim
 
-        if self.context_sensitive_shift:
-            # Use the raw embedding vectors, they will be combined with the hidden state of
-            # the tracking unit later
-            buffer_t = raw_embeddings
-            buffer_emb_dim = self.word_embedding_dim
-        else:
-            # Allocate a "buffer" stack initialized with projected embeddings,
-            # and maintain a cursor in this buffer.
-            buffer_t = self._embedding_projection_network(
-                raw_embeddings, self.word_embedding_dim, self.model_dim, self._vs, name="project")
-            if self.use_input_batch_norm:
-                buffer_t = util.BatchNorm(buffer_t, self.model_dim, self._vs, "buffer",
-                    self.training_mode, axes=[0, 1])
-            if self.use_input_dropout:
-                buffer_t = util.Dropout(buffer_t, self.embedding_dropout_keep_rate, self.training_mode)
-            buffer_emb_dim = self.model_dim
+        # Allocate a "buffer" stack initialized with projected embeddings,
+        # and maintain a cursor in this buffer.
+        buffer_t = self._embedding_projection_network(
+            raw_embeddings, self.word_embedding_dim, self.model_dim, self._vs, name="project")
+        if self.use_input_batch_norm:
+            buffer_t = util.BatchNorm(buffer_t, self.model_dim, self._vs, "buffer",
+                self.training_mode, axes=[0, 1])
+        if self.use_input_dropout:
+            buffer_t = util.Dropout(buffer_t, self.embedding_dropout_keep_rate, self.training_mode)
+        buffer_emb_dim = self.model_dim
 
         # Collapse buffer to (batch_size * buffer_size) * emb_dim for fast indexing.
         self.buffer_t = buffer_t = buffer_t.reshape((-1, buffer_emb_dim))
@@ -428,15 +395,6 @@ class HardStack(object):
         transitions = self.transitions.dimshuffle(1, 0)
         transitions_f = T.cast(transitions, dtype=theano.config.floatX)
 
-        # Initialize the hidden state for the tracking LSTM, if needed.
-        if self.use_tracking_lstm:
-            # TODO: Unify what 'dim' means with LSTM. Here, it's the dim of
-            # each of h and c. For 'model_dim', it's the combined dimension
-            # of the full hidden state (so h and c are each model_dim/2).
-            hidden_init = T.zeros((batch_size, self.tracking_lstm_hidden_dim * 2))
-        else:
-            hidden_init = DUMMY
-
         # Initialize the attention representation if needed
         if self.use_attention:
             attention_init = T.zeros((batch_size, self.model_dim))
@@ -445,10 +403,9 @@ class HardStack(object):
 
         # Set up the output list for scanning over _step().
         # Final `None` entry is for accumulating `stack_2_ptr` values.
-        if self._predict_transitions:
-            outputs_info = [stack_init, buffer_cur_init, hidden_init, attention_init, None]
-        else:
-            outputs_info = [buffer_cur_init, hidden_init, attention_init, None]
+        outputs_info = [buffer_cur_init, attention_init, None]
+        if self.recurrence.predicts_transitions:
+            outputs_info.append(None)
 
         # Prepare data to scan over.
         sequences = [T.arange(transitions.shape[0]),
@@ -472,11 +429,15 @@ class HardStack(object):
         else:
             non_sequences = non_sequences + [DUMMY]
 
+        # Tack on all relevant params, structures to satisfy strict mode.
+        non_sequences += self.aux_stacks
+
         scan_ret, self.scan_updates = theano.scan(
                 self._step,
                 sequences=sequences,
-                non_sequences=[buffer_t, self.ground_truth_transitions_visible],
+                non_sequences=non_sequences,
                 outputs_info=outputs_info,
+                strict=True,
                 name="fwd")
 
         ret_shift = 0 if self.interpolate else 1
@@ -485,11 +446,12 @@ class HardStack(object):
         self.buf_ptrs = scan_ret[ret_shift + 0]
 
         self.final_stack = self.scan_updates[self.stack]
-        self.final_aux_stack = self.scan_updates[self.aux_stack]
+        self.final_aux_stacks = [self.scan_updates[aux_stack]
+                                 for aux_stack in self.aux_stacks]
 
         self.transitions_pred = None
-        if self._predict_transitions:
-            self.transitions_pred = scan_ret[0][-1].dimshuffle(1, 0, 2)
+        if self.recurrence.predicts_transitions:
+            self.transitions_pred = scan_ret[ret_shift + 3][-1].dimshuffle(1, 0, 2)
 
         # TODO(Raghav): update to work with new stack representation
         if self.use_attention and not self.is_hypothesis:
@@ -755,7 +717,7 @@ class HardStack(object):
                          for shape in wrt_shapes]
 
         # bwd stacks
-        non_sequences = [self.stack_bwd] + extra_bwd_init
+        non_sequences = [self.stack_bwd] + self.aux_bwd_stacks
         # auxiliary data
         non_sequences += [id_buffer, self.final_stack]
         # more helpers (not referenced directly in code, but we need to include
@@ -773,84 +735,84 @@ class HardStack(object):
         self.dE = bscan_ret[0][-1]
 
 
-class Model0(HardStack):
+# class Model0(HardStack):
 
-    def __init__(self, *args, **kwargs):
-        use_tracking_lstm = kwargs.get("use_tracking_lstm", False)
-        if use_tracking_lstm:
-            kwargs["prediction_and_tracking_network"] = partial(util.TrackingUnit, make_logits=False)
-        else:
-            kwargs["prediction_and_tracking_network"] = None
+#     def __init__(self, *args, **kwargs):
+#         use_tracking_lstm = kwargs.get("use_tracking_lstm", False)
+#         if use_tracking_lstm:
+#             kwargs["prediction_and_tracking_network"] = partial(util.TrackingUnit, make_logits=False)
+#         else:
+#             kwargs["prediction_and_tracking_network"] = None
 
-        kwargs["predict_transitions"] = False
-        kwargs["train_with_predicted_transitions"] = False
-        kwargs["interpolate"] = False
+#         kwargs["predict_transitions"] = False
+#         kwargs["train_with_predicted_transitions"] = False
+#         kwargs["interpolate"] = False
 
-        use_attention = kwargs.get("use_attention", False)
-        if use_attention:
-            kwargs["attention_unit"] = util.AttentionUnit
-        else:
-            kwargs["attention_unit"] = None
-        super(Model0, self).__init__(*args, **kwargs)
-
-
-class Model1(HardStack):
-
-    def __init__(self, *args, **kwargs):
-        # Set the tracking unit based on supplied tracking_lstm_hidden_dim.
-        use_tracking_lstm = kwargs.get("use_tracking_lstm", False)
-        if use_tracking_lstm:
-            kwargs["prediction_and_tracking_network"] = util.TrackingUnit
-        else:
-            kwargs["prediction_and_tracking_network"] = util.Linear
-        # Defaults to not using predictions while training and not using scheduled sampling.
-        kwargs["predict_transitions"] = True
-        kwargs["train_with_predicted_transitions"] = False
-        kwargs["interpolate"] = False
-        use_attention = kwargs.get("use_attention", False)
-        if use_attention:
-            kwargs["attention_unit"] = util.AttentionUnit
-        else:
-            kwargs["attention_unit"] = None
-        super(Model1, self).__init__(*args, **kwargs)
+#         use_attention = kwargs.get("use_attention", False)
+#         if use_attention:
+#             kwargs["attention_unit"] = util.AttentionUnit
+#         else:
+#             kwargs["attention_unit"] = None
+#         super(Model0, self).__init__(*args, **kwargs)
 
 
-class Model2(HardStack):
+# class Model1(HardStack):
 
-    def __init__(self, *args, **kwargs):
-        # Set the tracking unit based on supplied tracking_lstm_hidden_dim.
-        use_tracking_lstm = kwargs.get("use_tracking_lstm", False)
-        if use_tracking_lstm:
-            kwargs["prediction_and_tracking_network"] = util.TrackingUnit
-        else:
-            kwargs["prediction_and_tracking_network"] = util.Linear
-        # Defaults to using predictions while training and not using scheduled sampling.
-        kwargs["predict_transitions"] = True
-        kwargs["train_with_predicted_transitions"] = True
-        kwargs["interpolate"] = False
-        use_attention = kwargs.get("use_attention", False)
-        if use_attention:
-            kwargs["attention_unit"] = util.AttentionUnit
-        else:
-            kwargs["attention_unit"] = None
-        super(Model2, self).__init__(*args, **kwargs)
+#     def __init__(self, *args, **kwargs):
+#         # Set the tracking unit based on supplied tracking_lstm_hidden_dim.
+#         use_tracking_lstm = kwargs.get("use_tracking_lstm", False)
+#         if use_tracking_lstm:
+#             kwargs["prediction_and_tracking_network"] = util.TrackingUnit
+#         else:
+#             kwargs["prediction_and_tracking_network"] = util.Linear
+#         # Defaults to not using predictions while training and not using scheduled sampling.
+#         kwargs["predict_transitions"] = True
+#         kwargs["train_with_predicted_transitions"] = False
+#         kwargs["interpolate"] = False
+#         use_attention = kwargs.get("use_attention", False)
+#         if use_attention:
+#             kwargs["attention_unit"] = util.AttentionUnit
+#         else:
+#             kwargs["attention_unit"] = None
+#         super(Model1, self).__init__(*args, **kwargs)
 
 
-class Model2S(HardStack):
+# class Model2(HardStack):
 
-    def __init__(self, *args, **kwargs):
-        use_tracking_lstm = kwargs.get("use_tracking_lstm", False)
-        if use_tracking_lstm:
-            kwargs["prediction_and_tracking_network"] = util.TrackingUnit
-        else:
-            kwargs["prediction_and_tracking_network"] = util.Linear
-        # Use supplied settings and use scheduled sampling.
-        kwargs["predict_transitions"] = True
-        kwargs["train_with_predicted_transitions"] = True
-        kwargs["interpolate"] = True
-        use_attention = kwargs.get("use_attention", False)
-        if use_attention:
-            kwargs["attention_unit"] = util.AttentionUnit
-        else:
-            kwargs["attention_unit"] = None
-        super(Model2S, self).__init__(*args, **kwargs)
+#     def __init__(self, *args, **kwargs):
+#         # Set the tracking unit based on supplied tracking_lstm_hidden_dim.
+#         use_tracking_lstm = kwargs.get("use_tracking_lstm", False)
+#         if use_tracking_lstm:
+#             kwargs["prediction_and_tracking_network"] = util.TrackingUnit
+#         else:
+#             kwargs["prediction_and_tracking_network"] = util.Linear
+#         # Defaults to using predictions while training and not using scheduled sampling.
+#         kwargs["predict_transitions"] = True
+#         kwargs["train_with_predicted_transitions"] = True
+#         kwargs["interpolate"] = False
+#         use_attention = kwargs.get("use_attention", False)
+#         if use_attention:
+#             kwargs["attention_unit"] = util.AttentionUnit
+#         else:
+#             kwargs["attention_unit"] = None
+#         super(Model2, self).__init__(*args, **kwargs)
+
+
+# class Model2S(HardStack):
+
+#     def __init__(self, *args, **kwargs):
+#         use_tracking_lstm = kwargs.get("use_tracking_lstm", False)
+#         if use_tracking_lstm:
+#             kwargs["prediction_and_tracking_network"] = util.TrackingUnit
+#         else:
+#             kwargs["prediction_and_tracking_network"] = util.Linear
+#         # Use supplied settings and use scheduled sampling.
+#         kwargs["predict_transitions"] = True
+#         kwargs["train_with_predicted_transitions"] = True
+#         kwargs["interpolate"] = True
+#         use_attention = kwargs.get("use_attention", False)
+#         if use_attention:
+#             kwargs["attention_unit"] = util.AttentionUnit
+#         else:
+#             kwargs["attention_unit"] = None
+#         super(Model2S, self).__init__(*args, **kwargs)

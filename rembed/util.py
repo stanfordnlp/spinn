@@ -168,8 +168,8 @@ class VariableStore(object):
         if skip_saved_unsavables:
             keys = self.vars
         else:
-        if not keys:
-            keys = self.savable_vars
+            if not keys:
+                keys = self.savable_vars
         save_file = open(filename)
         for key in keys:
             if skip_saved_unsavables and key not in self.savable_vars:
@@ -179,10 +179,10 @@ class VariableStore(object):
                         "Not restoring variable " + full_name, level=self.logger.DEBUG)
                 _ = cPickle.load(save_file) # Discard
             else:
-            if self.logger:
-                full_name = "%s/%s" % (self.prefix, key)
-                self.logger.Log(
-                    "Restoring variable " + full_name, level=self.logger.DEBUG)
+                if self.logger:
+                    full_name = "%s/%s" % (self.prefix, key)
+                    self.logger.Log(
+                        "Restoring variable " + full_name, level=self.logger.DEBUG)
             self.vars[key].set_value(cPickle.load(save_file), borrow=True)
 
         extra_vars = []

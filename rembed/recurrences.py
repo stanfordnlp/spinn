@@ -7,6 +7,8 @@ by the `rembed.stack` model.
 
 from functools import partial
 
+from theano import tensor as T
+
 from rembed import util
 
 
@@ -20,15 +22,17 @@ class Recurrence(object):
         # values in a push op. A recurrence may also output `N` "extra"
         # outputs, expected at both merge and push ops.
         #
-        # This list should contain `N` integers. The integer at position `i`
-        # specifies that extra output #`i` will have `extra_outputs[i]`
-        # dimensions given a single example (non-batched) input.
+        # This list should contain `N` shape tuples. The tuple at position `i`
+        # specifies that extra output #`i` will have shape `extra_outputs[i]`
+        # for a single example (i.e., not including batch axis). For example,
+        # if a recurrence yields a 50-dimensional vector for each example at
+        # each timestep, we would include `(50,)` here.
         self.extra_outputs = []
 
         self.predicts_transitions = False
-        self.uses_transitions = False
+        self.uses_predictions = False
 
-    def forward(self, inputs, **constants):
+    def __call__(self, inputs, **constants):
         """
         Computes push and merge results for a single timestep.
 
@@ -123,7 +127,7 @@ class Model0(Recurrence, SharedRecurrenceMixin):
         super(Model0, self).__init__(spec, vs)
         self.extra_outputs = []
         if use_tracking_lstm:
-            self.extra_outputs.append(1)
+            self.extra_outputs.append((tracking_lstm_hidden_dim * 2,))
         self.predicts_transitions = False
 
         self._compose_network = compose_network
@@ -136,7 +140,7 @@ class Model0(Recurrence, SharedRecurrenceMixin):
             self._prediction_and_tracking_network = partial(util.TrackingUnit,
                                                             make_logits=False)
 
-    def forward(self, inputs, **constants):
+    def __call__(self, inputs, **constants):
         c1, c2, buffer_top = inputs[:3]
         if self.use_tracking_lstm:
             tracking_hidden = inputs[3]
@@ -148,7 +152,7 @@ class Model0(Recurrence, SharedRecurrenceMixin):
             tracking_hidden, _ = self._tracking_lstm_predict(
                 inputs, self._prediction_and_tracking_network)
 
-        merge_value = self._merge(inputs, network)
+        merge_value = self._merge(inputs, self._compose_network)
 
         if self.use_tracking_lstm:
             return [tracking_hidden], [merge_value, tracking_hidden]
@@ -164,11 +168,10 @@ class Model1(Recurrence, SharedRecurrenceMixin):
                  context_sensitive_shift=False,
                  context_sensitive_use_relu=False):
         super(Model1, self).__init__(spec, vs)
-        self.extra_outputs = [1]
         if use_tracking_lstm:
-            self.extra_outputs.append(1)
+            self.extra_outputs.append((tracking_lstm_hidden_dim * 2,))
         self.predicts_transitions = True
-        self.uses_transitions = False
+        self.uses_predictions = False
 
         self._compose_network = compose_network
         self.use_tracking_lstm = use_tracking_lstm
@@ -182,7 +185,7 @@ class Model1(Recurrence, SharedRecurrenceMixin):
         else:
             self._prediction_and_tracking_network = util.Linear
 
-    def forward(self, inputs, **constants):
+    def __call__(self, inputs, **constants):
         c1, c2, buffer_top = inputs[:3]
         if self.use_tracking_lstm:
             tracking_hidden = inputs[3]
@@ -198,7 +201,7 @@ class Model1(Recurrence, SharedRecurrenceMixin):
             actions_t = self._predict(
                 inputs, self._prediction_and_tracking_network)
 
-        merge_value = self._merge(inputs, network)
+        merge_value = self._merge(inputs, self._compose_network)
 
         if self.use_tracking_lstm:
             return [tracking_hidden], [merge_value, tracking_hidden], actions_t
@@ -210,4 +213,4 @@ class Model2(Model1, SharedRecurrenceMixin):
 
     def __init__(self, spec, vs, compose_network, **kwargs):
         super(Model2, self).__init__(spec, vs, compose_network, **kwargs)
-        self.uses_transitions = True
+        self.uses_predictions = True

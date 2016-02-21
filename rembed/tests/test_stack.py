@@ -5,19 +5,23 @@ import theano
 from theano import tensor as T
 
 from rembed import cuda_util, util
-from rembed.stack import HardStack
+from rembed.stack import ThinStack
+from rembed.recurrences import Recurrence, Model0
 from rembed.util import VariableStore, CropAndPad, IdentityLayer, batch_subgraph_gradients
 
 
-class HardStackTestCase(unittest.TestCase):
+class ThinStackTestCase(unittest.TestCase):
 
-    """Basic functional tests for HardStack with dummy data."""
+    """Basic functional tests for ThinStack with dummy data."""
 
     def _make_stack(self, seq_length=4):
         self.batch_size = 2
         self.embedding_dim = embedding_dim = 3
         self.vocab_size = vocab_size = 10
         self.seq_length = seq_length
+
+        spec = util.ModelSpec(embedding_dim, embedding_dim, self.batch_size,
+                              vocab_size, seq_length)
 
         def compose_network(inp, inp_dim, outp_dim, vs, name="compose"):
             # Just add the two embeddings!
@@ -34,14 +38,15 @@ class HardStackTestCase(unittest.TestCase):
         initial_embeddings = np.arange(vocab_size).reshape(
             (vocab_size, 1)).repeat(embedding_dim, axis=1)
 
-        self.stack = HardStack(
-            embedding_dim, embedding_dim, 2, vocab_size, seq_length, compose_network,
-            IdentityLayer, training_mode, ground_truth_transitions_visible, vs,
-            X=X,
-            transitions=transitions,
-            make_test_fn=True,
-            initial_embeddings=initial_embeddings,
-            use_input_batch_norm=False, use_input_dropout=False)
+        recurrence = Model0(spec, vs, compose_network)
+        self.stack = ThinStack(spec, recurrence, IdentityLayer, training_mode,
+                               ground_truth_transitions_visible, vs,
+                               X=X,
+                               transitions=transitions,
+                               make_test_fn=True,
+                               initial_embeddings=initial_embeddings,
+                               use_input_batch_norm=False,
+                               use_input_dropout=False)
 
     def test_basic_ff(self):
         self._make_stack(4)
