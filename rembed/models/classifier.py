@@ -30,12 +30,12 @@ import theano
 import numpy as np
 
 from rembed import afs_safe_logger
-from rembed import util
+from rembed import recurrences, util
 from rembed.data.boolean import load_boolean_data
 from rembed.data.sst import load_sst_data
 from rembed.data.snli import load_snli_data
+from rembed.stack import ThinStack
 
-import rembed.stack
 import rembed.plain_rnn
 
 
@@ -84,21 +84,23 @@ def build_sentence_model(cls, vocab_size, seq_length, tokens, transitions,
                 "word_embedding_dim must equal model_dim unless a projection layer is used."
             embedding_projection_network = util.IdentityLayer
 
-    # Build hard stack which scans over input sequence.
-    sentence_model = cls(
-        FLAGS.model_dim, FLAGS.word_embedding_dim, FLAGS.batch_size, vocab_size, seq_length,
-        compose_network, embedding_projection_network, training_mode, ground_truth_transitions_visible, vs,
-        use_tracking_lstm=FLAGS.use_tracking_lstm,
-        tracking_lstm_hidden_dim=FLAGS.tracking_lstm_hidden_dim,
-        X=tokens,
-        transitions=transitions,
-        initial_embeddings=initial_embeddings,
-        embedding_dropout_keep_rate=FLAGS.embedding_keep_rate,
-        ss_mask_gen=ss_mask_gen,
-        ss_prob=ss_prob,
-        connect_tracking_comp=FLAGS.connect_tracking_comp,
-        context_sensitive_shift=FLAGS.context_sensitive_shift,
-        context_sensitive_use_relu=FLAGS.context_sensitive_use_relu)
+    spec = util.ModelSpec(FLAGS.model_dim, FLAGS.word_embedding_dim,
+                          FLAGS.batch_size, vocab_size, seq_length)
+    # TODO check non-Model0 support
+    recurrence = cls(spec, vs, compose_network,
+                     use_context_sensitive_shift=FLAGS.context_sensitive_shift,
+                     context_sensitive_use_relu=FLAGS.context_sensitive_use_relu,
+                     use_tracking_lstm=FLAGS.use_tracking_lstm,
+                     tracking_lstm_hidden_dim=FLAGS.tracking_lstm_hidden_dim)
+
+    stack = ThinStack(spec, recurrence, embedding_projection_network,
+                      training_mode, ground_truth_transitions_visible, vs,
+                      X=tokens,
+                      transitions=transitions,
+                      initial_embeddings=initial_embeddings,
+                      embedding_dropout_keep_rate=FLAGS.embedding_keep_rate,
+                      ss_mask_gen=ss_mask_gen,
+                      ss_prob=ss_prob)
 
     # Extract top element of final stack timestep.
     stack_top = stack.scan_updates[stack.stack][-FLAGS.batch_size:]
@@ -112,7 +114,7 @@ def build_sentence_model(cls, vocab_size, seq_length, tokens, transitions,
         sentence_vector, FLAGS.model_dim, num_classes, vs,
         name="semantic_classifier", use_bias=True)
 
-    return stack, stack_top, sentence_model.transitions_pred, logits
+    return stack, stack_top, stack.transitions_pred, logits
 
 
 def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
@@ -495,7 +497,7 @@ def run(only_forward=False):
     if FLAGS.model_type == "RNN":
         model_cls = rembed.plain_rnn.RNN
     else:
-        model_cls = getattr(rembed.stack, FLAGS.model_type)
+        model_cls = getattr(recurrences, FLAGS.model_type)
 
     # Generator of mask for scheduled sampling
     numpy_random = np.random.RandomState(1234)
@@ -559,8 +561,8 @@ def run(only_forward=False):
         checkpoint_path = os.path.join(FLAGS.ckpt_path, FLAGS.experiment_name + ".ckpt")
     if os.path.isfile(checkpoint_path):
         logger.Log("Found checkpoint, restoring.")
-        step, best_dev_error = vs.load_checkpoint(checkpoint_path, num_extra_vars=2, 
-                                                  skip_saved_unsavables=FLAGS.skip_saved_unsavables) 
+        step, best_dev_error = vs.load_checkpoint(checkpoint_path, num_extra_vars=2,
+                                                  skip_saved_unsavables=FLAGS.skip_saved_unsavables)
     else:
         assert not only_forward, "Can't run an eval-only run without a checkpoint. Supply a checkpoint."
         step = 0
@@ -603,12 +605,17 @@ def run(only_forward=False):
                               data_manager.SENTENCE_PAIR_DATA, ind_to_word)
     else:
         # Train
-
-        new_values = util.RMSprop(total_cost, vs.trainable_vars.values(), lr)
-        new_values += [(key, vs.nongradient_updates[key]) for key in vs.nongradient_updates]
+        # TODO collect gradients wrt things past stack_top, with
+        # consider_constant(stack_top)
+        error_signal = T.grad(total_cost, stack_top)
+        stack.make_backprop_scan(error_signal)
         # Training open-vocabulary embeddings is a questionable idea right now. Disabled:
-        # new_values.append(
-        #     util.embedding_SGD(total_cost, embedding_params, embedding_lr))
+        # stack_gradients[stack.embeddings] = stack.embedding_gradients
+
+        new_values = util.RMSprop(total_cost, stack.gradients.keys(), lr,
+                                  grads=stack.gradients.values())
+        new_values += [(key, vs.nongradient_updates[key]) for key in vs.nongradient_updates]
+        new_values += stack.scan_updates.items() + stack.bscan_updates.items()
 
         # Create training and eval functions.
         # Unused variable warnings are supressed so that num_transitions can be passed in when training Model 0,
@@ -649,6 +656,9 @@ def run(only_forward=False):
 
             if step % FLAGS.ckpt_interval_steps == 0 and step > 0:
                 vs.save_checkpoint(checkpoint_path, extra_vars=[step, best_dev_error])
+
+            # Zero out all auxiliary variables.
+            stack.zero()
 
 
 if __name__ == '__main__':

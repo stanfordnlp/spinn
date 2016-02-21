@@ -448,7 +448,7 @@ class ThinStack(object):
         input_ndim += [len(extra_output_shape)
                        for extra_output_shape in self.recurrence.extra_outputs]
 
-        wrt = [var for var in self._vs.vars.values()
+        wrt = [var for var in self._vs.trainable_vars.values()
                if var != self.embeddings]
 
         # TODO handle gradient of action prediction
@@ -735,8 +735,9 @@ class ThinStack(object):
                 strict=True,
                 name="stack_bwd")
 
-        self.deltas = [deltas[-1] for deltas in bscan_ret[1:]]
-        self.dE = bscan_ret[0][-1]
+        self.gradients = {wrt_i: deltas_i[-1] for wrt_i, deltas_i
+                          in zip(wrt, bscan_ret[1:])}
+        self.embedding_gradients = bscan_ret[0][-1]
 
 
 # class Model0(HardStack):

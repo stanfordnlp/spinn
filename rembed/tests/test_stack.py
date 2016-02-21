@@ -203,15 +203,16 @@ class ThinStackBackpropTestCase(unittest.TestCase, BackpropTestMixin):
         self.stack.make_backprop_scan(error_signal)
         f = theano.function(
             [self.X, self.transitions, self.y],
-            (cost, self.stack.deltas[0], self.stack.deltas[1], self.stack.dE))
+            (cost, self.stack.gradients[W], self.stack.gradients[b], self.stack.embedding_gradients),
+            updates=self.stack.scan_updates + self.stack.bscan_updates)
 
-        b_cost_sim, b_dW_sim, b_db_sim, b_dE_sim = f_simulated(X, y)
-        b_cost, b_dW, b_db, b_dE = f(X, transitions, y)
+        b_cost_sim, b_dW_sim, b_db_sim, b_embedding_gradients_sim = f_simulated(X, y)
+        b_cost, b_dW, b_db, b_embedding_gradients = f(X, transitions, y)
 
         np.testing.assert_almost_equal(b_cost_sim, b_cost)
         np.testing.assert_almost_equal(b_dW_sim, b_dW)
         np.testing.assert_almost_equal(b_db_sim, b_db)
-        np.testing.assert_almost_equal(b_dE_sim, b_dE)
+        np.testing.assert_almost_equal(b_embedding_gradients_sim, b_dE)
 
 
 class ThinStackTrackingBackpropTestCase(unittest.TestCase, BackpropTestMixin):
@@ -316,8 +317,8 @@ class ThinStackTrackingBackpropTestCase(unittest.TestCase, BackpropTestMixin):
         stack.make_backprop_scan(error_signal)
         f = theano.function(
             [self.X, self.transitions, self.y],
-            [top, cost, stack.dE] + stack.deltas,
-            updates=stack.bscan_updates)
+            [top, cost, stack.embedding_gradients] + [stack.gradients[var] for _, var in rel_vars],
+            updates=stack.scan_updates + stack.bscan_updates)
 
         checks = ["top", "cost", "d/embeddings"] + ["d/%s" % name for name, _ in rel_vars]
         sim = f_sim(X, y)

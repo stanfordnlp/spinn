@@ -122,7 +122,7 @@ class Model0(Recurrence, SharedRecurrenceMixin):
     def __init__(self, spec, vs, compose_network,
                  use_tracking_lstm=False,
                  tracking_lstm_hidden_dim=8,
-                 context_sensitive_shift=False,
+                 use_context_sensitive_shift=False,
                  context_sensitive_use_relu=False):
         super(Model0, self).__init__(spec, vs)
         self.extra_outputs = []
@@ -133,7 +133,7 @@ class Model0(Recurrence, SharedRecurrenceMixin):
         self._compose_network = compose_network
         self.use_tracking_lstm = use_tracking_lstm
         self.tracking_lstm_hidden_dim = tracking_lstm_hidden_dim
-        self.use_context_sensitive_shift = context_sensitive_shift
+        self.use_context_sensitive_shift = use_context_sensitive_shift
         self.context_sensitive_use_relu = context_sensitive_use_relu
 
         if use_tracking_lstm:
@@ -166,7 +166,7 @@ class Model1(Recurrence, SharedRecurrenceMixin):
     def __init__(self, spec, vs, compose_network,
                  use_tracking_lstm=False,
                  tracking_lstm_hidden_dim=8,
-                 context_sensitive_shift=False,
+                 use_context_sensitive_shift=False,
                  context_sensitive_use_relu=False):
         super(Model1, self).__init__(spec, vs)
         if use_tracking_lstm:
@@ -177,7 +177,7 @@ class Model1(Recurrence, SharedRecurrenceMixin):
         self._compose_network = compose_network
         self.use_tracking_lstm = use_tracking_lstm
         self.tracking_lstm_hidden_dim = tracking_lstm_hidden_dim
-        self.use_context_sensitive_shift = context_sensitive_shift
+        self.use_context_sensitive_shift = use_context_sensitive_shift
         self.context_sensitive_use_relu = context_sensitive_use_relu
 
         if use_tracking_lstm:

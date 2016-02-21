@@ -421,10 +421,13 @@ def Momentum(cost, params, lr=0.01, momentum=0.9):
     return new_values
 
 
-def RMSprop(cost, params, lr=0.001, rho=0.9, epsilon=1e-6):
+def RMSprop(cost, params, lr=0.001, rho=0.9, epsilon=1e-6, grads=None):
     # From:
     # https://github.com/Newmu/Theano-Tutorials/blob/master/4_modern_net.py
-    grads = T.grad(cost=cost, wrt=params)
+    if grads is None:
+        grads = T.grad(cost=cost, wrt=params)
+    assert len(grads) == len(params)
+
     updates = []
     for p, g in zip(params, grads):
         acc = theano.shared(p.get_value() * 0.)
