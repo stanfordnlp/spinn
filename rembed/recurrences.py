@@ -1,8 +1,8 @@
 """
 Implements the core recurrences for various stack models.
 
-The recurrences described here are unrolled into bona-fide stacks
-by the `rembed.stack` model.
+The recurrences described here are unrolled into bona-fide stack models
+by `rembed.stack`.
 """
 
 from functools import partial
@@ -17,6 +17,9 @@ class Recurrence(object):
     def __init__(self, spec, vs):
         self._spec = spec
         self._vs = vs
+
+        # TODO(SB): Standardize terminology in comments --
+        #   Merge/push v. push/pop v. shift/reduce...
 
         # A recurrence is expected to output 1 value in a merge op and zero
         # values in a push op. A recurrence may also output `N` "extra"
@@ -76,6 +79,8 @@ class SharedRecurrenceMixin(object):
     def _context_sensitive_shift(self, inputs):
         """
         Compute a buffer top representation by mixing buffer top and hidden state.
+
+        NB: This hasn't been an especially effective tool so far.
         """
         assert self.use_tracking_lstm
         buffer_top, tracking_hidden = inputs[2:4]
@@ -91,6 +96,7 @@ class SharedRecurrenceMixin(object):
                      initializer=util.HeKaimingInitializer())
 
     def _tracking_lstm_predict(self, inputs, network):
+        # TODO(SB): Offer more buffer content than just the top as input.
         c1, c2, buffer_top, tracking_hidden = inputs[:4]
         inp = T.concatenate([c1, c2, buffer_top], axis=1)
         return network(tracking_hidden, inp, self._spec.model_dim * 3,
@@ -98,6 +104,7 @@ class SharedRecurrenceMixin(object):
                        name="prediction_and_tracking")
 
     def _predict(self, inputs, network):
+        # TODO(SB): Offer more buffer content than just the top as input.
         c1, c2, buffer_top = inputs[:3]
         inp = T.concatenate([c1, c2, buffer_top], axis=1)
         return network(inp, self._spec.model_dim * 3,
@@ -108,6 +115,10 @@ class SharedRecurrenceMixin(object):
         c1, c2 = inputs[:2]
         merge_items = T.concatenate([c1, c2], axis=1)
         if self.use_tracking_lstm:
+            # NB: Unlike in the previous implementation, context-sensitive 
+            # composition (aka the tracking--composition connection) is not 
+            # optional here. It helps performance, so this shouldn't be a 
+            # big problem.
             tracking_h_t = inputs[3][:, :self.tracking_lstm_hidden_dim]
             return network(merge_items, tracking_h_t, self._spec.model_dim,
                            self._vs, name="compose",
@@ -145,13 +156,15 @@ class Model0(Recurrence, SharedRecurrenceMixin):
         if self.use_tracking_lstm:
             tracking_hidden = inputs[3]
 
-        if self.use_context_sensitive_shift:
-            buffer_top = self._context_sensitive_shift(inputs)
-
+        # Unlike in the previous implementation, we update the tracking LSTM
+        # before using its output to update the inputs.
         if self.use_tracking_lstm:
             tracking_hidden, _ = self._tracking_lstm_predict(
                 inputs, self._prediction_and_tracking_network)
             inputs = [c1, c2, buffer_top, tracking_hidden]
+
+        if self.use_context_sensitive_shift:
+            buffer_top = self._context_sensitive_shift(inputs)
 
         merge_value = self._merge(inputs, self._compose_network)
 
@@ -191,10 +204,10 @@ class Model1(Recurrence, SharedRecurrenceMixin):
         if self.use_tracking_lstm:
             tracking_hidden = inputs[3]
 
-        if self.use_context_sensitive_shift:
-            buffer_top = self._context_sensitive_shift(inputs)
-
         # Predict transitions.
+
+        # Unlike in the previous implementation, we update the tracking LSTM
+        # before using its output to update the inputs.
         if self.use_tracking_lstm:
             tracking_hidden, actions_t = self._tracking_lstm_predict(
                 inputs, self._prediction_and_tracking_network)
@@ -202,6 +215,9 @@ class Model1(Recurrence, SharedRecurrenceMixin):
         else:
             actions_t = self._predict(
                 inputs, self._prediction_and_tracking_network)
+
+        if self.use_context_sensitive_shift:
+            buffer_top = self._context_sensitive_shift(inputs)
 
         merge_value = self._merge(inputs, self._compose_network)
 
@@ -212,6 +228,7 @@ class Model1(Recurrence, SharedRecurrenceMixin):
 
 
 class Model2(Model1, SharedRecurrenceMixin):
+    """Core implementation of Model 2. Supports scheduled sampling."""
 
     def __init__(self, spec, vs, compose_network, **kwargs):
         super(Model2, self).__init__(spec, vs, compose_network, **kwargs)
