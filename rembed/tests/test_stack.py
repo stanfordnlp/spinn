@@ -141,19 +141,19 @@ class ThinStackBackpropTestCase(unittest.TestCase, BackpropTestMixin):
         self.batch_size = 2
         self.num_classes = 2
 
-        embeddings = (np.arange(self.vocab_size)[:, np.newaxis]
-                .repeat(self.embedding_dim, axis=1).astype(np.float32) + 1.0)
-        W = theano.shared(np.array([[ 0.09853827,  0.28727029],
-                                    [ 0.70784546,  0.17831399],
-                                    [ 0.96303163,  0.53989795],
-                                    [ 0.37782846,  0.83950132]],
-                                   dtype=np.float32))
-        b = theano.shared(np.array([1.0, 1.0], dtype=np.float32))
-        self.embeddings = embeddings
-        self.W = W
-        self.b = b
+        spec = util.ModelSpec(self.model_dim, self.embedding_dim,
+                              self.batch_size, self.vocab_size,
+                              self.seq_length)
 
-        self.compose_network = lambda inp, *args, **kwargs: T.dot(inp, W) + b
+        self.vs = vs = VariableStore()
+        def compose_network(inp, *args, **kwargs):
+            W = vs.add_param("W", (self.model_dim * 2, self.model_dim))
+            b = vs.add_param("b", (self.model_dim,),
+                             initializer=util.ZeroInitializer())
+            return T.dot(inp, W) + b
+
+        self.compose_network = compose_network
+        recurrence = Model0(spec, vs, compose_network)
 
         def ghost_compose_net(c1, c2, buf_top):
             if c1.ndim == 1: c1 = c1[np.newaxis, :]
@@ -165,15 +165,10 @@ class ThinStackBackpropTestCase(unittest.TestCase, BackpropTestMixin):
         self.transitions = T.imatrix("transitions")
         self.y = T.ivector("y")
 
-        self.stack = HardStack(
-            self.model_dim, self.embedding_dim, self.batch_size,
-            self.vocab_size, self.seq_length, self.compose_network,
-            IdentityLayer, 0.0, 1.0, VariableStore(),
-            X=self.X,
-            transitions=self.transitions,
-            initial_embeddings=embeddings,
-            use_input_batch_norm=False,
-            use_input_dropout=False)
+        self.stack = ThinStack(spec, recurrence, IdentityLayer, 0.0, 1.0, vs,
+                               X=self.X, transitions=self.transitions,
+                               use_input_batch_norm=False,
+                               use_input_dropout=False)
 
     def _fake_stack_ff(self):
         """Fake a stack feedforward S S M S M with the given data."""
@@ -196,27 +191,22 @@ class ThinStackBackpropTestCase(unittest.TestCase, BackpropTestMixin):
         y = np.array([1, 0], dtype=np.int32)
         transitions = np.tile([0, 0, 1, 0, 1], (2, 1)).astype(np.int32)
 
+        W, b = self.vs.vars["W"], self.vs.vars["b"]
+
         simulated_top = self._fake_stack_ff()
         simulated_cost = self._make_cost(simulated_top)
         f_simulated = theano.function(
             [self.X, self.y],
-            (simulated_cost, T.grad(simulated_cost, self.W),
-             T.grad(simulated_cost, self.b),
+            (simulated_cost, T.grad(simulated_cost, W),
+             T.grad(simulated_cost, b),
              T.grad(simulated_cost, self.stack.embeddings)))
 
         top = self.stack.final_stack[-self.batch_size:]
         cost = self._make_cost(top)
         error_signal = T.grad(cost, top)
 
-        # Build composition gradient subgraph.
-        m_delta = batch_subgraph_gradients([1, 1, 1], [self.W, self.b], self.ghost_compose_net)
-        p_delta = lambda inps, grads: ([T.zeros((self.batch_size, self.model_dim))] * 3,
-                                       [T.zeros((self.batch_size, 1, self.model_dim)), T.zeros((self.batch_size, 1))])
-
-        # Now build backprop, passing in our composition gradient.
-        self.stack.make_backprop_scan([], [], error_signal, p_delta, m_delta,
-                                      [self.W.get_value().shape,
-                                       self.b.get_value().shape])
+        # Build automatic backprop function.
+        self.stack.make_backprop_scan(error_signal)
         f = theano.function(
             [self.X, self.transitions, self.y],
             (cost, self.stack.deltas[0], self.stack.deltas[1], self.stack.dE))

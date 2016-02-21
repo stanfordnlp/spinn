@@ -1,5 +1,6 @@
 from collections import namedtuple, OrderedDict
 import cPickle
+from functools import wraps
 import itertools
 import math
 import random
@@ -555,6 +556,31 @@ def batch_subgraph_gradients(g_in, wrt, f_g_out, name="batch_subgraph_grad"):
         return ds[:n_in], ds[n_in:]
 
     return batch_gradients
+
+
+def ensure_2d_arguments(f, squeeze_ret=True):
+    """Decorator which ensures all of its function's arguments are 2D."""
+    @wraps(f)
+    def wrapped(*args, **kwargs):
+        new_args = []
+        for arg in args:
+            if isinstance(arg, T.TensorVariable):
+                if arg.ndim == 1:
+                    arg = arg[np.newaxis, :]
+                elif arg.ndim > 2:
+                    raise RuntimeError("ensure_2d_arguments wrapped a function"
+                                       " which received an %i-d argument. "
+                                       "Don't know what to do.")
+            new_args.append(arg)
+
+        ret = f(*new_args, **kwargs)
+        if squeeze_ret:
+            if isinstance(ret, (list, tuple)):
+                ret = [ret_i.squeeze() for ret_i in ret]
+            elif isinstance(ret, T.TensorVariable):
+                ret = ret.squeeze()
+        return ret
+    return wrapped
 
 
 def prepare_updates_dict(updates):

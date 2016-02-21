@@ -210,6 +210,7 @@ class ThinStack(object):
         all_vars = [self.stack, self.stack_bwd, self.cursors, self.queue]
         all_vars += self.aux_stacks + self.aux_bwd_stacks
 
+        # Build a function to zero out all of these shared variables.
         zero_updates = {shared_var: np.zeros(shared_var.get_value().shape,
                                              dtype=np.float32)
                         for shared_var in all_vars}
@@ -408,14 +409,14 @@ class ThinStack(object):
             non_sequences = non_sequences + [DUMMY]
 
         # Tack on all relevant params, structures to satisfy strict mode.
-        non_sequences += self.aux_stacks
+        non_sequences += self.aux_stacks + self._vs.vars.values()
 
         scan_ret, self.scan_updates = theano.scan(
                 self._step,
                 sequences=sequences,
                 non_sequences=non_sequences,
                 outputs_info=outputs_info,
-                strict=True,
+                #strict=True,
                 name="fwd")
 
         ret_shift = 0 if self.interpolate else 1
@@ -438,9 +439,32 @@ class ThinStack(object):
         if self.use_attention and self.is_hypothesis:
             self.final_weighed_representation = util.AttentionUnitFinalRepresentation(scan_ret[0][stack_ind+3][-1], self.embeddings, self.model_dim, self._vs)
 
+    def _make_backward_graphs(self):
+        """Generate gradient subgraphs for this stack's recurrence."""
 
-    def make_backprop_scan(self, extra_inputs, extra_outputs, error_signal,
-                           f_push_delta, f_merge_delta, wrt_shapes):
+        input_ndim = [1] * 3
+        input_ndim += [len(extra_output_shape)
+                       for extra_output_shape in self.recurrence.extra_outputs]
+
+        wrt = [var for var in self._vs.vars.values()
+               if var != self.embeddings]
+
+        # TODO handle gradient of action prediction
+        # TODO would it pay off to force these to have the same concrete
+        # subgraph instances rather than creating it twice?
+        @util.ensure_2d_arguments
+        def p_fwd(*inputs, **constants):
+            return self.recurrence(inputs, **constants)[0]
+        @util.ensure_2d_arguments
+        def m_fwd(*inputs, **constants):
+            return self.recurrence(inputs, **constants)[1]
+
+        f_p_delta = util.batch_subgraph_gradients(input_ndim, wrt, p_fwd)
+        f_m_delta = util.batch_subgraph_gradients(input_ndim, wrt, m_fwd)
+
+        return wrt, f_p_delta, f_m_delta
+
+    def make_backprop_scan(self, error_signal):
         """
         Args:
             extra_inputs: List of auxiliary stack representations, matching
@@ -518,14 +542,13 @@ class ThinStack(object):
             raise RuntimeError("self._make_scan (forward pass) must be defined "
                                "before self.make_backprop_scan is called")
 
-        extra_bwd_init = [theano.shared(np.zeros((self.stack_size * self.batch_size, dim), dtype=np.float32),
-                                        borrow=False, name="bprop/bwd/%i" % i)
-                          for i, dim in enumerate(extra_outputs)]
-        # TODO add to zero fn
+        wrt, f_push_delta, f_merge_delta = self._make_backward_graphs()
+        wrt_shapes = [wrt_i.get_value().shape for wrt_i in wrt]
 
         # Useful batch zero-constants.
         zero_stack = T.zeros((self.batch_size, self.model_dim))
-        zero_extra_inps = [T.zeros((self.batch_size, inp.shape[1])) for inp in extra_inputs]
+        zero_extra_inps = [T.zeros((self.batch_size, aux_stack.shape[1]))
+                           for aux_stack in self.final_aux_stacks]
 
         batch_size = self.batch_size
         batch_range = T.arange(batch_size)
@@ -568,7 +591,7 @@ class ThinStack(object):
             # Retrieve extra inputs from auxiliary stack(s).
             extra_inps_t = [cuda_util.AdvancedSubtensor1Floats("B_extra_inp_%i" % i)(
                 extra_inp_i, t_c1)
-                for extra_inp_i in extra_inputs]
+                for extra_inp_i in self.final_aux_stacks]
             # TODO could avoid the branching by just pegging on an extra zero
             # row as precomputation
             extra_inps_t = tuple([
@@ -586,7 +609,8 @@ class ThinStack(object):
                    # rest (incl. outputs_info, non_sequences)
                    *rest):
             # Separate the accum arguments from the non-sequence arguments.
-            n_wrt, n_extra_bwd = len(wrt_shapes), len(extra_outputs)
+            n_wrt = len(wrt_shapes)
+            n_extra_bwd = len(self.recurrence.extra_outputs)
             wrt_deltas = rest[:n_wrt]
             stack_bwd_t = rest[n_wrt]
             extra_bwd = rest[n_wrt + 1:n_wrt + 1 + n_extra_bwd]
@@ -700,7 +724,7 @@ class ThinStack(object):
         non_sequences += [id_buffer, self.final_stack]
         # more helpers (not referenced directly in code, but we need to include
         # them as non-sequences to satisfy scan strict mode)
-        non_sequences += [self.buffer_t] + extra_inputs
+        non_sequences += [self.buffer_t] + self.final_aux_stacks
         non_sequences += self._vs.vars.values()
 
         bscan_ret, self.bscan_updates = theano.scan(
