@@ -108,7 +108,7 @@ class SharedRecurrenceMixin(object):
         c1, c2 = inputs[:2]
         merge_items = T.concatenate([c1, c2], axis=1)
         if self.use_tracking_lstm:
-            tracking_h_t = inputs[2][:, :self.tracking_lstm_hidden_dim]
+            tracking_h_t = inputs[3][:, :self.tracking_lstm_hidden_dim]
             return network(merge_items, tracking_h_t, self._spec.model_dim,
                            self._vs, name="compose",
                            external_state_dim=self.tracking_lstm_hidden_dim)
@@ -151,6 +151,7 @@ class Model0(Recurrence, SharedRecurrenceMixin):
         if self.use_tracking_lstm:
             tracking_hidden, _ = self._tracking_lstm_predict(
                 inputs, self._prediction_and_tracking_network)
+            inputs = [c1, c2, buffer_top, tracking_hidden]
 
         merge_value = self._merge(inputs, self._compose_network)
 
@@ -197,6 +198,7 @@ class Model1(Recurrence, SharedRecurrenceMixin):
         if self.use_tracking_lstm:
             tracking_hidden, actions_t = self._tracking_lstm_predict(
                 inputs, self._prediction_and_tracking_network)
+            inputs = [c1, c2, buffer_top, tracking_hidden]
         else:
             actions_t = self._predict(
                 inputs, self._prediction_and_tracking_network)
