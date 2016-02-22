@@ -212,7 +212,7 @@ class ThinStackBackpropTestCase(unittest.TestCase, BackpropTestMixin):
         np.testing.assert_almost_equal(b_cost_sim, b_cost)
         np.testing.assert_almost_equal(b_dW_sim, b_dW)
         np.testing.assert_almost_equal(b_db_sim, b_db)
-        np.testing.assert_almost_equal(b_embedding_gradients_sim, b_dE)
+        np.testing.assert_almost_equal(b_embedding_gradients_sim, b_embedding_gradients)
 
 
 class ThinStackTrackingBackpropTestCase(unittest.TestCase, BackpropTestMixin):
