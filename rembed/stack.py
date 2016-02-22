@@ -37,10 +37,6 @@ def update_hard_stack(t, t_f, stack_t, push_value, merge_value, merge_queue_t,
     queue_next = cuda_util.AdvancedIncSubtensor1Floats(set_instead_of_inc=True, inplace=True)(
             merge_queue_t, t_f, cursors_shift + cursors_next)
 
-    # WARNING: The model doesn't currently support padded examples, since it allows invalid 
-    # cursor states from one example in a batch (which padding can create) to cause unexpected 
-    # behavior in other examples.
-
     # DEV super hacky: don't update queue unless we have valid cursors
     # TODO necessary?
     queue_next = ifelse(cursors_next.min() < 0, merge_queue_t + 0.0, queue_next)
