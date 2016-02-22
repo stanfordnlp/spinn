@@ -223,7 +223,7 @@ class HardStack(object):
 
     def _step(self, transitions_t, ss_mask_gen_matrix_t, stack_t, buffer_cur_t, 
             tracking_hidden, attention_hidden, stack_pushed, stack_merged, buffer, 
-            ground_truth_transitions_visible, premise_stack_tops):
+            ground_truth_transitions_visible, premise_stack_tops, weighted_stack_tops):
         batch_size, _ = self.X.shape
 
         # Extract top buffer values.
@@ -295,8 +295,8 @@ class HardStack(object):
         # If attention is to be used and premise_stack_tops is not None i.e.
         # we're processing the hypothesis- Calculate the attention weighed representation
         if self.use_attention and self.is_hypothesis:
-            attention_hidden = self._attention_unit(attention_hidden, stack_next[:, 0], premise_stack_tops,
-                self.model_dim, self._vs, name="attention_unit")
+            attention_hidden = self._attention_unit(attention_hidden, stack_next[:, 0], premise_stack_tops, 
+                weighted_stack_tops, self.model_dim, self._vs, name="attention_unit")
         # premise_stack_tops.shape[0]
 
         # Move buffer cursor as necessary. Since mask == 1 when merge, we
@@ -395,9 +395,11 @@ class HardStack(object):
         non_sequences = [stack_pushed, stack_merged, buffer_t, self.ground_truth_transitions_visible]
 
         if self.use_attention and self.is_hypothesis:
-            non_sequences = non_sequences + [self.premise_stack_tops]
+            weighted_stack_tops = util.AttentionUnitInit(self.premise_stack_tops, self.model_dim, self._vs)
+            non_sequences = non_sequences + [self.premise_stack_tops, weighted_stack_tops]
         else:
-            non_sequences = non_sequences + [DUMMY]
+            DUMMY2 = T.zeros((2,)) # another dummy tensor
+            non_sequences = non_sequences + [DUMMY, DUMMY2]
 
         scan_ret = theano.scan(
                 self._step,
@@ -432,9 +434,11 @@ class Model0(HardStack):
         kwargs["train_with_predicted_transitions"] = False
         kwargs["interpolate"] = False
 
-        use_attention = kwargs.get("use_attention", False)
-        if use_attention:
-            kwargs["attention_unit"] = util.AttentionUnit
+        use_attention = kwargs.get("use_attention", None)
+        if use_attention == "Rocktaschel":
+            kwargs["attention_unit"] = util.RocktaschelAttentionUnit
+        elif use_attention == "WangJiang":
+            kwargs["attention_unit"] = util.WangJiangAttentionUnit
         else:
             kwargs["attention_unit"] = None
         super(Model0, self).__init__(*args, **kwargs)
@@ -452,10 +456,11 @@ class Model1(HardStack):
         # Defaults to not using predictions while training and not using scheduled sampling.
         kwargs["predict_transitions"] = True
         kwargs["train_with_predicted_transitions"] = False
-        kwargs["interpolate"] = False
-        use_attention = kwargs.get("use_attention", False)
-        if use_attention:
-            kwargs["attention_unit"] = util.AttentionUnit
+        use_attention = kwargs.get("use_attention", None)
+        if use_attention == "Rocktaschel":
+            kwargs["attention_unit"] = util.RocktaschelAttentionUnit
+        elif use_attention == "WangJiang":
+            kwargs["attention_unit"] = util.WangJiangAttentionUnit
         else:
             kwargs["attention_unit"] = None
         super(Model1, self).__init__(*args, **kwargs)
@@ -474,9 +479,11 @@ class Model2(HardStack):
         kwargs["predict_transitions"] = True
         kwargs["train_with_predicted_transitions"] = True
         kwargs["interpolate"] = False
-        use_attention = kwargs.get("use_attention", False)
-        if use_attention:
-            kwargs["attention_unit"] = util.AttentionUnit
+        use_attention = kwargs.get("use_attention", None)
+        if use_attention == "Rocktaschel":
+            kwargs["attention_unit"] = util.RocktaschelAttentionUnit
+        elif use_attention == "WangJiang":
+            kwargs["attention_unit"] = util.WangJiangAttentionUnit
         else:
             kwargs["attention_unit"] = None
         super(Model2, self).__init__(*args, **kwargs)
@@ -494,9 +501,11 @@ class Model2S(HardStack):
         kwargs["predict_transitions"] = True
         kwargs["train_with_predicted_transitions"] = True
         kwargs["interpolate"] = True
-        use_attention = kwargs.get("use_attention", False)
-        if use_attention:
-            kwargs["attention_unit"] = util.AttentionUnit
+        use_attention = kwargs.get("use_attention", None)
+        if use_attention == "Rocktaschel":
+            kwargs["attention_unit"] = util.RocktaschelAttentionUnit
+        elif use_attention == "WangJiang":
+            kwargs["attention_unit"] = util.WangJiangAttentionUnit
         else:
             kwargs["attention_unit"] = None
         super(Model2S, self).__init__(*args, **kwargs)

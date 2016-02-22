@@ -688,8 +688,9 @@ if __name__ == '__main__':
     gflags.DEFINE_integer("tracking_lstm_hidden_dim", 4, "")
     gflags.DEFINE_boolean("use_tracking_lstm", True,
                           "Whether to use LSTM in the tracking unit")
-    gflags.DEFINE_boolean("use_attention", False,
-                          "Whether to use word-by-word attention")
+    gflags.DEFINE_enum("use_attention", "None",
+                       ["None", "Rocktaschel", "WangJiang"],
+                       "")
     gflags.DEFINE_boolean("context_sensitive_shift", False, 
         "Use LSTM hidden state and word embedding to determine the vector to be pushed")
     gflags.DEFINE_boolean("context_sensitive_use_relu", False,

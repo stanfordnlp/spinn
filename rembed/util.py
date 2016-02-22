@@ -325,7 +325,7 @@ def TrackingUnit(state_prev, inp, inp_dim, hidden_dim, vs, name="track_unit", ma
 
     return state, logits
 
-def AttentionUnit(attention_state_prev, current_lstm_state, premise_stack_tops, model_dim, 
+def WangJiangAttentionUnit(attention_state_prev, lstm_input, premise_stack_tops, weighted_stack_tops, model_dim, 
                     vs, name="attention_unit", initializer=None):
     """
     Dimension notation:
@@ -333,7 +333,33 @@ def AttentionUnit(attention_state_prev, current_lstm_state, premise_stack_tops, 
     k : Model dim
     L : num_transitions
     """
-    W_y = vs.add_param("%s_W_y" % name, (model_dim, model_dim), initializer=initializer)
+    W_h = vs.add_param("%s_W_h" % name, (model_dim, model_dim), initializer=initializer)
+    W_r = vs.add_param("%s_W_r" % name, (model_dim, model_dim), initializer=initializer)
+    w = vs.add_param("%s_w" % name, (model_dim,), initializer=initializer)
+
+    W_h__h_t = T.dot(lstm_input, W_h)
+    W_r__r_t_prev = T.dot(attention_state_prev, W_r)
+    # Shape: L x B x k
+    M_t = T.tanh(weighted_stack_tops + (W_h__h_t + W_r__r_t_prev))
+    # Shape: B x L
+    alpha_t = T.nnet.softmax(T.dot(M_t, w).T)
+    # Shape B x k
+    Y__alpha_t = T.sum(premise_stack_tops * alpha_t.T[:, :, np.newaxis], axis=0)
+
+    mlstm_input = T.concatenate([Y__alpha_t, lstm_input], axis=1)
+
+    r_t = LSTMLayer(attention_state_prev, mlstm_input, 2 * model_dim, model_dim, vs, name="%s/lstm" % name)
+
+    return r_t
+
+def RocktaschelAttentionUnit(attention_state_prev, current_lstm_state, premise_stack_tops, weighted_stack_tops, model_dim, 
+                    vs, name="attention_unit", initializer=None):
+    """
+    Dimension notation:
+    B : Batch size
+    k : Model dim
+    L : num_transitions
+    """
     W_h = vs.add_param("%s_W_h" % name, (model_dim, model_dim), initializer=initializer)
     W_r = vs.add_param("%s_W_r" % name, (model_dim, model_dim), initializer=initializer)
     W_t = vs.add_param("%s_W_t" % name, (model_dim, model_dim), initializer=initializer)
@@ -342,7 +368,7 @@ def AttentionUnit(attention_state_prev, current_lstm_state, premise_stack_tops, 
     W_h__h_t = T.dot(current_lstm_state, W_h)
     W_r__r_t_prev = T.dot(attention_state_prev, W_r)
     # Shape: L x B x k
-    M_t = T.tanh(T.dot(premise_stack_tops, W_y) + (W_h__h_t + W_r__r_t_prev))
+    M_t = T.tanh(weighted_stack_tops + (W_h__h_t + W_r__r_t_prev))
     # Shape: B x L
     alpha_t = T.nnet.softmax(T.dot(M_t, w).T)
     # Shape B x k
@@ -351,10 +377,14 @@ def AttentionUnit(attention_state_prev, current_lstm_state, premise_stack_tops, 
     return r_t
 
 def AttentionUnitFinalRepresentation(final_attention_state, final_stack_top, model_dim, vs, initializer=None, name="attention_unit_final"):
-    W_p = vs.add_param("%s_W_p" % "attention_unit_end", (model_dim, model_dim), initializer=initializer)
-    W_x = vs.add_param("%s_W_x" % "attention_unit_end", (model_dim, model_dim), initializer=initializer)
+    W_p = vs.add_param("%s_W_p" % name, (model_dim, model_dim), initializer=initializer)
+    W_x = vs.add_param("%s_W_x" % name, (model_dim, model_dim), initializer=initializer)
     h_final = T.tanh(T.dot(final_attention_state, W_p) + T.dot(final_stack_top, W_x))
     return h_final
+
+def AttentionUnitInit(premise_stack_tops, model_dim, vs, initializer=None, name="attention_unit_init"):
+    W_y = vs.add_param("%s_W_y" % name, (model_dim, model_dim), initializer=initializer)
+    return T.dot(premise_stack_tops, W_y)
 
 def MLP(inp, inp_dim, outp_dim, vs, layer=ReLULayer, hidden_dims=None,
         name="mlp", initializer=None):
