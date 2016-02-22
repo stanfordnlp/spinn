@@ -18,6 +18,7 @@
 \usepackage{color}
 \usepackage{xcolor}
 \usepackage{tikz}
+\usepackage{tikz-qtree}
 \usepackage{ifthen}
 \usepackage{framed}
 
@@ -231,6 +232,8 @@ For Model 0, no tracking LSTM is needed for the ordinary operation of the model,
 So far, we have found this technique to yield non-trivial performance gain. A clearer evaluation on converged models is forthcoming.
 
 \subsection{Constituent-by-constituent attention}\label{sec:c-by-c}
+
+\input{tree_attn_fig.tex}
 
 We aim to build on the results of \citealt{rocktaschel2015reasoning} and \citealt{wang2015learning}, who find that neural soft attention models is an extremely effective technique for learning natural language inference. In particular, both papers use versions of word-by-word entailment, in which a latent alignment is learned from every word in the hypothesis to one or more words of the premise. We propose to borrow this basic idea, but to adapt it to a tree-structured setting, proposing \textit{constituent-by-constituent} attention. While these models do attention over a matrix $\mathbf{Y}$ of word-in-context representations from the premise encoder, we will perform attention instead over our own primary data structure, $\mathbf{Y}^{st}$, the matrix of vectors that have appeared at the top of the stack during premise encoding, which correspond one-to-one to the constituents in the tree structure representing the premise. Similarly, while the previous models perform one instance of soft attention conditioned on each word in the hypothesis, we perform one instance of soft attention conditioned on each stack top in the hypothesis encoder, representing the constituents of the hypothesis tree.
 
