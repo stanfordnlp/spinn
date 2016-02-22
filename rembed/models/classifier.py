@@ -182,7 +182,7 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
         context_sensitive_use_relu=FLAGS.context_sensitive_use_relu,
         use_attention=FLAGS.use_attention)
 
-    premise_stack_tops = premise_model.stack_tops if FLAGS.use_attention else None
+    premise_stack_tops = premise_model.stack_tops if FLAGS.use_attention != "None" else None
 
     hypothesis_model = cls(
         FLAGS.model_dim, FLAGS.word_embedding_dim, vocab_size, seq_length,
@@ -214,9 +214,10 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
     mlp_input_dim = 2 * FLAGS.model_dim
 
     # Use the attention weighted representation
-    if FLAGS.use_attention:
-        mlp_input = hypothesis_model.final_weighed_representation.reshape((-1, FLAGS.model_dim))
-        mlp_input_dim = FLAGS.model_dim
+    if FLAGS.use_attention != "None":
+        h_dim = FLAGS.model_dim / 2
+        mlp_input = hypothesis_model.final_weighed_representation.reshape((-1, h_dim))
+        mlp_input_dim = h_dim
 
     if FLAGS.use_difference_feature:
         mlp_input = T.concatenate([mlp_input, premise_vector - hypothesis_vector], axis=1)

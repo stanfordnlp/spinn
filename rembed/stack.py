@@ -223,7 +223,7 @@ class HardStack(object):
 
     def _step(self, transitions_t, ss_mask_gen_matrix_t, stack_t, buffer_cur_t, 
             tracking_hidden, attention_hidden, stack_pushed, stack_merged, buffer, 
-            ground_truth_transitions_visible, premise_stack_tops, weighted_stack_tops):
+            ground_truth_transitions_visible, premise_stack_tops, projected_stack_tops):
         batch_size, _ = self.X.shape
 
         # Extract top buffer values.
@@ -294,9 +294,10 @@ class HardStack(object):
 
         # If attention is to be used and premise_stack_tops is not None i.e.
         # we're processing the hypothesis- Calculate the attention weighed representation
-        if self.use_attention and self.is_hypothesis:
-            attention_hidden = self._attention_unit(attention_hidden, stack_next[:, 0], premise_stack_tops, 
-                weighted_stack_tops, self.model_dim, self._vs, name="attention_unit")
+        if self.use_attention != "None" and self.is_hypothesis:
+            h_dim = self.model_dim / 2
+            attention_hidden = self._attention_unit(attention_hidden, stack_next[:, 0, :h_dim], premise_stack_tops, 
+                projected_stack_tops, h_dim, self._vs, name="attention_unit")
 
         # Move buffer cursor as necessary. Since mask == 1 when merge, we
         # should increment each buffer cursor by 1 - mask.
@@ -367,7 +368,8 @@ class HardStack(object):
 
         # Initialize the attention representation if needed
         if self.use_attention:
-            attention_init = T.zeros((batch_size, self.model_dim))
+            h_dim = self.model_dim / 2
+            attention_init = T.zeros((batch_size, h_dim))
         else:
             attention_init = DUMMY
 
@@ -393,9 +395,10 @@ class HardStack(object):
 
         non_sequences = [stack_pushed, stack_merged, buffer_t, self.ground_truth_transitions_visible]
 
-        if self.use_attention and self.is_hypothesis:
-            weighted_stack_tops = util.AttentionUnitInit(self.premise_stack_tops, self.model_dim, self._vs)
-            non_sequences = non_sequences + [self.premise_stack_tops, weighted_stack_tops]
+        if self.use_attention != "None" and self.is_hypothesis:
+            h_dim = self.model_dim / 2
+            projected_stack_tops = util.AttentionUnitInit(self.premise_stack_tops, h_dim, self._vs)
+            non_sequences = non_sequences + [self.premise_stack_tops, projected_stack_tops]
         else:
             DUMMY2 = T.zeros((2,)) # another dummy tensor
             non_sequences = non_sequences + [DUMMY, DUMMY2]
@@ -415,13 +418,17 @@ class HardStack(object):
         else:
             self.transitions_pred = None
 
-        if self.use_attention and not self.is_hypothesis:
+        if self.use_attention != "None" and not self.is_hypothesis:
             # Store the stack top at each step as an attribute.
-            self.stack_tops = scan_ret[0][stack_ind][:,:,0,:].reshape((max_stack_size, batch_size, self.model_dim))
+            h_dim = self.model_dim / 2
+            self.stack_tops = scan_ret[0][stack_ind][:,:,0,:h_dim].reshape((max_stack_size, batch_size, h_dim))
 
-        if self.use_attention and self.is_hypothesis:
+        if self.use_attention == "Rocktaschel" and self.is_hypothesis:
+            h_dim = self.model_dim / 2
             self.final_weighed_representation = util.AttentionUnitFinalRepresentation(scan_ret[0][stack_ind + 3][-1], 
-                self.embeddings, self.model_dim, self._vs)
+                self.embeddings[:,:h_dim], h_dim, self._vs)
+        elif self.use_attention == "WangJiang" and self.is_hypothesis:
+            self.final_weighed_representation = scan_ret[0][stack_ind+3][-1]
 
 
 class Model0(HardStack):

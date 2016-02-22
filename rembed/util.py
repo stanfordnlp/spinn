@@ -326,14 +326,14 @@ def TrackingUnit(state_prev, inp, inp_dim, hidden_dim, vs, name="track_unit", ma
     return state, logits
 
 
-def WangJiangAttentionUnit(attention_state_prev, lstm_input, premise_stack_tops, weighted_stack_tops, model_dim, 
+def WangJiangAttentionUnit(attention_state_prev, current_stack_top, premise_stack_tops, projected_stack_tops, model_dim, 
                     vs, name="attention_unit", initializer=None):
     """
     Args:
       attention_state_prev: The output of this unit at the previous time step.
-      lstm_input: The current stack top. (Strange name?)
+      current_stack_top: The current stack top.
       premise_stack_tops: The values to do attention over.
-      weighted_stack_tops: Projected (not weighted?) vectors to use to produce an attentive
+      projected_stack_tops: Projected vectors to use to produce an attentive
           weighting alpha_t.
       model_dim: The dimension of the vectors over which to do attention.
       vs: A variable store for the learned parameters.
@@ -349,11 +349,11 @@ def WangJiangAttentionUnit(attention_state_prev, lstm_input, premise_stack_tops,
     W_r = vs.add_param("%s_W_r" % name, (model_dim, model_dim), initializer=initializer)
     w = vs.add_param("%s_w" % name, (model_dim,), initializer=initializer)
 
-    W_h__h_t = T.dot(lstm_input, W_h)
+    W_h__h_t = T.dot(current_stack_top, W_h)
     W_r__r_t_prev = T.dot(attention_state_prev, W_r)
 
     # Shape: L x B x k
-    M_t = T.tanh(weighted_stack_tops + (W_h__h_t + W_r__r_t_prev))
+    M_t = T.tanh(projected_stack_tops + (W_h__h_t + W_r__r_t_prev))
 
     # Shape: B x L
     alpha_t = T.nnet.softmax(T.dot(M_t, w).T)
@@ -361,21 +361,21 @@ def WangJiangAttentionUnit(attention_state_prev, lstm_input, premise_stack_tops,
     # Shape B x k
     Y__alpha_t = T.sum(premise_stack_tops * alpha_t.T[:, :, np.newaxis], axis=0)
 
-    mlstm_input = T.concatenate([Y__alpha_t, lstm_input], axis=1)
+    mlstm_input = T.concatenate([Y__alpha_t, current_stack_top], axis=1)
 
     r_t = LSTMLayer(attention_state_prev, mlstm_input, 2 * model_dim, model_dim, vs, name="%s/lstm" % name)
 
     return r_t
 
 
-def RocktaschelAttentionUnit(attention_state_prev, current_lstm_state, premise_stack_tops, weighted_stack_tops, model_dim, 
+def RocktaschelAttentionUnit(attention_state_prev, current_stack_top, premise_stack_tops, projected_stack_tops, model_dim, 
                     vs, name="attention_unit", initializer=None):
     """
     Args:
       attention_state_prev: The output of this unit at the previous time step.
-      current_lstm_state: The current stack top, which doesn't necessarily come from a TreeLSTM...?
+      current_stack_top: The current stack top.
       premise_stack_tops: The values to retrieve using attention.
-      weighted_stack_tops: Projected (not weighted?) vectors to use to produce an attentive
+      projected_stack_tops: Projected vectors to use to produce an attentive
           weighting alpha_t.
       model_dim: The dimension of the vectors over which to do attention.
       vs: A variable store for the learned parameters.
@@ -393,12 +393,12 @@ def RocktaschelAttentionUnit(attention_state_prev, current_lstm_state, premise_s
     W_t = vs.add_param("%s_W_t" % name, (model_dim, model_dim), initializer=initializer)
     w = vs.add_param("%s_w" % name, (model_dim,), initializer=initializer)
 
-    W_h__h_t = T.dot(current_lstm_state, W_h)
+    W_h__h_t = T.dot(current_stack_top, W_h)
     W_r__r_t_prev = T.dot(attention_state_prev, W_r)
 
     # Vector-by-matrix addition here: (Right?)
     # Shape: L x B x k
-    M_t = T.tanh(weighted_stack_tops + (W_h__h_t + W_r__r_t_prev))
+    M_t = T.tanh(projected_stack_tops + (W_h__h_t + W_r__r_t_prev))
 
     # Shape: B x L
     alpha_t = T.nnet.softmax(T.dot(M_t, w).T)
