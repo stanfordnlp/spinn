@@ -31,7 +31,6 @@ def UniformInitializer(range):
     return lambda shape: np.random.uniform(-range, range, shape)
 
 
-
 def HeKaimingInitializer():
     return lambda shape: np.random.normal(scale=math.sqrt(4.0/(shape[0] + shape[1])), size=shape)
 
@@ -313,6 +312,7 @@ def LSTMLayer(lstm_prev, inp, inp_dim, full_memory_dim, vs, name="lstm", initial
 
     return T.concatenate([h_t, c_t], axis=1)
 
+
 def TrackingUnit(state_prev, inp, inp_dim, hidden_dim, vs, name="track_unit", make_logits=True):
     # Pass previous state and input to an LSTM layer.
     state = LSTMLayer(state_prev, inp, inp_dim, 2 * hidden_dim, vs, name="%s/lstm" % name)
@@ -325,13 +325,25 @@ def TrackingUnit(state_prev, inp, inp_dim, hidden_dim, vs, name="track_unit", ma
 
     return state, logits
 
+
 def WangJiangAttentionUnit(attention_state_prev, lstm_input, premise_stack_tops, weighted_stack_tops, model_dim, 
                     vs, name="attention_unit", initializer=None):
     """
+    Args:
+      attention_state_prev: The output of this unit at the previous time step.
+      lstm_input: The current stack top. (Strange name?)
+      premise_stack_tops: The values to do attention over.
+      weighted_stack_tops: Projected (not weighted?) vectors to use to produce an attentive
+          weighting alpha_t.
+      model_dim: The dimension of the vectors over which to do attention.
+      vs: A variable store for the learned parameters.
+      name: An identifier for the learned parameters in this unit.
+      initializer: Used to initialize the learned parameters.
+
     Dimension notation:
-    B : Batch size
-    k : Model dim
-    L : num_transitions
+      B : Batch size
+      k : Model dim
+      L : num_transitions
     """
     W_h = vs.add_param("%s_W_h" % name, (model_dim, model_dim), initializer=initializer)
     W_r = vs.add_param("%s_W_r" % name, (model_dim, model_dim), initializer=initializer)
@@ -339,10 +351,13 @@ def WangJiangAttentionUnit(attention_state_prev, lstm_input, premise_stack_tops,
 
     W_h__h_t = T.dot(lstm_input, W_h)
     W_r__r_t_prev = T.dot(attention_state_prev, W_r)
+
     # Shape: L x B x k
     M_t = T.tanh(weighted_stack_tops + (W_h__h_t + W_r__r_t_prev))
+
     # Shape: B x L
     alpha_t = T.nnet.softmax(T.dot(M_t, w).T)
+
     # Shape B x k
     Y__alpha_t = T.sum(premise_stack_tops * alpha_t.T[:, :, np.newaxis], axis=0)
 
@@ -352,14 +367,27 @@ def WangJiangAttentionUnit(attention_state_prev, lstm_input, premise_stack_tops,
 
     return r_t
 
+
 def RocktaschelAttentionUnit(attention_state_prev, current_lstm_state, premise_stack_tops, weighted_stack_tops, model_dim, 
                     vs, name="attention_unit", initializer=None):
     """
+    Args:
+      attention_state_prev: The output of this unit at the previous time step.
+      current_lstm_state: The current stack top, which doesn't necessarily come from a TreeLSTM...?
+      premise_stack_tops: The values to retrieve using attention.
+      weighted_stack_tops: Projected (not weighted?) vectors to use to produce an attentive
+          weighting alpha_t.
+      model_dim: The dimension of the vectors over which to do attention.
+      vs: A variable store for the learned parameters.
+      name: An identifier for the learned parameters in this unit.
+      initializer: Used to initialize the learned parameters.
+
     Dimension notation:
-    B : Batch size
-    k : Model dim
-    L : num_transitions
+      B : Batch size
+      k : Model dim
+      L : num_transitions
     """
+
     W_h = vs.add_param("%s_W_h" % name, (model_dim, model_dim), initializer=initializer)
     W_r = vs.add_param("%s_W_r" % name, (model_dim, model_dim), initializer=initializer)
     W_t = vs.add_param("%s_W_t" % name, (model_dim, model_dim), initializer=initializer)
@@ -367,24 +395,39 @@ def RocktaschelAttentionUnit(attention_state_prev, current_lstm_state, premise_s
 
     W_h__h_t = T.dot(current_lstm_state, W_h)
     W_r__r_t_prev = T.dot(attention_state_prev, W_r)
+
+    # Vector-by-matrix addition here: (Right?)
     # Shape: L x B x k
     M_t = T.tanh(weighted_stack_tops + (W_h__h_t + W_r__r_t_prev))
+
     # Shape: B x L
     alpha_t = T.nnet.softmax(T.dot(M_t, w).T)
+
     # Shape B x k
     Y__alpha_t = T.sum(premise_stack_tops * alpha_t.T[:, :, np.newaxis], axis=0) 
+
+    # Mysterious Rocktaschel-style RNN update step.
     r_t = Y__alpha_t + T.tanh(T.dot(attention_state_prev, W_t))
     return r_t
 
+
 def AttentionUnitFinalRepresentation(final_attention_state, final_stack_top, model_dim, vs, initializer=None, name="attention_unit_final"):
+    """Produces the complete representation of the aligned sentence pair."""
+    
     W_p = vs.add_param("%s_W_p" % name, (model_dim, model_dim), initializer=initializer)
     W_x = vs.add_param("%s_W_x" % name, (model_dim, model_dim), initializer=initializer)
     h_final = T.tanh(T.dot(final_attention_state, W_p) + T.dot(final_stack_top, W_x))
     return h_final
 
+
 def AttentionUnitInit(premise_stack_tops, model_dim, vs, initializer=None, name="attention_unit_init"):
+    """Does an initial reweighting on the input vectors that will be used for attention.
+
+    Unlike the units above, this only needs to be called once per batch, not at every step."""
+
     W_y = vs.add_param("%s_W_y" % name, (model_dim, model_dim), initializer=initializer)
     return T.dot(premise_stack_tops, W_y)
+
 
 def MLP(inp, inp_dim, outp_dim, vs, layer=ReLULayer, hidden_dims=None,
         name="mlp", initializer=None):

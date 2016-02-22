@@ -297,7 +297,6 @@ class HardStack(object):
         if self.use_attention and self.is_hypothesis:
             attention_hidden = self._attention_unit(attention_hidden, stack_next[:, 0], premise_stack_tops, 
                 weighted_stack_tops, self.model_dim, self._vs, name="attention_unit")
-        # premise_stack_tops.shape[0]
 
         # Move buffer cursor as necessary. Since mask == 1 when merge, we
         # should increment each buffer cursor by 1 - mask.
@@ -411,14 +410,18 @@ class HardStack(object):
         self.final_stack = scan_ret[0][stack_ind][-1]
         self.embeddings = self.final_stack[:, 0]
 
-        self.transitions_pred = None
         if self._predict_transitions:
             self.transitions_pred = scan_ret[0][-1].dimshuffle(1, 0, 2)
+        else:
+            self.transitions_pred = None
+
         if self.use_attention and not self.is_hypothesis:
-            # store the stack top at each step as an attribute
+            # Store the stack top at each step as an attribute.
             self.stack_tops = scan_ret[0][stack_ind][:,:,0,:].reshape((max_stack_size, batch_size, self.model_dim))
+
         if self.use_attention and self.is_hypothesis:
-            self.final_weighed_representation = util.AttentionUnitFinalRepresentation(scan_ret[0][stack_ind+3][-1], self.embeddings, self.model_dim, self._vs)
+            self.final_weighed_representation = util.AttentionUnitFinalRepresentation(scan_ret[0][stack_ind + 3][-1], 
+                self.embeddings, self.model_dim, self._vs)
 
 
 class Model0(HardStack):
