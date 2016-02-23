@@ -564,7 +564,7 @@ class ThinStack(object):
 
             # At first iteration, drop the external error signal into the main
             # backward stack.
-            stack_bwd_next = ifelse(T.eq(t_f, self.seq_length - 1),
+            stack_bwd_next = ifelse(T.eq(t_f, self.seq_length),
                                     T.set_subtensor(stack_bwd_t[-self.batch_size:], error_signal),
                                     stack_bwd_t)
 
