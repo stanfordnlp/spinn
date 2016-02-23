@@ -112,7 +112,8 @@ class ThinStack(object):
 
         self.batch_size = spec.batch_size
         self.vocab_size = spec.vocab_size
-        self.stack_size = self.seq_length = spec.seq_length
+        self.seq_length = spec.seq_length 
+        self.stack_size = self.seq_length + 1
         self.model_dim = spec.model_dim
         self.word_embedding_dim = spec.word_embedding_dim
 
@@ -199,12 +200,12 @@ class ThinStack(object):
                                for i, shape in enumerate(aux_stack_shapes)]
 
         # Build cursor vector.
-        cursors_init = np.zeros((self.batch_size,), dtype=np.float32) - 1.0
+        cursors_init = np.zeros((self.batch_size,), dtype=np.float32) + self.seq_length
         self.cursors = theano.shared(cursors_init, borrow=False,
                                      name="cursors")
 
         # Build queue matrix.
-        queue_init = np.zeros((self.batch_size * self.stack_size,),
+        queue_init = np.zeros((self.batch_size * ((2 * self.seq_length) + 1),),
                               dtype=np.float32)
         self.queue = theano.shared(queue_init, borrow=False, name="queue")
 
@@ -247,6 +248,8 @@ class ThinStack(object):
         #
         # TODO: Factor out this zeros constant and the one in the next ifelse
         # op
+        #
+        # TODO: See if we can delete this... Jon thinks we can.
         stack_2_mask = cursors < 0
         stack_2_mask2 = stack_2_mask.dimshuffle(0, "x")
         stack_2 = stack_2_mask2 * T.zeros((self.batch_size, self.model_dim)) + (1. - stack_2_mask2) * stack_2
@@ -348,8 +351,7 @@ class ThinStack(object):
         self._queue_shift = T.cast(batch_range * self.seq_length,
                                    theano.config.floatX)
         self._buffer_shift = self._queue_shift
-        self._cursors_shift = T.cast(batch_range * self.stack_size,
-                                     theano.config.floatX)
+        self._cursors_shift = self._queue_shift
         self._stack_shift = T.cast(batch_range, theano.config.floatX)
 
         # Look up all of the embeddings that will be used.
@@ -390,8 +392,8 @@ class ThinStack(object):
             outputs_info.append(None)
 
         # Prepare data to scan over.
-        sequences = [T.arange(transitions.shape[0]),
-                     T.arange(transitions.shape[0], dtype="float32"),
+        sequences = [T.arange(1, transitions.shape[0] + 1),
+                     T.arange(1, transitions.shape[0] + 1, dtype="float32"),
                      transitions, transitions_f]
         if self.interpolate:
             # Generate Bernoulli RVs to simulate scheduled sampling
@@ -438,9 +440,11 @@ class ThinStack(object):
         # TODO(Raghav): update to work with new stack representation
         if self.use_attention and not self.is_hypothesis:
             # store the stack top at each step as an attribute
+            assert False
             self.stack_tops = scan_ret[0][stack_ind][:,:,0,:].reshape((max_stack_size, batch_size, self.model_dim))
         if self.use_attention and self.is_hypothesis:
             self.final_weighed_representation = util.AttentionUnitFinalRepresentation(scan_ret[0][stack_ind+3][-1], self.embeddings, self.model_dim, self._vs)
+
 
     def _make_backward_graphs(self):
         """Generate gradient subgraphs for this stack's recurrence."""
@@ -701,7 +705,7 @@ class ThinStack(object):
         transitions_f = T.cast(self.transitions.dimshuffle(1, 0),
                                dtype=theano.config.floatX)
 
-        ts_f = T.cast(T.arange(transitions_f.shape[0]), dtype=theano.config.floatX)
+        ts_f = T.cast(T.arange(1, transitions_f.shape[0] + 1), dtype=theano.config.floatX)
 
         # Representation of buffer using embedding indices rather than values
         id_buffer = T.cast(self.X.flatten(), theano.config.floatX)

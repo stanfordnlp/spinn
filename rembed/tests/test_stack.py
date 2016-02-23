@@ -64,7 +64,9 @@ class ThinStackTestCase(unittest.TestCase):
             [0, 0, 1, 0]
         ], dtype=np.int32)
 
-        expected = np.array([[ 3.,  3.,  3.],
+        expected = np.array([[ 0.,  0.,  0.],
+                             [ 0.,  0.,  0.],
+                             [ 3.,  3.,  3.],
                              [ 3.,  3.,  3.],
                              [ 1.,  1.,  1.],
                              [ 2.,  2.,  2.],
