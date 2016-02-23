@@ -73,13 +73,7 @@ class ThinStackTestCase(unittest.TestCase):
                              [ 0.,  0.,  0.],
                              [ 4.,  4.,  4.]])
 
-        # DEV: We are letting ThinStack return the dummy values at the base of
-        # the stack for now.
-        expected = np.vstack([np.zeros((self.batch_size, self.embedding_dim)),
-                              expected])
-
-        self.stack.scan_fn(X, transitions, 1.0, 1)
-        ret = self.stack.stack.get_value()
+        ret = self.stack.scan_fn(X, transitions, 1.0, 1)
         np.testing.assert_almost_equal(ret, expected)
 
     def test_with_cropped_data(self):
@@ -122,13 +116,7 @@ class ThinStackTestCase(unittest.TestCase):
                              [7., 7., 7.],
                              [0., 0., 0.]])
 
-        # DEV: We are letting ThinStack return the dummy values at the base of
-        # the stack for now.
-        expected = np.vstack([np.zeros((self.batch_size, self.embedding_dim)),
-                              expected])
-
         ret = self.stack.scan_fn(X, transitions, 1.0, 1)
-        ret = self.stack.stack.get_value()
         np.testing.assert_almost_equal(ret, expected)
 
 

@@ -86,7 +86,8 @@ def build_sentence_model(cls, vocab_size, seq_length, tokens, transitions,
 
     spec = util.ModelSpec(FLAGS.model_dim, FLAGS.word_embedding_dim,
                           FLAGS.batch_size, vocab_size, seq_length)
-    # TODO check non-Model0 support
+
+    # TODO: Check non-Model0 support.
     recurrence = cls(spec, vs, compose_network,
                      use_context_sensitive_shift=FLAGS.context_sensitive_shift,
                      context_sensitive_use_relu=FLAGS.context_sensitive_use_relu,

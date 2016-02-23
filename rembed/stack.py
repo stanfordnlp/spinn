@@ -153,11 +153,16 @@ class ThinStack(object):
         self._make_scan()
 
         if make_test_fn:
-            self.scan_fn = theano.function([self.X, self.transitions, self.training_mode,
-                                            self.ground_truth_transitions_visible],
-                                           self.stack, updates=self.scan_updates,
-                                           accept_inplace=True,
-                                           on_unused_input="warn")
+            scan_fn = theano.function([self.X, self.transitions, self.training_mode,
+                                       self.ground_truth_transitions_visible],
+                                   self.stack, updates=self.scan_updates,
+                                   accept_inplace=True,
+                                   on_unused_input="warn")
+            def scan_fn_wrapper(*args):
+                scan_fn(*args)
+                ret = self.stack.get_value()
+                return ret[self.batch_size:]
+            self.scan_fn = scan_fn_wrapper
 
     def _make_params(self):
         # Per-token embeddings.
