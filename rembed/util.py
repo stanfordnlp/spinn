@@ -40,7 +40,6 @@ def UniformInitializer(range):
     return lambda shape: np.random.uniform(-range, range, shape)
 
 
-
 def HeKaimingInitializer():
     return lambda shape: np.random.normal(scale=math.sqrt(4.0/(shape[0] + shape[1])), size=shape)
 
