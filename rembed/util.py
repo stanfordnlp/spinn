@@ -714,15 +714,17 @@ def MakeTrainingIterator(sources, batch_size):
 
 def MakeEvalIterator(sources, batch_size):
     # Make a list of minibatches from a dataset to use as an iterator.
-    # TODO(SB): Handle the last few examples in the eval set if they don't
+    # TODO(SB): Pad out the last few examples in the eval set if they don't
     # form a batch.
+
+    print "WARNING: May be discarding eval examples."
 
     dataset_size = len(sources[0])
     data_iter = []
     start = -batch_size
     while True:
         start += batch_size
-        if start >= dataset_size:
+        if dataset_size - start < batch_size:
             break
         data_iter.append(tuple(source[start:start + batch_size]
                                for source in sources))

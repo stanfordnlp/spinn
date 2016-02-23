@@ -422,6 +422,7 @@ class ThinStack(object):
         self.final_stack = self.scan_updates[self.stack]
         self.final_aux_stacks = [self.scan_updates[aux_stack]
                                  for aux_stack in self.aux_stacks]
+        self.sentence_embeddings = self.final_stack[-self.batch_size:]
 
         self.transitions_pred = None
         if self.recurrence.predicts_transitions:
@@ -430,7 +431,7 @@ class ThinStack(object):
         # TODO(Raghav): update to work with new stack representation
         if self.use_attention and not self.is_hypothesis:
             # Store the stack top at each step as an attribute.
-            self.stack_tops = self.stack[self.batch_size:]
+            self.stack_tops = self.final_stack[self.batch_size:]
         if self.use_attention and self.is_hypothesis:
             self.final_weighed_representation = util.AttentionUnitFinalRepresentation(self.final_attn_hidden[-1], 
                 self.embeddings, self.model_dim, self._vs)
@@ -523,7 +524,7 @@ class ThinStack(object):
                    dE,
                    # rest (incl. outputs_info, non_sequences)
                    *rest):
-        
+
             # Separate the accum arguments from the non-sequence arguments.
             n_wrt = len(wrt_shapes)
             n_extra_bwd = len(self.recurrence.extra_outputs)
