@@ -94,7 +94,7 @@ def build_sentence_model(cls, vocab_size, seq_length, tokens, transitions,
                      use_tracking_lstm=FLAGS.use_tracking_lstm,
                      tracking_lstm_hidden_dim=FLAGS.tracking_lstm_hidden_dim)
 
-    stack = ThinStack(spec, recurrence, embedding_projection_network,
+    model = ThinStack(spec, recurrence, embedding_projection_network,
                       training_mode, ground_truth_transitions_visible, vs,
                       X=tokens,
                       transitions=transitions,
@@ -104,7 +104,7 @@ def build_sentence_model(cls, vocab_size, seq_length, tokens, transitions,
                       ss_prob=ss_prob)
 
     # Extract top element of final stack timestep.
-    stack_top = stack.scan_updates[stack.stack][-FLAGS.batch_size:]
+    stack_top = model.sentence_embeddings
     sentence_vector = stack_top
 
     sentence_vector = util.BatchNorm(sentence_vector, FLAGS.model_dim, vs, "sentence_vector", training_mode)
@@ -115,7 +115,7 @@ def build_sentence_model(cls, vocab_size, seq_length, tokens, transitions,
         sentence_vector, FLAGS.model_dim, num_classes, vs,
         name="semantic_classifier", use_bias=True)
 
-    return stack, stack_top, stack.transitions_pred, logits
+    return model, logits
 
 
 def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
@@ -139,7 +139,6 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
       vs: Variable store.
     """
 
-
     # Prepare layer which performs stack element composition.
     if cls is rembed.plain_rnn.RNN:
         compose_network = partial(util.LSTMLayer,
@@ -161,6 +160,9 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
                 "word_embedding_dim must equal model_dim unless a projection layer is used."
             embedding_projection_network = util.IdentityLayer
 
+    spec = util.ModelSpec(FLAGS.model_dim, FLAGS.word_embedding_dim,
+                          FLAGS.batch_size, vocab_size, seq_length)
+
     # Split the two sentences
     premise_tokens = tokens[:, :, 0]
     hypothesis_tokens = tokens[:, :, 1]
@@ -168,46 +170,39 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
     premise_transitions = transitions[:, :, 0]
     hypothesis_transitions = transitions[:, :, 1]
 
+    # TODO: Check non-Model0 support.
+    recurrence = cls(spec, vs, compose_network,
+                     use_context_sensitive_shift=FLAGS.context_sensitive_shift,
+                     context_sensitive_use_relu=FLAGS.context_sensitive_use_relu,
+                     use_tracking_lstm=FLAGS.use_tracking_lstm,
+                     tracking_lstm_hidden_dim=FLAGS.tracking_lstm_hidden_dim)
+
     # Build two hard stack models which scan over input sequences.
-    premise_model = cls(
-        FLAGS.model_dim, FLAGS.word_embedding_dim, vocab_size, seq_length,
-        compose_network, embedding_projection_network, training_mode, ground_truth_transitions_visible, vs,
-        use_tracking_lstm=FLAGS.use_tracking_lstm,
-        tracking_lstm_hidden_dim=FLAGS.tracking_lstm_hidden_dim,
+    premise_model = ThinStack(spec, recurrence, embedding_projection_network,
+        training_mode, ground_truth_transitions_visible, vs,
         X=premise_tokens,
         transitions=premise_transitions,
         initial_embeddings=initial_embeddings,
         embedding_dropout_keep_rate=FLAGS.embedding_keep_rate,
         ss_mask_gen=ss_mask_gen,
         ss_prob=ss_prob,
-        connect_tracking_comp=FLAGS.connect_tracking_comp,
-        context_sensitive_shift=FLAGS.context_sensitive_shift,
-        context_sensitive_use_relu=FLAGS.context_sensitive_use_relu,
         use_attention=FLAGS.use_attention)
 
     premise_stack_tops = premise_model.stack_tops if FLAGS.use_attention else None
 
-    hypothesis_model = cls(
-        FLAGS.model_dim, FLAGS.word_embedding_dim, vocab_size, seq_length,
-        compose_network, embedding_projection_network, training_mode, ground_truth_transitions_visible, vs,
-        use_tracking_lstm=FLAGS.use_tracking_lstm,
-        tracking_lstm_hidden_dim=FLAGS.tracking_lstm_hidden_dim,
+    hypothesis_model = ThinStack(spec, recurrence, embedding_projection_network,
+        training_mode, ground_truth_transitions_visible, vs,
         X=hypothesis_tokens,
-        transitions=hypothesis_transitions,
+        transitions=premise_transitions,
         initial_embeddings=initial_embeddings,
         embedding_dropout_keep_rate=FLAGS.embedding_keep_rate,
         ss_mask_gen=ss_mask_gen,
         ss_prob=ss_prob,
-        connect_tracking_comp=FLAGS.connect_tracking_comp,
-        context_sensitive_shift=FLAGS.context_sensitive_shift,
-        context_sensitive_use_relu=FLAGS.context_sensitive_use_relu,
-        use_attention=FLAGS.use_attention,
-        premise_stack_tops=premise_stack_tops,
-        is_hypothesis=True)
+        use_attention=FLAGS.use_attention)
 
     # Extract top element of final stack timestep.
-    premise_embeddings = premise_model.embeddings
-    hypothesis_embeddings = hypothesis_model.embeddings
+    premise_embeddings = premise_model.sentence_embeddings
+    hypothesis_embeddings = hypothesis_model.sentence_embeddings
 
     premise_vector = premise_embeddings.reshape((-1, FLAGS.model_dim))
     hypothesis_vector = hypothesis_embeddings.reshape((-1, FLAGS.model_dim))
@@ -249,7 +244,7 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
         prev_features, prev_features_dim, num_classes, vs,
         name="semantic_classifier", use_bias=True)
 
-    return premise_model.transitions_pred, hypothesis_model.transitions_pred, logits
+    return premise_model, hypothesis_model, logits
 
 
 def build_cost(logits, targets):
@@ -512,23 +507,29 @@ def run(only_forward=False):
         transitions = T.itensor3("transitions")
         num_transitions = T.imatrix("num_transitions")
 
-        predicted_premise_transitions, predicted_hypothesis_transitions, logits = build_sentence_pair_model(
+        premise_model, hypothesis_model, logits = build_sentence_pair_model(
             model_cls, len(vocabulary), FLAGS.seq_length,
             X, transitions, len(data_manager.LABEL_MAP), training_mode, ground_truth_transitions_visible, vs,
             initial_embeddings=initial_embeddings, project_embeddings=(not train_embeddings),
             ss_mask_gen=ss_mask_gen,
             ss_prob=ss_prob)
+        premise_stack_top = premise_model.sentence_embeddings
+        hypothesis_stack_top = hypothesis_model.sentence_embeddings
+        predicted_premise_transitions = premise_model.transitions_pred
+        predicted_hypothesis_transitions = hypothesis_model.transitions_pred
     else:
         X = T.matrix("X", dtype="int32")
         transitions = T.imatrix("transitions")
         num_transitions = T.vector("num_transitions", dtype="int32")
 
-        stack, stack_top, predicted_transitions, logits = build_sentence_model(
+        model, logits = build_sentence_model(
             model_cls, len(vocabulary), FLAGS.seq_length,
             X, transitions, len(data_manager.LABEL_MAP), training_mode, ground_truth_transitions_visible, vs,
             initial_embeddings=initial_embeddings, project_embeddings=(not train_embeddings),
             ss_mask_gen=ss_mask_gen,
             ss_prob=ss_prob)
+        stack_top = model.sentence_embeddings
+        predicted_transitions = model.transitions_pred
 
     xent_cost, acc = build_cost(logits, y)
 
@@ -606,17 +607,33 @@ def run(only_forward=False):
                               data_manager.SENTENCE_PAIR_DATA, ind_to_word)
     else:
         # Train
-        # TODO collect gradients wrt things past stack_top, with
-        # consider_constant(stack_top)
-        error_signal = T.grad(total_cost, stack_top)
-        stack.make_backprop_scan(error_signal)
-        # Training open-vocabulary embeddings is a questionable idea right now. Disabled:
-        # stack_gradients[stack.embeddings] = stack.embedding_gradients
+        if data_manager.SENTENCE_PAIR_DATA:
+            premise_error_signal = T.grad(total_cost, premise_stack_top)
+            premise_model.make_backprop_scan(premise_error_signal)
 
-        new_values = util.RMSprop(total_cost, stack.gradients.keys(), lr,
-                                  grads=stack.gradients.values())
+            hypothesis_error_signal = T.grad(total_cost, hypothesis_stack_top)
+            hypothesis_model.make_backprop_scan(hypothesis_error_signal)
+
+            gradients = premise_model.gradients
+            hypothesis_gradients = hypothesis_model.gradiennts
+            for key in hypothesis_gradients:
+                gradients[key] += hypothesis_gradients[key]
+
+            new_values += premise_model.scan_updates.items() + premise_model.bscan_updates.items()
+            new_values += hypothesis_model.scan_updates.items() + hypothesis_model.bscan_updates.items()
+        else:
+            error_signal = T.grad(total_cost, stack_top)
+            model.make_backprop_scan(error_signal)
+            if train_embeddings:
+                model.gradients[model.embeddings] = model.embedding_gradients
+            gradients = model.gradients
+
+            new_values = model.scan_updates.items() + model.bscan_updates.items()
+
+
+        new_values += util.RMSprop(total_cost, gradients.keys(), lr,
+                                   grads=gradients.values())
         new_values += [(key, vs.nongradient_updates[key]) for key in vs.nongradient_updates]
-        new_values += stack.scan_updates.items() + stack.bscan_updates.items()
 
         # Create training and eval functions.
         # Unused variable warnings are supressed so that num_transitions can be passed in when training Model 0,
@@ -659,7 +676,11 @@ def run(only_forward=False):
                 vs.save_checkpoint(checkpoint_path, extra_vars=[step, best_dev_error])
 
             # Zero out all auxiliary variables.
-            stack.zero()
+            if data_manager.SENTENCE_PAIR_DATA:
+                premise_model.zero()
+                hypothesis_model.zero()
+            else:
+                model.zero()
 
 
 if __name__ == '__main__':
