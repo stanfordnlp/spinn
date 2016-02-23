@@ -112,7 +112,7 @@ class ThinStack(object):
 
         self.batch_size = spec.batch_size
         self.vocab_size = spec.vocab_size
-        self.seq_length = spec.seq_length 
+        self.seq_length = spec.seq_length
         self.stack_size = self.seq_length + 1
         self.model_dim = spec.model_dim
         self.word_embedding_dim = spec.word_embedding_dim

@@ -14,8 +14,8 @@ class ThinStackTestCase(unittest.TestCase):
 
     """Basic functional tests for ThinStack with dummy data."""
 
-    def _make_stack(self, seq_length=4):
-        self.batch_size = 2
+    def _make_stack(self, batch_size=2, seq_length=4):
+        self.batch_size = batch_size
         self.embedding_dim = embedding_dim = 3
         self.vocab_size = vocab_size = 10
         self.seq_length = seq_length
@@ -49,7 +49,7 @@ class ThinStackTestCase(unittest.TestCase):
                                use_input_dropout=False)
 
     def test_basic_ff(self):
-        self._make_stack(4)
+        self._make_stack(seq_length=4)
 
         X = np.array([
             [3, 1,  2, 0],
@@ -64,9 +64,7 @@ class ThinStackTestCase(unittest.TestCase):
             [0, 0, 1, 0]
         ], dtype=np.int32)
 
-        expected = np.array([[ 0.,  0.,  0.],
-                             [ 0.,  0.,  0.],
-                             [ 3.,  3.,  3.],
+        expected = np.array([[ 3.,  3.,  3.],
                              [ 3.,  3.,  3.],
                              [ 1.,  1.,  1.],
                              [ 2.,  2.,  2.],
@@ -74,6 +72,11 @@ class ThinStackTestCase(unittest.TestCase):
                              [ 5.,  5.,  5.],
                              [ 0.,  0.,  0.],
                              [ 4.,  4.,  4.]])
+
+        # DEV: We are letting ThinStack return the dummy values at the base of
+        # the stack for now.
+        expected = np.vstack([np.zeros((self.batch_size, self.embedding_dim)),
+                              expected])
 
         self.stack.scan_fn(X, transitions, 1.0, 1)
         ret = self.stack.stack.get_value()
@@ -96,30 +99,36 @@ class ThinStackTestCase(unittest.TestCase):
         ]
 
         seq_length = 5
-        self._make_stack(seq_length)
+        self._make_stack(len(dataset), seq_length)
 
         dataset = CropAndPad(dataset, seq_length)
         X = np.array([example["tokens"] for example in dataset],
                      dtype=np.int32)
         transitions = np.array([example["transitions"] for example in dataset],
                                dtype=np.int32)
-        expected = np.array([[[8, 8, 8],
-                              [0, 0, 0],
-                              [0, 0, 0],
-                              [0, 0, 0],
-                              [0, 0, 0]],
-                             [[7, 7, 7],
-                              [0, 0, 0],
-                              [0, 0, 0],
-                              [0, 0, 0],
-                              [0, 0, 0]],
-                             [[0, 0, 0],
-                              [0, 0, 0],
-                              [0, 0, 0],
-                              [0, 0, 0],
-                              [0, 0, 0]]])
+        expected = np.array([[0., 0., 0.],
+                             [0., 0., 0.],
+                             [0., 0., 0.],
+                             [6., 6., 6.],
+                             [0., 0., 0.],
+                             [0., 0., 0.],
+                             [6., 6., 6.],
+                             [6., 6., 6.],
+                             [0., 0., 0.],
+                             [2., 2., 2.],
+                             [1., 1., 1.],
+                             [0., 0., 0.],
+                             [8., 8., 8.],
+                             [7., 7., 7.],
+                             [0., 0., 0.]])
+
+        # DEV: We are letting ThinStack return the dummy values at the base of
+        # the stack for now.
+        expected = np.vstack([np.zeros((self.batch_size, self.embedding_dim)),
+                              expected])
 
         ret = self.stack.scan_fn(X, transitions, 1.0, 1)
+        ret = self.stack.stack.get_value()
         np.testing.assert_almost_equal(ret, expected)
 
 
