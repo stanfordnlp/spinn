@@ -217,11 +217,22 @@ class ThinStack(object):
         all_vars = [self.stack, self.stack_bwd, self.cursors, self.queue]
         all_vars += self.aux_stacks + self.aux_bwd_stacks
 
-        # Build a function to zero out all of these shared variables.
-        zero_updates = {shared_var: np.zeros(shared_var.get_value().shape,
-                                             dtype=np.float32)
-                        for shared_var in all_vars}
-        self.zero = theano.function([], (), updates=zero_updates)
+        # Track which shared variables need to be cleared on each batch.
+        self._zero_updates = all_vars
+
+        # Don't compile our `zero` function until last-minute. This lets the
+        # backprop unrolling (if used) add its own data to `_zero_updates`.
+        self._zero = None
+
+    def zero(self):
+        if self._zero is None:
+            # JIT-prepare the zero function.
+            zero_updates = {var: np.zeros(var.get_value().shape,
+                                          dtype=np.float32)
+                            for var in self._zero_updates}
+            self._zero = theano.function([], [], updates=zero_updates)
+
+        self._zero()
 
     def _make_inputs(self):
         self.X = self.X or T.imatrix("X")
@@ -433,7 +444,7 @@ class ThinStack(object):
             # Store the stack top at each step as an attribute.
             self.stack_tops = self.final_stack[self.batch_size:]
         if self.use_attention and self.is_hypothesis:
-            self.final_weighed_representation = util.AttentionUnitFinalRepresentation(self.final_attn_hidden[-1], 
+            self.final_weighed_representation = util.AttentionUnitFinalRepresentation(self.final_attn_hidden[-1],
                 self.embeddings, self.model_dim, self._vs)
 
     def _make_backward_graphs(self):
@@ -461,19 +472,41 @@ class ThinStack(object):
 
         return wrt, f_p_delta, f_m_delta
 
-    def make_backprop_scan(self, error_signal):
+    def make_backprop_scan(self, error_signal, extra_cost_inputs=None):
         """
         Args:
             error_signal: The external gradient d(cost)/d(stack top). A Theano
                 batch of size `batch_size * model_dim`.
         """
 
-        if not hasattr(self, "stack_2_ptrs"):
-            raise RuntimeError("self._make_scan (forward pass) must be defined "
-                               "before self.make_backprop_scan is called")
+        assert hasattr(self, "stack_2_ptrs"), \
+            ("self._make_scan (forward pass) must be defined before "
+             "self.make_backprop_scan is called")
+
+        # We need to add extra updates to the `_zero_updates` member, so we
+        # must be called before `_zero_updates` is read.
+        assert self._zero is None, \
+            ("Can only install backprop on a fresh ThinStack. Don't call "
+             "ThinStack.zero before setting up backprop.")
+
+        if extra_cost_inputs is None:
+            extra_cost_inputs = []
 
         wrt, f_push_delta, f_merge_delta = self._make_backward_graphs()
         wrt_shapes = [wrt_i.get_value().shape for wrt_i in wrt]
+
+        # Build shared variables for accumulating wrt deltas.
+        wrt_vars = [theano.shared(np.zeros(wrt_shape, dtype=np.float32),
+                                  name="bwd/wrt/%s" % wrt_i)
+                    for wrt_i, wrt_shape in zip(wrt, wrt_shapes)]
+        # All of these need to be zeroed out in between batches.
+        self._zero_updates += wrt_vars
+
+        # Also accumulate embedding gradients separately
+        dE = theano.shared(np.zeros(self.embeddings.get_value().shape,
+                                    dtype=np.float32),
+                           name="bwd/wrt/embeddings")
+        self._zero_updates.append(dE)
 
         # Useful batch zero-constants.
         zero_stack = T.zeros((self.batch_size, self.model_dim))
@@ -586,7 +619,7 @@ class ThinStack(object):
                 new_stacks[stack] = new_stack
 
             # Accumulate wrt deltas, switching over push/merge decision.
-            new_wrt_deltas = []
+            new_wrt_deltas = {}
             for i, (accum_delta, m_delta, p_delta) in enumerate(zip(wrt_deltas, m_delta_wrt, p_delta_wrt)):
                 # Check that tensors returned by delta functions match shape
                 # expectations.
@@ -598,17 +631,17 @@ class ThinStack(object):
                 mask_i = masks[m_delta.ndim - 1]
                 # TODO: Is this at all efficient? (Bring back GPURowSwitch?)
                 delta = (mask_i * m_delta + (1. - mask_i) * p_delta).sum(axis=0)
-                new_wrt_deltas.append(accum_delta + delta)
+                new_wrt_deltas[accum_delta] = accum_delta + delta
 
             # On push ops, backprop the stack_bwd error onto the embedding
             # parameters.
             # TODO make sparse?
-            dE_next = new_stacks.pop(dE)
-            dE_next = cuda_util.AdvancedIncSubtensor1Floats()(
-                dE_next, (1. - masks[1]) * main_grad, buffer_ids_t)
+            new_stacks[dE] = cuda_util.AdvancedIncSubtensor1Floats()(
+                new_stacks[dE], (1. - masks[1]) * main_grad, buffer_ids_t)
 
-            updates = util.prepare_updates_dict(new_stacks)
-            return [dE_next] + new_wrt_deltas, updates
+            updates = dict(new_wrt_deltas.items() + new_stacks.items())
+            updates = util.prepare_updates_dict(updates)
+            return updates
 
         # TODO: These should come from forward pass -- not fixed -- in model
         # 1S, etc.
@@ -627,22 +660,16 @@ class ThinStack(object):
                                   self.buf_ptrs[:-1]], axis=0)
 
         sequences = [ts_f, transitions_f, self.stack_2_ptrs, buf_ptrs]
-        outputs_info = [T.zeros_like(self.embeddings)]
+        outputs_info = []#T.zeros_like(self.embeddings)]
 
-        # The `patternbroadcast` call below prevents any of the alloc axes from
-        # being broadcastable. (Trust the client -- they should give us the
-        # parameter shapes exactly, of course!)
-        outputs_info += [T.patternbroadcast(T.zeros(shape), (False,) * len(shape))
-                         for shape in wrt_shapes]
-
-        # bwd stacks
-        non_sequences = [self.stack_bwd] + self.aux_bwd_stacks
-        # auxiliary data
+        # Shared variables: Accumulated wrt deltas and bwd stacks.
+        non_sequences = [dE] + wrt_vars + [self.stack_bwd] + self.aux_bwd_stacks
+        # More auxiliary data
         non_sequences += [id_buffer, self.final_stack]
-        # more helpers (not referenced directly in code, but we need to include
+        # More helpers (not referenced directly in code, but we need to include
         # them as non-sequences to satisfy scan strict mode)
         non_sequences += [self.buffer_t] + self.final_aux_stacks
-        non_sequences += self._vs.vars.values()
+        non_sequences += self._vs.vars.values() + extra_cost_inputs
 
         bscan_ret, self.bscan_updates = theano.scan(
                 step_b, sequences, outputs_info, non_sequences,
@@ -650,6 +677,6 @@ class ThinStack(object):
                 strict=True,
                 name="stack_bwd")
 
-        self.gradients = {wrt_i: deltas_i[-1] for wrt_i, deltas_i
-                          in zip(wrt, bscan_ret[1:])}
-        self.embedding_gradients = bscan_ret[0][-1]
+        self.gradients = {wrt_i: self.bscan_updates[wrt_var]
+                          for wrt_i, wrt_var in zip(wrt, wrt_vars)}
+        self.embedding_gradients = self.bscan_updates[dE]

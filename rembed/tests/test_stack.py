@@ -199,7 +199,7 @@ class ThinStackBackpropTestCase(unittest.TestCase, BackpropTestMixin):
         error_signal = T.grad(cost, top)
 
         # Build automatic backprop function.
-        self.stack.make_backprop_scan(error_signal)
+        self.stack.make_backprop_scan(error_signal, [self.y])
         f = theano.function(
             [self.X, self.transitions, self.y],
             (cost, self.stack.gradients[W], self.stack.gradients[b], self.stack.embedding_gradients),
@@ -313,7 +313,7 @@ class ThinStackTrackingBackpropTestCase(unittest.TestCase, BackpropTestMixin):
         cost = self._make_cost(top)
         error_signal = T.grad(cost, top)
 
-        stack.make_backprop_scan(error_signal)
+        stack.make_backprop_scan(error_signal, [self.y])
         f = theano.function(
             [self.X, self.transitions, self.y],
             [top, cost, stack.embedding_gradients] + [stack.gradients[var] for _, var in rel_vars],

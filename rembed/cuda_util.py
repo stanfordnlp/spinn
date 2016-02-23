@@ -398,7 +398,7 @@ class AdvancedIncSubtensor1Floats(T.subtensor.AdvancedIncSubtensor1):
                 opname = 'increment'
             raise TypeError(
                 'cannot %s x subtensor with ndim=%s'
-                ' by y with ndim=%s to x subtensor with ndim=%s ' % (
+                ' by y with ndim=%s' % (
                     opname, x_.type.ndim, y_.type.ndim))
 
         return theano.gof.Apply(self, [x_, y_, ilist_], [x_.type()])
@@ -456,7 +456,7 @@ class GpuAdvancedIncSubtensor1Floats_dev20(AdvancedIncSubtensor1Floats, GpuOp):
                 opname = 'increment'
             raise TypeError(
                 'cannot %s x subtensor with ndim=%s'
-                ' by y with ndim=%s to x subtensor with ndim=%s ' % (
+                ' by y with ndim=%s' % (
                     opname, x_.type.ndim, y_.type.ndim))
 
         return theano.gof.Apply(self, [x_, y_, ilist_], [x_.type()])
@@ -614,7 +614,7 @@ class GpuAdvancedIncSubtensor1Floats_scal_dev20(AdvancedIncSubtensor1Floats, Gpu
                 opname = 'increment'
             raise TypeError(
                 'cannot %s x subtensor with ndim=%s'
-                ' by y with ndim=%s to x subtensor with ndim=%s ' % (
+                ' by y with ndim=%s' % (
                     opname, x_.type.ndim, y_.type.ndim))
 
         return theano.gof.Apply(self, [x_, y_, ilist_], [x_.type()])
