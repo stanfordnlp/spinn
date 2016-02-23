@@ -246,25 +246,6 @@ class ThinStack(object):
         # Retrieve second-to-top element.
         stack_2 = cuda_util.AdvancedSubtensor1Floats("F_stack2")(self.stack, stack_2_ptrs)
 
-        # Zero out stack_2 elements which are invalid (i.e., were drawn with
-        # negative cursor values)
-        #
-        # TODO: Probably incurs H<->D because of bool mask. Do on the GPU.
-        #
-        # TODO: Factor out this zeros constant and the one in the next ifelse
-        # op
-        #
-        # TODO: See if we can delete this... Jon thinks we can.
-        stack_2_mask = cursors < 0
-        stack_2_mask2 = stack_2_mask.dimshuffle(0, "x")
-        stack_2 = stack_2_mask2 * T.zeros((self.batch_size, self.model_dim)) + (1. - stack_2_mask2) * stack_2
-        # Also update stack_2_ptrs for backprop pass. Set -1 sentinel, which
-        # indicates that stack_2 is empty.
-        stack_2_ptrs = stack_2_mask * (-1. * T.ones((self.batch_size,))) + (1. - stack_2_mask) * stack_2_ptrs
-
-        # stack_2 values are not valid unless we are on t >= 1 (TODO?)
-        stack_2 = ifelse(t <= 1, T.zeros((self.batch_size, self.model_dim)), stack_2)
-
         extra_inputs = tuple([
             cuda_util.AdvancedSubtensor1Floats("F_extra_inp_%i" % i)(
                 aux_stack, stack_1_ptrs)
@@ -272,7 +253,7 @@ class ThinStack(object):
         #########
 
         recurrence_inputs = (stack_1, stack_2, buffer_top_t)
-        recurrence_inputs += extra_inputs # TODO
+        recurrence_inputs += extra_inputs
         recurrence_ret = self.recurrence(recurrence_inputs)
 
         push_ret, merge_ret = recurrence_ret[:2]
@@ -521,28 +502,14 @@ class ThinStack(object):
             c1 = cuda_util.AdvancedSubtensor1Floats("B_stack1")(stack_fwd, t_c1)
             c2 = cuda_util.AdvancedSubtensor1Floats("B_stack2")(stack_fwd, t_c2)
 
-            # Mask over examples which have invalid c2 cursors.
-            c2_mask = (t_c2 < 0).dimshuffle(0, "x")
-            c2 = c2_mask * zero_stack + (1. - c2_mask) * c2
-
-            # Guard against indexing edge cases.
-            c1 = ifelse(T.eq(t_f, 0.0), zero_stack, c1)
-            # TODO is this one covered by c2_mask above? I think so.
-            c2 = ifelse(t_f <= 1.0, zero_stack, c2)
-
             buffer_top_t = cuda_util.AdvancedSubtensor1Floats("B_buffer_top")(
                 self.buffer_t, buffer_cur_t + buffer_shift)
 
             # Retrieve extra inputs from auxiliary stack(s).
-            extra_inps_t = [cuda_util.AdvancedSubtensor1Floats("B_extra_inp_%i" % i)(
-                extra_inp_i, t_c1)
-                for extra_inp_i in self.final_aux_stacks]
-            # TODO could avoid the branching by just pegging on an extra zero
-            # row as precomputation
             extra_inps_t = tuple([
-                ifelse(T.eq(t_f, 0.0), zero_extra, extra_inp_i)
-                for extra_inp_i, zero_extra
-                in zip(extra_inps_t, zero_extra_inps)])
+                cuda_util.AdvancedSubtensor1Floats("B_extra_inp_%i" % i)(
+                    extra_inp_i, t_c1)
+                for extra_inp_i in self.final_aux_stacks])
 
             inputs = (c1, c2, buffer_top_t) + extra_inps_t
             grads = (main_grad,) + extra_grads
