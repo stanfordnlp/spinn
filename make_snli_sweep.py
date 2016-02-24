@@ -26,7 +26,7 @@ FIXED_PARAMETERS = {
     "eval_data_path":    "/scr/nlp/data/snli_1.0/snli_1.0_dev.jsonl",
     "embedding_data_path": "/scr/nlp/data/glove_vecs/glove.840B.300d.txt",
     "word_embedding_dim":	"300",
-    "model_dim":   "300",
+    "model_dim":   "600",
     "seq_length":	"50",
     "eval_seq_length":	"100",
     "clipping_max_value":  "5.0",
@@ -38,14 +38,14 @@ FIXED_PARAMETERS = {
 
 # Tunable parameters.
 SWEEP_PARAMETERS = {
-    "learning_rate":      (EXP, 0.0002, 0.003),  # RNN likes higher end of range, but below 009.
+    "learning_rate":      (EXP, 0.0002, 0.001),  # RNN likes higher end of range, but below 009.
     "l2_lambda":   		  (EXP, 5e-7, 2e-5),
     "semantic_classifier_keep_rate": (LIN, 0.80, 0.95),  # NB: Keep rates may depend considerably on dims.
-    "embedding_keep_rate": (LIN, 0.75, 0.9),
+    "embedding_keep_rate": (LIN, 0.8, 0.95),
     "scheduled_sampling_exponent_base": (SS_BASE, 1e-5, 8e-5),
     "transition_cost_scale": (LIN, 0.5, 4.0),
-    "tracking_lstm_hidden_dim": (EXP, 12, 50),
-    "num_sentence_pair_combination_layers": (LIN, 1, 3)
+    "tracking_lstm_hidden_dim": (EXP, 12, 100),
+    "num_sentence_pair_combination_layers": (LIN, 1, 2)
 }
 
 sweep_name = "sweep_" + \
