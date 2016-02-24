@@ -228,7 +228,6 @@ def Dropout(inp, keep_rate, apply_dropout):
     return result
 
 
-
 def IdentityLayer(inp, inp_dim, outp_dim, vs, name="identity_layer", use_bias=True, initializer=None):
     """An identity function that takes the same parameters as the above layers."""
     assert inp_dim == outp_dim, "Identity layer requires inp_dim == outp_dim."
@@ -273,7 +272,6 @@ def TreeLSTMLayer(lstm_prev, external_state, full_memory_dim, vs, name="tree_lst
     h_t = o_gate * T.tanh(c_t)
 
     return T.concatenate([h_t, c_t], axis=1)
-
 
 
 def LSTMLayer(lstm_prev, inp, inp_dim, full_memory_dim, vs, name="lstm", initializer=None):
@@ -326,7 +324,7 @@ def TrackingUnit(state_prev, inp, inp_dim, hidden_dim, vs, name="track_unit", ma
     return state, logits
 
 
-def WangJiangAttentionUnit(attention_state_prev, current_stack_top, premise_stack_tops, projected_stack_tops, model_dim, 
+def WangJiangAttentionUnit(attention_state_prev, current_stack_top, premise_stack_tops, projected_stack_tops, attention_dim, 
                     vs, name="attention_unit", initializer=None):
     """
     Args:
@@ -335,7 +333,7 @@ def WangJiangAttentionUnit(attention_state_prev, current_stack_top, premise_stac
       premise_stack_tops: The values to do attention over.
       projected_stack_tops: Projected vectors to use to produce an attentive
           weighting alpha_t.
-      model_dim: The dimension of the vectors over which to do attention.
+      attention_dim: The dimension of the vectors over which to do attention.
       vs: A variable store for the learned parameters.
       name: An identifier for the learned parameters in this unit.
       initializer: Used to initialize the learned parameters.
@@ -345,9 +343,9 @@ def WangJiangAttentionUnit(attention_state_prev, current_stack_top, premise_stac
       k : Model dim
       L : num_transitions
     """
-    W_h = vs.add_param("%s_W_h" % name, (model_dim, model_dim), initializer=initializer)
-    W_r = vs.add_param("%s_W_r" % name, (model_dim, model_dim), initializer=initializer)
-    w = vs.add_param("%s_w" % name, (model_dim,), initializer=initializer)
+    W_h = vs.add_param("%s_W_h" % name, (attention_dim, attention_dim), initializer=initializer)
+    W_r = vs.add_param("%s_W_r" % name, (attention_dim, attention_dim), initializer=initializer)
+    w = vs.add_param("%s_w" % name, (attention_dim,), initializer=initializer)
 
     W_h__h_t = T.dot(current_stack_top, W_h)
     W_r__r_t_prev = T.dot(attention_state_prev, W_r)
@@ -356,19 +354,21 @@ def WangJiangAttentionUnit(attention_state_prev, current_stack_top, premise_stac
     M_t = T.tanh(projected_stack_tops + (W_h__h_t + W_r__r_t_prev))
 
     # Shape: B x L
+    M_t = theano.printing.Print("m")(M_t)
     alpha_t = T.nnet.softmax(T.dot(M_t, w).T)
+    alpha_t = theano.printing.Print("alpha")(alpha_t)
 
     # Shape B x k
     Y__alpha_t = T.sum(premise_stack_tops * alpha_t.T[:, :, np.newaxis], axis=0)
 
     mlstm_input = T.concatenate([Y__alpha_t, current_stack_top], axis=1)
 
-    r_t = LSTMLayer(attention_state_prev, mlstm_input, 2 * model_dim, model_dim, vs, name="%s/lstm" % name)
+    r_t = LSTMLayer(attention_state_prev, mlstm_input, 2 * attention_dim, attention_dim, vs, name="%s/lstm" % name)
 
     return r_t
 
 
-def RocktaschelAttentionUnit(attention_state_prev, current_stack_top, premise_stack_tops, projected_stack_tops, model_dim, 
+def RocktaschelAttentionUnit(attention_state_prev, current_stack_top, premise_stack_tops, projected_stack_tops, attention_dim, 
                     vs, name="attention_unit", initializer=None):
     """
     Args:
@@ -377,7 +377,7 @@ def RocktaschelAttentionUnit(attention_state_prev, current_stack_top, premise_st
       premise_stack_tops: The values to retrieve using attention.
       projected_stack_tops: Projected vectors to use to produce an attentive
           weighting alpha_t.
-      model_dim: The dimension of the vectors over which to do attention.
+      attention_dim: The dimension of the vectors over which to do attention.
       vs: A variable store for the learned parameters.
       name: An identifier for the learned parameters in this unit.
       initializer: Used to initialize the learned parameters.
@@ -388,10 +388,10 @@ def RocktaschelAttentionUnit(attention_state_prev, current_stack_top, premise_st
       L : num_transitions
     """
 
-    W_h = vs.add_param("%s_W_h" % name, (model_dim, model_dim), initializer=initializer)
-    W_r = vs.add_param("%s_W_r" % name, (model_dim, model_dim), initializer=initializer)
-    W_t = vs.add_param("%s_W_t" % name, (model_dim, model_dim), initializer=initializer)
-    w = vs.add_param("%s_w" % name, (model_dim,), initializer=initializer)
+    W_h = vs.add_param("%s_W_h" % name, (attention_dim, attention_dim), initializer=initializer)
+    W_r = vs.add_param("%s_W_r" % name, (attention_dim, attention_dim), initializer=initializer)
+    W_t = vs.add_param("%s_W_t" % name, (attention_dim, attention_dim), initializer=initializer)
+    w = vs.add_param("%s_w" % name, (attention_dim,), initializer=initializer)
 
     W_h__h_t = T.dot(current_stack_top, W_h)
     W_r__r_t_prev = T.dot(attention_state_prev, W_r)
@@ -411,21 +411,21 @@ def RocktaschelAttentionUnit(attention_state_prev, current_stack_top, premise_st
     return r_t
 
 
-def AttentionUnitFinalRepresentation(final_attention_state, final_stack_top, model_dim, vs, initializer=None, name="attention_unit_final"):
+def AttentionUnitFinalRepresentation(final_attention_state, final_stack_top, attention_dim, vs, initializer=None, name="attention_unit_final"):
     """Produces the complete representation of the aligned sentence pair."""
     
-    W_p = vs.add_param("%s_W_p" % name, (model_dim, model_dim), initializer=initializer)
-    W_x = vs.add_param("%s_W_x" % name, (model_dim, model_dim), initializer=initializer)
+    W_p = vs.add_param("%s_W_p" % name, (attention_dim, attention_dim), initializer=initializer)
+    W_x = vs.add_param("%s_W_x" % name, (attention_dim, attention_dim), initializer=initializer)
     h_final = T.tanh(T.dot(final_attention_state, W_p) + T.dot(final_stack_top, W_x))
     return h_final
 
 
-def AttentionUnitInit(premise_stack_tops, model_dim, vs, initializer=None, name="attention_unit_init"):
+def AttentionUnitInit(premise_stack_tops, attention_dim, vs, initializer=None, name="attention_unit_init"):
     """Does an initial reweighting on the input vectors that will be used for attention.
 
     Unlike the units above, this only needs to be called once per batch, not at every step."""
 
-    W_y = vs.add_param("%s_W_y" % name, (model_dim, model_dim), initializer=initializer)
+    W_y = vs.add_param("%s_W_y" % name, (attention_dim, attention_dim), initializer=initializer)
     return T.dot(premise_stack_tops, W_y)
 
 

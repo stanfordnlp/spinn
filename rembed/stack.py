@@ -189,7 +189,13 @@ class HardStack(object):
         # Stores premise stack tops; none for the premise stack
         self.premise_stack_tops = premise_stack_tops
         # Attention unit
-        self._attention_unit = attention_unit
+        if use_attention == "Rocktaschel" and is_hypothesis:
+            self._attention_unit = util.RocktaschelAttentionUnit
+        elif use_attention == "WangJiang" and is_hypothesis:
+            self._attention_unit = util.WangJiangAttentionUnit
+        else:
+            self._attention_unit = None
+
         # Check whether we're processing the hypothesis or the premise
         self.is_hypothesis = is_hypothesis
 
@@ -367,9 +373,12 @@ class HardStack(object):
             hidden_init = DUMMY
 
         # Initialize the attention representation if needed
-        if self.use_attention:
+        if self.use_attention and self.is_hypothesis:
             h_dim = self.model_dim / 2
-            attention_init = T.zeros((batch_size, h_dim))
+            if self.use_attention == "WangJiang" and False: # TODO
+                 attention_init = T.zeros((batch_size, 2 * h_dim))
+            else:
+                attention_init = T.zeros((batch_size, h_dim))
         else:
             attention_init = DUMMY
 
@@ -428,7 +437,7 @@ class HardStack(object):
             self.final_weighed_representation = util.AttentionUnitFinalRepresentation(scan_ret[0][stack_ind + 3][-1], 
                 self.embeddings[:,:h_dim], h_dim, self._vs)
         elif self.use_attention == "WangJiang" and self.is_hypothesis:
-            self.final_weighed_representation = scan_ret[0][stack_ind+3][-1]
+            self.final_weighed_representation = scan_ret[0][stack_ind+3][-1]#[:h_dim]
 
 
 class Model0(HardStack):
@@ -443,14 +452,6 @@ class Model0(HardStack):
         kwargs["predict_transitions"] = False
         kwargs["train_with_predicted_transitions"] = False
         kwargs["interpolate"] = False
-
-        use_attention = kwargs.get("use_attention", None)
-        if use_attention == "Rocktaschel":
-            kwargs["attention_unit"] = util.RocktaschelAttentionUnit
-        elif use_attention == "WangJiang":
-            kwargs["attention_unit"] = util.WangJiangAttentionUnit
-        else:
-            kwargs["attention_unit"] = None
         super(Model0, self).__init__(*args, **kwargs)
 
 
@@ -466,13 +467,6 @@ class Model1(HardStack):
         # Defaults to not using predictions while training and not using scheduled sampling.
         kwargs["predict_transitions"] = True
         kwargs["train_with_predicted_transitions"] = False
-        use_attention = kwargs.get("use_attention", None)
-        if use_attention == "Rocktaschel":
-            kwargs["attention_unit"] = util.RocktaschelAttentionUnit
-        elif use_attention == "WangJiang":
-            kwargs["attention_unit"] = util.WangJiangAttentionUnit
-        else:
-            kwargs["attention_unit"] = None
         super(Model1, self).__init__(*args, **kwargs)
 
 
@@ -489,13 +483,6 @@ class Model2(HardStack):
         kwargs["predict_transitions"] = True
         kwargs["train_with_predicted_transitions"] = True
         kwargs["interpolate"] = False
-        use_attention = kwargs.get("use_attention", None)
-        if use_attention == "Rocktaschel":
-            kwargs["attention_unit"] = util.RocktaschelAttentionUnit
-        elif use_attention == "WangJiang":
-            kwargs["attention_unit"] = util.WangJiangAttentionUnit
-        else:
-            kwargs["attention_unit"] = None
         super(Model2, self).__init__(*args, **kwargs)
 
 
@@ -511,11 +498,4 @@ class Model2S(HardStack):
         kwargs["predict_transitions"] = True
         kwargs["train_with_predicted_transitions"] = True
         kwargs["interpolate"] = True
-        use_attention = kwargs.get("use_attention", None)
-        if use_attention == "Rocktaschel":
-            kwargs["attention_unit"] = util.RocktaschelAttentionUnit
-        elif use_attention == "WangJiang":
-            kwargs["attention_unit"] = util.WangJiangAttentionUnit
-        else:
-            kwargs["attention_unit"] = None
         super(Model2S, self).__init__(*args, **kwargs)
