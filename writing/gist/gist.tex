@@ -1,5 +1,5 @@
 \documentclass[11pt,letterpaper]{article}
-\usepackage{acl2015}
+\usepackage{../acl2015}
 \usepackage{times}
 \usepackage{latexsym}
 % \setlength\titlebox{5cm}    % Expanding the titlebox
@@ -122,7 +122,7 @@ $^{\S}$Stanford Computer Science}
 \newcommand{\@emptybiblabel}[1]{}
 \definecolor{black}{rgb}{0,0,0}
 \makeatother
-\usepackage[breaklinks, colorlinks, linkcolor=black, urlcolor=black, citecolor=black]{hyperref}
+\usepackage[breaklinks, colorlinks, linkcolor=black, urlcolor=black, citecolor=black, draft]{hyperref}
 
 \def\t#1{#1}
 \def\b#1{\t{\textbf{#1}}}
@@ -191,7 +191,7 @@ If we add no additional features, this model computes the same function as a pla
 
 \subsection{Model 1}
 
-\input{model1_fig.tex}
+\input{../model1_fig.tex}
 
 Model 1, depicted in Figures~\ref{fig:model:1d} and \ref{fig:model:1b}, adapts Model 0 to use a stack and a buffer, making it more closely resemble a shift--reduce parser, and laying the groundwork for a model which can parse novel sentences at test time.
 
@@ -233,7 +233,7 @@ So far, we have found this technique to yield non-trivial performance gain. A cl
 
 \subsection{Constituent-by-constituent attention}\label{sec:c-by-c}
 
-\input{tree_attn_fig.tex}
+\input{../tree_attn_fig.tex}
 
 We aim to build on the results of \citealt{rocktaschel2015reasoning} and \citealt{wang2015learning}, who find that neural soft attention models is an extremely effective technique for learning natural language inference. In particular, both papers use versions of word-by-word entailment, in which a latent alignment is learned from every word in the hypothesis to one or more words of the premise. We propose to borrow this basic idea, but to adapt it to a tree-structured setting, proposing \textit{constituent-by-constituent} attention. While these models do attention over a matrix $\mathbf{Y}$ of word-in-context representations from the premise encoder, we will perform attention instead over our own primary data structure, $\mathbf{Y}^{st}$, the matrix of vectors that have appeared at the top of the stack during premise encoding, which correspond one-to-one to the constituents in the tree structure representing the premise. Similarly, while the previous models perform one instance of soft attention conditioned on each word in the hypothesis, we perform one instance of soft attention conditioned on each stack top in the hypothesis encoder, representing the constituents of the hypothesis tree.
 
@@ -322,7 +322,7 @@ Evaluation metrics: accuracy, F1 (for all models but 0).
 
 (some of) the Tesla K40(s) used for this research was/were donated by the NVIDIA Corporation.
 
-\bibliographystyle{acl}
-\bibliography{MLSemantics} 
+\bibliographystyle{../acl}
+\bibliography{../MLSemantics} 
 
 \end{document}

@@ -1,11 +1,11 @@
-%!TEX root = gist.tex
+%!TEX root = hard_stack_paper/paper.tex
 
-\begin{figure*}[t]
+\begin{figure}[t]
 \centering
-\scalebox{0.8}{
+\scalebox{0.9}{
  \begin{tikzpicture}
-    \tikzstyle{word}=[fill=black!20,text height=2mm]    
-    \tikzstyle{nonleaf}=[fill=black!20,text height=2mm]    
+    \tikzstyle{word}=[fill=yellow!40,text height=2mm]    
+    \tikzstyle{nonleaf}=[fill=yellow!40,text height=2mm]    
 
     \begin{scope}[shift={(0in,0in)}, frontier/.style={distance from root=60pt}]
 
@@ -21,10 +21,10 @@
     
     \usetikzlibrary{arrows,scopes}
 
-    \tikzstyle{attn} = [line width=1pt,draw=black!40,opacity=0.25,line cap=round]
-    \tikzstyle{heavy} = [line width=2pt]
-    \tikzstyle{light} = [line width=0.5pt]
-    \tikzstyle{focus} = [draw=blue!40,opacity=1.0]
+    \tikzstyle{attn} = [line width=1pt,draw=black!80,opacity=0.25,line cap=round]
+    \tikzstyle{heavy} = [line width=3pt]
+    \tikzstyle{light} = [line width=0.33pt]
+    \tikzstyle{focus} = [draw=red,opacity=1.0]
 
     \draw [attn,heavy] (1the) to[in=155,out=25] (2the);
     \draw [attn,light] (1thecat) to[in=155,out=25] (2the);
@@ -48,5 +48,5 @@
 
   \end{tikzpicture}}
   
- \caption{Soft alignments between the nodes of two trees, with alignments to ``the kitten'' highlighted in blue.}\label{fig:tree_attn}
-\end{figure*}
+ \caption{Soft alignments between the nodes of two trees, with alignments to ``the kitten'' highlighted in red.}\label{fig:tree_attn}
+\end{figure}

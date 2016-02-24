@@ -1,0 +1,287 @@
+\documentclass[11pt,letterpaper]{article}
+\usepackage{../acl2015}
+\usepackage{times}
+\usepackage{latexsym}
+% \setlength\titlebox{7.5cm}    % Expanding the titlebox
+
+%%% Custom additions %%%
+\usepackage{url}
+\usepackage[leqno, fleqn]{amsmath}
+\usepackage{amssymb}
+\usepackage{qtree}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{colortbl}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{color}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usepackage{tikz-qtree}
+\usepackage{ifthen}
+\usepackage{framed}
+
+\newcount\colveccount
+\newcommand*\colvec[1]{
+        \global\colveccount#1
+        \begin{bmatrix}
+        \colvecnext
+}
+\def\colvecnext#1{
+        #1
+        \global\advance\colveccount-1
+        \ifnum\colveccount>0
+                \\
+                \expandafter\colvecnext
+        \else
+                \end{bmatrix}
+        \fi
+}
+
+\newcommand{\nateq}{\equiv}
+\newcommand{\natind}{\mathbin{\#}}
+\newcommand{\natneg}{\mathbin{^{\wedge}}}
+\newcommand{\natfor}{\sqsubset}
+\newcommand{\natrev}{\sqsupset}
+\newcommand{\natalt}{\mathbin{|}}
+\newcommand{\natcov}{\mathbin{\smallsmile}}
+
+\newcommand{\plneg}{\mathop{\textit{not}}}
+\newcommand{\pland}{\mathbin{\textit{and}}}
+\newcommand{\plor}{\mathbin{\textit{or}}}
+
+\newcommand{\shift}{\textsc{shift}}
+\newcommand{\reduce}{\textsc{reduce}}
+
+% Strikeout
+\newlength{\howlong}\newcommand{\strikeout}[1]{\settowidth{\howlong}{#1}#1\unitlength0.5ex%
+\begin{picture}(0,0)\put(0,1){\line(-1,0){\howlong\divide\unitlength}}\end{picture}}
+
+\newcommand{\True}{\texttt{T}}
+\newcommand{\False}{\texttt{F}}
+\usepackage{stmaryrd}
+\newcommand{\sem}[1]{\ensuremath{\llbracket#1\rrbracket}}
+
+\newcommand{\mynote}[1]{{\color{blue}#1}}
+\newcommand{\tbchecked}[1]{{\color{red}#1}}
+
+\usepackage{gb4e}
+\noautomath
+ 
+\def\ii#1{\textit{#1}}
+\newcommand{\word}[1]{\emph{#1}}
+\newcommand{\fulllabel}[2]{\b{#1}\newline\textsc{#2}}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%% Code to simulate natbib's citealt, which prints citations with
+%%%%% no parentheses:
+
+\makeatletter
+\def\citealt{\def\citename##1{{\frenchspacing##1} }\@internalcitec}
+\def\@citexc[#1]#2{\if@filesw\immediate\write\@auxout{\string\citation{#2}}\fi
+  \def\@citea{}\@citealt{\@for\@citeb:=#2\do
+    {\@citea\def\@citea{;\penalty\@m\ }\@ifundefined
+       {b@\@citeb}{{\bf ?}\@warning
+       {Citation `\@citeb' on page \thepage \space undefined}}%
+{\csname b@\@citeb\endcsname}}}{#1}}
+\def\@internalcitec{\@ifnextchar [{\@tempswatrue\@citexc}{\@tempswafalse\@citexc[]}}
+\def\@citealt#1#2{{#1\if@tempswa, #2\fi}}
+\makeatother
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\title{Tree-structured neural networks revisited}
+
+\author{
+Samuel R.\ Bowman$^{\ast\dag}$ \\
+\texttt{sbowman@stanford.edu} \\
+\And
+Jon Gauthier$^{\dag\ddag}$ \\
+\texttt{jgauthie@stanford.edu} \\
+\And
+Abhinav Rastogi$^{\dag\S}$ \\
+\texttt{arastogi@stanford.edu} \\
+\AND
+Raghav Gupta$^{\dag\mathparagraph}$ \\
+\texttt{rgupta93@stanford.edu} \\
+\And
+Christopher D.\ Manning$^{\ast\dag\mathparagraph}$\\
+\texttt{manning@stanford.edu}\\
+\And
+Christopher Potts$^{\ast}$\\
+\texttt{cgpotts@stanford.edu}
+\AND\\[-3ex]
+{$^{\ast}$Stanford Linguistics\quad
+$^{\dag}$Stanford NLP Group\quad
+$^{\ddag}$Stanford Symbolic Systems}\\
+{$^{\S}$Stanford Electrical Engineering\quad
+$^{\mathparagraph}$Stanford Computer Science}
+}
+
+\date{}
+
+\makeatletter
+\newcommand{\@BIBLABEL}{\@emptybiblabel}
+\newcommand{\@emptybiblabel}[1]{}
+\definecolor{black}{rgb}{0,0,0}
+\makeatother
+\usepackage[breaklinks, colorlinks, linkcolor=black, urlcolor=black, citecolor=black, draft]{hyperref}
+
+\def\t#1{#1}
+\def\b#1{\t{\textbf{#1}}}
+\def\colspaceS{2.25mm}
+\def\colspaceM{4.0mm}
+\def\colspaceL{4.25mm}
+
+\newcommand\todo[1]{\textcolor{red}{\textbf{TODO:} #1}}
+\newcommand\note[1]{\textcolor{blue}{\textbf{NOTE:} #1}}
+
+
+\begin{document}
+\maketitle
+\todo{Anonymize.}
+
+\begin{abstract}
+\begin{itemize}
+\item TreeRNNs are great, don't work for big data.
+\item We present the transition-based TreeRNN implementation -- makes efficient training possible, show that it helps relative to seq models.
+\item Further, attention has proven powerful for extending sequence models. We introduce constit-by-constit attention, and find it to be effective here, too.
+\end{itemize}
+\end{abstract}
+
+
+\section{Introduction}
+
+\begin{itemize}
+\item Brief history of TreeRNNs
+\item Speed issues
+\item Attention issues
+\end{itemize}
+
+\section{The transition-based sentence model}
+
+\subsection{Intuition: Transition-based parsing}
+
+\subsection{The model}
+
+\todo{[SB] Reframe in terms of Model 0 alone.}
+
+
+\subsection{Model 0}
+
+Model 0, depicted in Figure~\ref{fig:model:0}, is the simplest instantiation of our design, using only a conventional stack and a learned composition function to incrementally build a sentence representation over a series of timesteps. For a sentence of $N$ words its input is a sequence of $2N-3$ inputs. These inputs can take two types. At some timesteps, the input will be a word embedding vector. This triggers the \shift~operation, in which the vector is pushed onto the top of a stack. At other timesteps, the input will be the special \reduce~token, which triggers the reduction operation. In that operation, the top two word vectors are popped from the stack, fed into a learned composition function that maps them to a single vector (in the simplest case, this is a single neural network layer), and then pushed back onto the stack.
+
+If we add no additional features, this model computes the same function as a plain TreeRNN. However, we expect it to be substantially faster than conventional TreeRNN implementations. Unlike a TreeRNN, the Model 0 computation graph is essentially static across examples, so examples of varying structures and lengths can be batched together and run on the same graph in a single step. This simply requires ensuring that the graph is run for enough timesteps to finish all of the sentences. This involves some wasted computation, since the composition function will be run $2N-3$ times (with the output of composition at non-\reduce~steps discarded), rather than $N-1$ times in a TreeRNN. However, this loss can be dramatically offset by the gains of batching, which stem from the ability to exploit highly optimized CPU and GPU libraries for batched matrix multiiplication.
+
+\subsection{Model 1}
+
+\input{../model1_fig.tex}
+
+Model 1, depicted in Figures~\ref{fig:model:1d} and \ref{fig:model:1b}, adapts Model 0 to use a stack and a buffer, making it more closely resemble a shift--reduce parser, and laying the groundwork for a model which can parse novel sentences at test time.
+
+The model runs for a fixed number of transition steps: $2N - 3$. In its starting configuration, it contains a stack that is prepopulated with the first two words of the sentence (since \shift~\shift~is the only legal operation sequence for the first two timesteps of a true shift-reduce parser), as well as a buffer (a queue) prepopulated with all of the remaining words in the sentence. Both the stack and buffer represent words using their embeddings. 
+
+At each timestep at test time, the model combines views of the stack and buffer (the top element of the buffer and the top two elements of the stack, highlighted in yellow) as the input to a tracking LSTM (red). This LSTM's output is fed into a sigmoid operation classifier (blue) which chooses between the \shift~and \reduce~operations. If \shift~is chosen, one word embedding is popped from the buffer and pushed onto the stack. If \reduce~is chosen, the buffer is left as is, and the top two elements of the stack are popped and composed using a learned composition function (green), with the result placed back on top of the stack.
+
+\paragraph{Supervision} The model is trained using two objective functions simultaneously. The semantic objective function is computed by feeding the value from the top of the stack at the final timestep---the full sentence encoding---into a downstream neural network model for some semantic task, like a sentiment classifier or an entailment classifier. The gradients from that classifier propagate to every part of the model except the operation classifier (blue). The syntactic objective function takes the form of direct supervision on the operation classifier (blue) which encourages that classifier to produce the same sequence of operations that an existing parser would produce for that sentence. The gradients from the syntactic objective function propagate to every part of the model but the downstream semantic model.
+
+At training time, following the strategy used in LSTM text decoders, the decisions made by the operation classifier (blue) is discarded, and the model instead uses the correct operation as specified in the (already parsed) training corpus. At test time, this signal is not available, and the model uses its own predicted operations.
+
+\subsection{Model 2}
+
+Model 2 makes a small change to Model 1 that is likely to substantially change the dynamics of learning: It uses the operation sequence predicted by the operation classifier (blue) at training time as well as at test time. It may be possible to accelerate Model 2 training by initializing it with parameters learned by Model 1.
+
+By exposing Model 2 to the results of its own decisions during training, we encourage it to become more robust to its own prediction errors. \citealt{bengio2015scheduled} applied a similar strategy\footnote{The authors experiment with several strategies which interpolate between oracle-driven training and oracle-free training (Models 1 and 2 in our presentation, respectively). It may be useful to adopt a similar interpolating approach.} to an image captioning model. They suggest that the resulting model can avoid propagating prediction errors through long sequences due to this training regime.
+
+
+\subsection{Tracking left context with an auxiliary LSTM} Includes both the tracking LSTM and context-sensitive composition.
+
+\subsection{Building a model}
+
+\paragraph{The size of the stack}
+The size of the stack should be $N$ for sentences of $N$ words, in case the first reduce merges the final two words. The size of the buffer should be $N$.
+
+\paragraph{Handling overly long sentences}
+
+\subsection{Data preparation}
+
+For Models 0--3, all training data must be parsed in advance into an unlabeled binary constituency tree. In addition, Model 0 requires that  parses be available at test time as well. For both SST and SNLI we use the parses included with the corpus distributions whenever parses are needed. 
+
+For model 0, training data can be prepared by linearizing the provided parse, then deleting left brackets and replacing right brackets with \reduce~instructions. That is demonstrated here with the example sentence \ii{the cat sat down}:
+
+\begin{quote}\small
+( ( the cat ) ( sat down ) )$\Rightarrow$\\
+the cat \reduce~sat down \reduce~\reduce
+\end{quote}
+
+The input for models 1--4 is simply the word sequence from the parse, with the first two words moved into the stack. The syntactic supervision labels for models 1--3 are simply a binarized version of the Model 0 inputs, with the first two tokens (which are necessarily \shift~\shift) omitted: 
+
+\begin{quote}\small
+( ( the cat ) ( sat down ) )$\Rightarrow$ \\
+stack: $\langle$the, cat$\rangle$\\
+buffer: $\langle$sat, down$\rangle$\\
+ops: \reduce~\shift~\shift~\reduce~\reduce
+\end{quote}
+
+\paragraph{Representing the stack in memory} Or, thin stack. 
+\todo{[JG] Explain.}
+
+
+\paragraph{Optimization and hyperparameters}
+
+\paragraph{Software infrastructure} We will make Theano code available.
+
+\subsection{Step time}
+
+\todo{Does anyone know of a better baseline TreeRNN implementation that we can use on Jagupard? We can use the CoreNLP SST model, but using a Java model as a baseline seems worrying unless we're guaranteed that it's competitively fast.}
+
+Comparing model step time to the plain RNN of \citealt{li2015tree}. We use the small \citealt{pang2004sentimental} sentiment corpus that they use, and train with identical hyperparameters: ...
+
+Evaluation metrics: Time per minibatch on a jag machine, with and without GPU access.
+
+
+\section{Attention over trees}
+
+\input{../tree_attn_fig.tex}
+
+\paragraph{Constituent-by-constituent attention}
+We aim to build on the results of \citealt{rocktaschel2015reasoning} and \citealt{wang2015learning}, who find that neural soft attention models is an extremely effective technique for learning natural language inference. In particular, both papers use versions of word-by-word entailment, in which a latent alignment is learned from every word in the hypothesis to one or more words of the premise. We propose to borrow this basic idea, but to adapt it to a tree-structured setting, proposing \textit{constituent-by-constituent} attention. While these models do attention over a matrix $\mathbf{Y}$ of word-in-context representations from the premise encoder, we will perform attention instead over our own primary data structure, $\mathbf{Y}^{st}$, the matrix of vectors that have appeared at the top of the stack during premise encoding, which correspond one-to-one to the constituents in the tree structure representing the premise. Similarly, while the previous models perform one instance of soft attention conditioned on each word in the hypothesis, we perform one instance of soft attention conditioned on each stack top in the hypothesis encoder, representing the constituents of the hypothesis tree.
+
+In our model, attention is performed at each step $t$ of the premise encoder. At step $t$, the query vector that drives attention will be $S^t_0$, the top of the stack. 
+
+\todo{[AR, RG] Write up the attention equations that you use.}
+
+\subsection{Accumulating the results of attention}
+
+\paragraph{Accumulating results sequentially} (After Rocktäschel, Wang and Jiang)
+
+\paragraph{Accumulating results using a second tree layer}
+
+\section{Experiments}
+
+\paragraph{The Stanford Natural Language Inference task} \cite{snli:emnlp2015}
+
+\paragraph{Results}
+
+\section{Discussion}
+
+\paragraph{Patterns in the examples that the tree model got right that the LSTM didn't}
+
+\paragraph{Induced alignments}
+
+\section{Conclusions and future work}
+
+\begin{itemize}
+\item Future work: Incorporate the parser
+\item Future work: Latent parses
+\end{itemize}
+
+\subsubsection*{Acknowledgments}
+
+(some of) the Tesla K40(s) used for this research was/were donated by the NVIDIA Corporation.
+
+\bibliographystyle{../acl}
+\bibliography{../MLSemantics} 
+
+\end{document}
