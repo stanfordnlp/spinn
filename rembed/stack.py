@@ -472,7 +472,9 @@ class ThinStack(object):
 
         return wrt, f_p_delta, f_m_delta
 
-    def make_backprop_scan(self, error_signal, extra_cost_inputs=None):
+    def make_backprop_scan(self, error_signal,
+                           extra_cost_inputs=None,
+                           compute_embedding_gradients=True):
         """
         Args:
             error_signal: The external gradient d(cost)/d(stack top). A Theano
@@ -503,10 +505,14 @@ class ThinStack(object):
         self._zero_updates += wrt_vars
 
         # Also accumulate embedding gradients separately
-        dE = theano.shared(np.zeros(self.embeddings.get_value().shape,
-                                    dtype=np.float32),
-                           name="bwd/wrt/embeddings")
-        self._zero_updates.append(dE)
+        if compute_embedding_gradients:
+            dE = theano.shared(np.zeros(self.embeddings.get_value().shape,
+                                        dtype=np.float32),
+                               name="bwd/wrt/embeddings")
+            self._zero_updates.append(dE)
+        else:
+            # Make dE a dummy variable.
+            dE = T.zeros((1,))
 
         # Useful batch zero-constants.
         zero_stack = T.zeros((self.batch_size, self.model_dim))
@@ -603,10 +609,17 @@ class ThinStack(object):
                      mask.dimshuffle(0, "x", "x")]
 
             # Accumulate inp deltas, switching over push/merge decision.
-            stacks = (stack_bwd_next, stack_bwd_next, dE) + extra_bwd
+            stacks = (stack_bwd_next, stack_bwd_next,
+                      (compute_embedding_gradients and dE) or None)
+            cursors = (t_c1, t_c2,
+                       (compute_embedding_gradients and buffer_ids_t) or None)
+            # Handle potential aux bwd stacks.
+            stacks += extra_bwd
+            cursors += ((t_c1,)) * len(extra_bwd)
             new_stacks = {}
-            cursors = (t_c1, t_c2, buffer_ids_t) + ((t_c1,) * len(extra_bwd))
             for stack, cursor, m_delta, p_delta in zip(stacks, cursors, m_delta_inp, p_delta_inp):
+                if stack is None or cursor is None:
+                    continue
                 base = new_stacks.get(stack, stack)
 
                 mask_i = masks[m_delta.ndim - 1]
@@ -636,8 +649,9 @@ class ThinStack(object):
             # On push ops, backprop the stack_bwd error onto the embedding
             # parameters.
             # TODO make sparse?
-            new_stacks[dE] = cuda_util.AdvancedIncSubtensor1Floats()(
-                new_stacks[dE], (1. - masks[1]) * main_grad, buffer_ids_t)
+            if compute_embedding_gradients:
+                new_stacks[dE] = cuda_util.AdvancedIncSubtensor1Floats()(
+                    new_stacks[dE], (1. - masks[1]) * main_grad, buffer_ids_t)
 
             updates = dict(new_wrt_deltas.items() + new_stacks.items())
             updates = util.prepare_updates_dict(updates)
@@ -660,10 +674,11 @@ class ThinStack(object):
                                   self.buf_ptrs[:-1]], axis=0)
 
         sequences = [ts_f, transitions_f, self.stack_2_ptrs, buf_ptrs]
-        outputs_info = []#T.zeros_like(self.embeddings)]
+        outputs_info = []
 
         # Shared variables: Accumulated wrt deltas and bwd stacks.
-        non_sequences = [dE] + wrt_vars + [self.stack_bwd] + self.aux_bwd_stacks
+        non_sequences = [dE] + wrt_vars
+        non_sequences += [self.stack_bwd] + self.aux_bwd_stacks
         # More auxiliary data
         non_sequences += [id_buffer, self.final_stack]
         # More helpers (not referenced directly in code, but we need to include
@@ -679,4 +694,5 @@ class ThinStack(object):
 
         self.gradients = {wrt_i: self.bscan_updates[wrt_var]
                           for wrt_i, wrt_var in zip(wrt, wrt_vars)}
-        self.embedding_gradients = self.bscan_updates[dE]
+        if compute_embedding_gradients:
+            self.embedding_gradients = self.bscan_updates[dE]

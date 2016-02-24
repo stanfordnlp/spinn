@@ -177,7 +177,7 @@ class ThinStackBackpropTestCase(unittest.TestCase, BackpropTestMixin):
 
         return c2
 
-    def test_backprop(self):
+    def _test_backprop(self, embedding_grad=True):
         # Simulate a batch of two token sequences, each with the same
         # transition sequence
         X = np.array([[0, 1, 2, 3, 1], [2, 1, 3, 0, 1]], dtype=np.int32)
@@ -199,19 +199,31 @@ class ThinStackBackpropTestCase(unittest.TestCase, BackpropTestMixin):
         error_signal = T.grad(cost, top)
 
         # Build automatic backprop function.
-        self.stack.make_backprop_scan(error_signal, [self.y])
+        self.stack.make_backprop_scan(error_signal, [self.y],
+                                      compute_embedding_gradients=embedding_grad)
+        outputs = (cost, self.stack.gradients[W], self.stack.gradients[b])
+        if embedding_grad:
+            outputs = outputs + (self.stack.embedding_gradients,)
         f = theano.function(
-            [self.X, self.transitions, self.y],
-            (cost, self.stack.gradients[W], self.stack.gradients[b], self.stack.embedding_gradients),
+            [self.X, self.transitions, self.y], outputs,
             updates=self.stack.scan_updates + self.stack.bscan_updates)
 
         b_cost_sim, b_dW_sim, b_db_sim, b_embedding_gradients_sim = f_simulated(X, y)
-        b_cost, b_dW, b_db, b_embedding_gradients = f(X, transitions, y)
+        real_ret = f(X, transitions, y)
+        b_cost, b_dW, b_db = real_ret[:3]
 
         np.testing.assert_almost_equal(b_cost_sim, b_cost)
         np.testing.assert_almost_equal(b_dW_sim, b_dW)
         np.testing.assert_almost_equal(b_db_sim, b_db)
-        np.testing.assert_almost_equal(b_embedding_gradients_sim, b_embedding_gradients)
+
+        if embedding_grad:
+            np.testing.assert_almost_equal(b_embedding_gradients_sim, real_ret[3])
+
+    def test_backprop_with_embedding_gradients(self):
+        self._test_backprop(True)
+
+    def test_backprop_without_embedding_gradients(self):
+        self._test_backprop(False)
 
 
 class ThinStackTrackingBackpropTestCase(unittest.TestCase, BackpropTestMixin):
