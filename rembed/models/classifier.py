@@ -609,10 +609,12 @@ def run(only_forward=False):
         # Train
         if data_manager.SENTENCE_PAIR_DATA:
             premise_error_signal = T.grad(total_cost, premise_stack_top)
-            premise_model.make_backprop_scan(premise_error_signal)
+            premise_model.make_backprop_scan(premise_error_signal,
+                                             compute_embedding_gradients=False)
 
             hypothesis_error_signal = T.grad(total_cost, hypothesis_stack_top)
-            hypothesis_model.make_backprop_scan(hypothesis_error_signal)
+            hypothesis_model.make_backprop_scan(hypothesis_error_signal,
+                                                compute_embedding_gradients=False)
 
             gradients = premise_model.gradients
             hypothesis_gradients = hypothesis_model.gradiennts
@@ -623,7 +625,8 @@ def run(only_forward=False):
             new_values += hypothesis_model.scan_updates.items() + hypothesis_model.bscan_updates.items()
         else:
             error_signal = T.grad(total_cost, stack_top)
-            model.make_backprop_scan(error_signal)
+            model.make_backprop_scan(error_signal,
+                                     compute_embedding_gradients=train_embeddings)
             if train_embeddings:
                 model.gradients[model.embeddings] = model.embedding_gradients
             gradients = model.gradients
