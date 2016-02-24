@@ -348,22 +348,20 @@ def WangJiangAttentionUnit(attention_state_prev, current_stack_top, premise_stac
     w = vs.add_param("%s_w" % name, (attention_dim,), initializer=initializer)
 
     W_h__h_t = T.dot(current_stack_top, W_h)
-    W_r__r_t_prev = T.dot(attention_state_prev, W_r)
+    W_r__r_t_prev = T.dot(attention_state_prev[:,:attention_dim], W_r)
 
     # Shape: L x B x k
     M_t = T.tanh(projected_stack_tops + (W_h__h_t + W_r__r_t_prev))
 
     # Shape: B x L
-    M_t = theano.printing.Print("m")(M_t)
     alpha_t = T.nnet.softmax(T.dot(M_t, w).T)
-    alpha_t = theano.printing.Print("alpha")(alpha_t)
 
     # Shape B x k
     Y__alpha_t = T.sum(premise_stack_tops * alpha_t.T[:, :, np.newaxis], axis=0)
 
     mlstm_input = T.concatenate([Y__alpha_t, current_stack_top], axis=1)
 
-    r_t = LSTMLayer(attention_state_prev, mlstm_input, 2 * attention_dim, attention_dim, vs, name="%s/lstm" % name)
+    r_t = LSTMLayer(attention_state_prev, mlstm_input, 2 * attention_dim, 2 * attention_dim, vs, name="%s/lstm" % name)
 
     return r_t
 

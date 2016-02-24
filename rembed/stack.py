@@ -375,7 +375,7 @@ class HardStack(object):
         # Initialize the attention representation if needed
         if self.use_attention and self.is_hypothesis:
             h_dim = self.model_dim / 2
-            if self.use_attention == "WangJiang" and False: # TODO
+            if self.use_attention == "WangJiang":
                  attention_init = T.zeros((batch_size, 2 * h_dim))
             else:
                 attention_init = T.zeros((batch_size, h_dim))
@@ -437,7 +437,7 @@ class HardStack(object):
             self.final_weighed_representation = util.AttentionUnitFinalRepresentation(scan_ret[0][stack_ind + 3][-1], 
                 self.embeddings[:,:h_dim], h_dim, self._vs)
         elif self.use_attention == "WangJiang" and self.is_hypothesis:
-            self.final_weighed_representation = scan_ret[0][stack_ind+3][-1]#[:h_dim]
+            self.final_weighed_representation = scan_ret[0][stack_ind+3][-1][:,:h_dim]
 
 
 class Model0(HardStack):
