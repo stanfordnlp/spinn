@@ -690,8 +690,10 @@ class ThinStack(object):
         non_sequences += [id_buffer, self.final_stack]
         # More helpers (not referenced directly in code, but we need to include
         # them as non-sequences to satisfy scan strict mode)
-        non_sequences += [self.buffer_t] + self.final_aux_stacks
+        non_sequences += [self.stack, self.buffer_t] + self.aux_stacks + self.final_aux_stacks
         non_sequences += self._vs.vars.values() + extra_cost_inputs
+        if self.premise_stack_tops:
+            non_sequences.append(self.premise_stack_tops)
 
         bscan_ret, self.bscan_updates = theano.scan(
                 step_b, sequences, outputs_info, non_sequences,

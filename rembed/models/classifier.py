@@ -609,25 +609,42 @@ def run(only_forward=False):
                               data_manager.SENTENCE_PAIR_DATA, ind_to_word)
     else:
         # Train
+        extra_cost_inputs = [X, transitions, y, training_mode, ground_truth_transitions_visible]
         if data_manager.SENTENCE_PAIR_DATA:
             premise_error_signal = T.grad(total_cost, premise_stack_top)
             premise_model.make_backprop_scan(premise_error_signal,
+                                             extra_cost_inputs=extra_cost_inputs,
                                              compute_embedding_gradients=False)
 
+            extra_cost_inputs += [premise_model.stack] + premise_model.aux_stacks
             hypothesis_error_signal = T.grad(total_cost, hypothesis_stack_top)
             hypothesis_model.make_backprop_scan(hypothesis_error_signal,
+                                                extra_cost_inputs=extra_cost_inputs,
                                                 compute_embedding_gradients=False)
 
             gradients = premise_model.gradients
-            hypothesis_gradients = hypothesis_model.gradiennts
+            hypothesis_gradients = hypothesis_model.gradients
             for key in hypothesis_gradients:
                 gradients[key] += hypothesis_gradients[key]
 
-            new_values += premise_model.scan_updates.items() + premise_model.bscan_updates.items()
+            new_values = premise_model.scan_updates.items() + premise_model.bscan_updates.items()
             new_values += hypothesis_model.scan_updates.items() + hypothesis_model.bscan_updates.items()
+
+            seen = set()
+            for new_value, output in new_values:
+                if new_value in seen:
+                    print new_value.get_value().shape
+                    print new_value.get_value()
+                    tr = getattr(new_value.tag, 'trace', [])
+                    print new_value, id(new_value), tr
+                    for subtr in tr:
+                        traceback.print_list(subtr, sys.stderr)
+                    print "============="
+                seen.add(new_value)
         else:
             error_signal = T.grad(total_cost, stack_top)
             model.make_backprop_scan(error_signal,
+                                     extra_cost_inputs=extra_cost_inputs,
                                      compute_embedding_gradients=train_embeddings)
             if train_embeddings:
                 model.gradients[model.embeddings] = model.embedding_gradients
