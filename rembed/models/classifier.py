@@ -101,7 +101,7 @@ def build_sentence_model(cls, vocab_size, seq_length, tokens, transitions,
         context_sensitive_use_relu=FLAGS.context_sensitive_use_relu)
 
     # Extract top element of final stack timestep.
-    sentence_vector = sentence_model.embeddings.reshape((-1, FLAGS.model_dim))
+    sentence_vector = sentence_model.final_representations.reshape((-1, FLAGS.model_dim))
 
     sentence_vector = util.BatchNorm(sentence_vector, FLAGS.model_dim, vs, "sentence_vector", training_mode)
     sentence_vector = util.Dropout(sentence_vector, FLAGS.semantic_classifier_keep_rate, training_mode)
@@ -203,21 +203,21 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
         is_hypothesis=True)
 
     # Extract top element of final stack timestep.
-    premise_embeddings = premise_model.embeddings
-    hypothesis_embeddings = hypothesis_model.embeddings
+    premise_embeddings = premise_model.final_representations
+    hypothesis_embeddings = hypothesis_model.final_representations
     
     premise_vector = premise_embeddings.reshape((-1, FLAGS.model_dim))
     hypothesis_vector = hypothesis_embeddings.reshape((-1, FLAGS.model_dim))
 
-    # Create MLP features
-    mlp_input = T.concatenate([premise_vector, hypothesis_vector], axis=1)
-    mlp_input_dim = 2 * FLAGS.model_dim
-
-    # Use the attention weighted representation
     if FLAGS.use_attention != "None":
+        # Use the attention weighted representation
         h_dim = FLAGS.model_dim / 2
         mlp_input = hypothesis_model.final_weighed_representation.reshape((-1, h_dim))
         mlp_input_dim = h_dim
+    else: 
+        # Create standard MLP features
+        mlp_input = T.concatenate([premise_vector, hypothesis_vector], axis=1)
+        mlp_input_dim = 2 * FLAGS.model_dim
 
     if FLAGS.use_difference_feature:
         mlp_input = T.concatenate([mlp_input, premise_vector - hypothesis_vector], axis=1)
@@ -691,7 +691,7 @@ if __name__ == '__main__':
     gflags.DEFINE_boolean("use_tracking_lstm", True,
                           "Whether to use LSTM in the tracking unit")
     gflags.DEFINE_enum("use_attention", "None",
-                       ["None", "Rocktaschel", "WangJiang"],
+                       ["None", "Rocktaschel", "WangJiang", "TreeWangJiang"],
                        "")
     gflags.DEFINE_boolean("context_sensitive_shift", False, 
         "Use LSTM hidden state and word embedding to determine the vector to be pushed")

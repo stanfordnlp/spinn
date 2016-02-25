@@ -10,7 +10,7 @@ from rembed import util
 
 
 def update_hard_stack(stack_t, stack_pushed, stack_merged, push_value,
-                      merge_value, mask):
+                      merge_value, mask, model_dim):
     """Compute the new value of the given hard stack.
 
     This performs stack pushes and pops in parallel, and somewhat wastefully.
@@ -25,17 +25,18 @@ def update_hard_stack(stack_t, stack_pushed, stack_merged, push_value,
         push_value: Batch of values to be pushed
         merge_value: Batch of merge results
         mask: Batch of booleans: 1 if merge, 0 if push
+        model_dim: The dimension of push_value and merge_value.
     """
 
     # Build two copies of the stack batch: one where every stack has received
     # a push op, and one where every stack has received a merge op.
     #
     # Copy 1: Push.
-    stack_pushed = T.set_subtensor(stack_pushed[:, 0], push_value)
+    stack_pushed = T.set_subtensor(stack_pushed[:, 0, :model_dim], push_value)
     stack_pushed = T.set_subtensor(stack_pushed[:, 1:], stack_t[:, :-1])
 
     # Copy 2: Merge.
-    stack_merged = T.set_subtensor(stack_merged[:, 0], merge_value)
+    stack_merged = T.set_subtensor(stack_merged[:, 0, :model_dim], merge_value)
     stack_merged = T.set_subtensor(stack_merged[:, 1:-1], stack_t[:, 2:])
 
     # Make sure mask broadcasts over all dimensions after the first.
@@ -144,6 +145,7 @@ class HardStack(object):
         """
 
         self.model_dim = model_dim
+        self.stack_dim = 2 * model_dim if use_attention == "TreeWangJiang" else model_dim
         self.word_embedding_dim = word_embedding_dim
         self.use_tracking_lstm = use_tracking_lstm
         self.tracking_lstm_hidden_dim = tracking_lstm_hidden_dim
@@ -193,6 +195,8 @@ class HardStack(object):
             self._attention_unit = util.RocktaschelAttentionUnit
         elif use_attention == "WangJiang" and is_hypothesis:
             self._attention_unit = util.WangJiangAttentionUnit
+        elif use_attention == "TreeWangJiang" and is_hypothesis:
+            self._attention_unit = util.TreeWangJiangAttentionUnit
         else:
             self._attention_unit = None
 
@@ -250,7 +254,7 @@ class HardStack(object):
         if self._prediction_and_tracking_network is not None:
             # We are predicting our own stack operations.
             predict_inp = T.concatenate(
-                [stack_t[:, 0], stack_t[:, 1], buffer_top_t], axis=1)
+                [stack_t[:, 0, :self.model_dim], stack_t[:, 1, :self.model_dim], buffer_top_t], axis=1)
 
             if self.use_tracking_lstm:
                 # Update the hidden state and obtain predicted actions.
@@ -285,7 +289,10 @@ class HardStack(object):
             mask = transitions_t
 
         # Now update the stack: first precompute merge results.
-        merge_items = stack_t[:, :2].reshape((-1, self.model_dim * 2))
+        if self.model_dim != self.stack_dim:
+            merge_items = stack_t[:, :2, :self.model_dim].reshape((-1, self.model_dim * 2))
+        else:
+            merge_items = stack_t[:, :2].reshape((-1, self.model_dim * 2))
         if self.connect_tracking_comp:
             tracking_h_t = tracking_hidden[:, :self.tracking_lstm_hidden_dim]
             merge_value = self._compose_network(merge_items, tracking_h_t, self.model_dim,
@@ -296,14 +303,22 @@ class HardStack(object):
 
         # Compute new stack value.
         stack_next = update_hard_stack(stack_t, stack_pushed, stack_merged, buffer_top_t, 
-                                    merge_value, mask)
+                                    merge_value, mask, self.model_dim)
 
-        # If attention is to be used and premise_stack_tops is not None i.e.
-        # we're processing the hypothesis- Calculate the attention weighed representation
+        # If attention is to be used and premise_stack_tops is not None (i.e.
+        # we're processing the hypothesis) calculate the attention weighed representation.
         if self.use_attention != "None" and self.is_hypothesis:
             h_dim = self.model_dim / 2
-            attention_hidden = self._attention_unit(attention_hidden, stack_next[:, 0, :h_dim], premise_stack_tops, 
-                projected_stack_tops, h_dim, self._vs, name="attention_unit")
+            if self.use_attention == "TreeWangJiang":
+                attention_hidden_l = stack_t[:, 0, self.model_dim:]
+                attention_hidden_r = stack_t[:, 1, self.model_dim:]
+                tree_attention_hidden = self._attention_unit(attention_hidden_l, attention_hidden_r, 
+                    stack_next[:, 0, :h_dim], premise_stack_tops, projected_stack_tops, h_dim, 
+                    self._vs, name="attention_unit")
+                stack_next = T.set_subtensor(stack_next[:, 0, self.model_dim:], tree_attention_hidden)
+            else:
+                attention_hidden = self._attention_unit(attention_hidden, stack_next[:, 0, :h_dim], 
+                    premise_stack_tops, projected_stack_tops, h_dim, self._vs, name="attention_unit")                
 
         # Move buffer cursor as necessary. Since mask == 1 when merge, we
         # should increment each buffer cursor by 1 - mask.
@@ -326,7 +341,7 @@ class HardStack(object):
         batch_size, max_stack_size = self.X.shape
 
         # Stack batch is a 3D tensor.
-        stack_shape = (batch_size, max_stack_size, self.model_dim)
+        stack_shape = (batch_size, max_stack_size, self.stack_dim)
         stack_init = T.zeros(stack_shape)
 
         # Allocate two helper stack copies (passed as non_seqs into scan).
@@ -373,13 +388,15 @@ class HardStack(object):
             hidden_init = DUMMY
 
         # Initialize the attention representation if needed
-        if self.use_attention and self.is_hypothesis:
+        if self.use_attention not in {"TreeWangJiang", "None"} and self.is_hypothesis:
             h_dim = self.model_dim / 2
             if self.use_attention == "WangJiang":
                  attention_init = T.zeros((batch_size, 2 * h_dim))
             else:
                 attention_init = T.zeros((batch_size, h_dim))
         else:
+            # If we're not using a sequential attention accumulator (i.e., no attention or
+            # tree attention), use a size-zero value here.
             attention_init = DUMMY
 
         # Set up the output list for scanning over _step().
@@ -420,7 +437,7 @@ class HardStack(object):
 
         stack_ind = 0 if self.interpolate else 1
         self.final_stack = scan_ret[0][stack_ind][-1]
-        self.embeddings = self.final_stack[:, 0]
+        self.final_representations = self.final_stack[:, 0, :self.model_dim]
 
         if self._predict_transitions:
             self.transitions_pred = scan_ret[0][-1].dimshuffle(1, 0, 2)
@@ -432,12 +449,15 @@ class HardStack(object):
             h_dim = self.model_dim / 2
             self.stack_tops = scan_ret[0][stack_ind][:,:,0,:h_dim].reshape((max_stack_size, batch_size, h_dim))
 
-        if self.use_attention == "Rocktaschel" and self.is_hypothesis:
+        if self.use_attention != "None" and self.is_hypothesis:
             h_dim = self.model_dim / 2
-            self.final_weighed_representation = util.AttentionUnitFinalRepresentation(scan_ret[0][stack_ind + 3][-1], 
-                self.embeddings[:,:h_dim], h_dim, self._vs)
-        elif self.use_attention == "WangJiang" and self.is_hypothesis:
-            self.final_weighed_representation = scan_ret[0][stack_ind+3][-1][:,:h_dim]
+            if self.use_attention == "Rocktaschel":
+                self.final_weighed_representation = util.AttentionUnitFinalRepresentation(scan_ret[0][stack_ind + 3][-1], 
+                    self.embeddings[:,:h_dim], h_dim, self._vs)
+            elif self.use_attention == "WangJiang":
+                self.final_weighed_representation = scan_ret[0][stack_ind+3][-1][:,:h_dim]
+            elif self.use_attention == "TreeWangJiang":
+                self.final_weighed_representation = scan_ret[0][stack_ind][-1][:,0,2*h_dim:3*h_dim]
 
 
 class Model0(HardStack):

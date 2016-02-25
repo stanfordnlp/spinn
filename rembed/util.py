@@ -324,12 +324,65 @@ def TrackingUnit(state_prev, inp, inp_dim, hidden_dim, vs, name="track_unit", ma
     return state, logits
 
 
+
+def TreeWangJiangAttentionUnit(attention_state_prev_l, attention_state_prev_r, current_stack_top, 
+        premise_stack_tops, projected_stack_tops, attention_dim, vs, name="attention_unit", 
+        initializer=None):
+    """
+    This is for use in a Wang and Jiang style mLSTM attention formalism where a TreeLSTM, rather than
+    an LSTM RNN, accumulates attention states. In this setting, the model should contain a single step
+    of 2 * model_dim dimensions, where the left [0:model_dim] half contains the TreeLSTM composition states
+    and the right [model_dim:2 * model_dim] half contains the mTreeLSTM states.
+
+    Args:
+      attention_state_prev_{l, r}: The attention results for the children of this node, if present.
+        Else, zero vectors.
+      current_stack_top: The current stack top (h state only, if applicable).
+      premise_stack_tops: The values to do attention over.
+      projected_stack_tops: Projected vectors to use to produce an attentive
+          weighting alpha_t.
+      attention_dim: The dimension of the vectors over which to do attention.
+      vs: A variable store for the learned parameters.
+      name: An identifier for the learned parameters in this unit.
+      initializer: Used to initialize the learned parameters.
+
+    Dimension notation:
+      B : Batch size
+      k : Model dim
+      L : num_transitions
+    """
+    W_h = vs.add_param("%s_W_h" % name, (attention_dim, attention_dim), initializer=initializer)
+    W_rl = vs.add_param("%s_W_rl" % name, (attention_dim, attention_dim), initializer=initializer)
+    W_rr = vs.add_param("%s_W_rr" % name, (attention_dim, attention_dim), initializer=initializer)
+    w = vs.add_param("%s_w" % name, (attention_dim,), initializer=initializer)
+
+    W_h__h_t = T.dot(current_stack_top, W_h)
+    W_rl__l_prev = T.dot(attention_state_prev_l[:,:attention_dim], W_rl)
+    W_rr__r_prev = T.dot(attention_state_prev_r[:,:attention_dim], W_rr)
+
+    # Shape: L x B x k
+    M_t = T.tanh(projected_stack_tops + (W_h__h_t +  W_rl__l_prev + W_rr__r_prev))
+
+    # Shape: B x L
+    alpha_t = T.nnet.softmax(T.dot(M_t, w).T)
+
+    # Shape B x k
+    Y__alpha_t = T.sum(premise_stack_tops * alpha_t.T[:, :, np.newaxis], axis=0)
+
+    mlstm_input = T.concatenate([Y__alpha_t, current_stack_top], axis=1)
+
+    r_t = TreeLSTMLayer(T.concatenate([attention_state_prev_l, attention_state_prev_r], axis=1), 
+                mlstm_input, 2 * attention_dim, vs,  name="%s/lstm" % name, external_state_dim=2 * attention_dim)
+
+    return r_t
+
+
 def WangJiangAttentionUnit(attention_state_prev, current_stack_top, premise_stack_tops, projected_stack_tops, attention_dim, 
                     vs, name="attention_unit", initializer=None):
     """
     Args:
       attention_state_prev: The output of this unit at the previous time step.
-      current_stack_top: The current stack top.
+      current_stack_top: The current stack top (h state only, if applicable).
       premise_stack_tops: The values to do attention over.
       projected_stack_tops: Projected vectors to use to produce an attentive
           weighting alpha_t.
@@ -371,7 +424,7 @@ def RocktaschelAttentionUnit(attention_state_prev, current_stack_top, premise_st
     """
     Args:
       attention_state_prev: The output of this unit at the previous time step.
-      current_stack_top: The current stack top.
+      current_stack_top: The current stack top (h state only, if applicable).
       premise_stack_tops: The values to retrieve using attention.
       projected_stack_tops: Projected vectors to use to produce an attentive
           weighting alpha_t.
