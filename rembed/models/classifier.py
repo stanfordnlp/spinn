@@ -562,8 +562,6 @@ def run(only_forward=False):
         action_acc = T.constant(0.0)
     transition_cost = transition_cost * FLAGS.transition_cost_scale
 
-    # TODO(jongauthier): Add hyperparameter for trading off action cost vs xent
-    # cost
     total_cost = xent_cost + l2_cost + transition_cost
 
     if ".ckpt" in FLAGS.ckpt_path:

@@ -379,10 +379,7 @@ class HardStack(object):
         transitions = self.transitions.dimshuffle(1, 0)
         
         # Initialize the hidden state for the tracking LSTM, if needed.
-        if self.use_tracking_lstm:    
-            # TODO: Unify what 'dim' means with LSTM. Here, it's the dim of 
-            # each of h and c. For 'model_dim', it's the combined dimension
-            # of the full hidden state (so h and c are each model_dim/2).
+        if self.use_tracking_lstm:
             hidden_init = T.zeros((batch_size, self.tracking_lstm_hidden_dim * 2))
         else:
             hidden_init = DUMMY
