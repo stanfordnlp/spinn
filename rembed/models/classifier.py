@@ -627,20 +627,9 @@ def run(only_forward=False):
             for key in hypothesis_gradients:
                 gradients[key] += hypothesis_gradients[key]
 
-            new_values = premise_model.scan_updates.items() + premise_model.bscan_updates.items()
-            new_values += hypothesis_model.scan_updates.items() + hypothesis_model.bscan_updates.items()
-
-            seen = set()
-            for new_value, output in new_values:
-                if new_value in seen:
-                    print new_value.get_value().shape
-                    print new_value.get_value()
-                    tr = getattr(new_value.tag, 'trace', [])
-                    print new_value, id(new_value), tr
-                    for subtr in tr:
-                        traceback.print_list(subtr, sys.stderr)
-                    print "============="
-                seen.add(new_value)
+            new_values = util.merge_updates(
+                premise_model.scan_updates + premise_model.bscan_updates,
+                hypothesis_model.scan_updates + hypothesis_model.bscan_updates).items()
         else:
             error_signal = T.grad(total_cost, stack_top)
             model.make_backprop_scan(error_signal,

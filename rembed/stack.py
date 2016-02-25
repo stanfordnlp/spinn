@@ -38,7 +38,7 @@ def update_hard_stack(t, t_f, stack_t, push_value, merge_value, merge_queue_t,
             merge_queue_t, t_f, cursors_shift + cursors_next)
 
     # DEV super hacky: don't update queue unless we have valid cursors
-    # TODO necessary?
+    # TODO: Probably not necessary with new queue setup. Think about it.
     queue_next = ifelse(cursors_next.min() < 0, merge_queue_t + 0.0, queue_next)
 
     return stack_next, queue_next, cursors_next

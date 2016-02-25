@@ -616,6 +616,18 @@ def prepare_updates_dict(updates):
     return {prepare_key(key, val): val for key, val in updates.iteritems()}
 
 
+def merge_updates(*updates_dicts):
+    all_updates = OrderedDict()
+    for updates_dict in updates_dicts:
+        for k, v in updates_dict.iteritems():
+            if k in all_updates:
+                all_updates[k] += v
+            else:
+                all_updates[k] = v
+
+    return all_updates
+
+
 def TrimDataset(dataset, seq_length, eval_mode=False, sentence_pair_data=False):
     """Avoid using excessively long training examples."""
     if eval_mode:
