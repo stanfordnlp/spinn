@@ -101,14 +101,19 @@ def build_sentence_model(cls, vocab_size, seq_length, tokens, transitions,
         context_sensitive_use_relu=FLAGS.context_sensitive_use_relu)
 
     # Extract top element of final stack timestep.
-    sentence_vector = sentence_model.final_representations.reshape((-1, FLAGS.model_dim))
+    if FLAGS.lstm_composition:
+        sentence_vector = sentence_model.final_representations[:,:FLAGS.model_dim / 2].reshape((-1, FLAGS.model_dim / 2))
+        sentence_vector_dim = FLAGS.model_dim / 2
+    else:
+        sentence_vector = sentence_model.final_representations.reshape((-1, FLAGS.model_dim))
+        sentence_vector_dim = FLAGS.model_dim / 2
 
-    sentence_vector = util.BatchNorm(sentence_vector, FLAGS.model_dim, vs, "sentence_vector", training_mode)
+    sentence_vector = util.BatchNorm(sentence_vector, sentence_vector_dim, vs, "sentence_vector", training_mode)
     sentence_vector = util.Dropout(sentence_vector, FLAGS.semantic_classifier_keep_rate, training_mode)
 
     # Feed forward through a single output layer
     logits = util.Linear(
-        sentence_vector, FLAGS.model_dim, num_classes, vs, 
+        sentence_vector, sentence_vector_dim, num_classes, vs, 
         name="semantic_classifier", use_bias=True)
 
     return sentence_model.transitions_pred, logits
@@ -203,11 +208,18 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
         is_hypothesis=True)
 
     # Extract top element of final stack timestep.
-    premise_embeddings = premise_model.final_representations
-    hypothesis_embeddings = hypothesis_model.final_representations
-    
-    premise_vector = premise_embeddings.reshape((-1, FLAGS.model_dim))
-    hypothesis_vector = hypothesis_embeddings.reshape((-1, FLAGS.model_dim))
+    if FLAGS.use_attention == "None" or FLAGS.use_difference_feature or FLAGS.use_product_feature:
+        premise_vector = premise_model.final_representations
+        hypothesis_vector = hypothesis_model.final_representations
+        
+        if FLAGS.lstm_composition:
+            premise_vector = premise_vector[:,:FLAGS.model_dim / 2].reshape((-1, FLAGS.model_dim / 2))
+            hypothesis_vector = hypothesis_vector[:,:FLAGS.model_dim / 2].reshape((-1, FLAGS.model_dim / 2))
+            sentence_vector_dim = FLAGS.model_dim / 2
+        else:
+            premise_vector = premise_vector.reshape((-1, FLAGS.model_dim))
+            hypothesis_vector = hypothesis_vector.reshape((-1, FLAGS.model_dim))
+            sentence_vector_dim = FLAGS.model_dim
 
     if FLAGS.use_attention != "None":
         # Use the attention weighted representation
@@ -217,15 +229,15 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
     else: 
         # Create standard MLP features
         mlp_input = T.concatenate([premise_vector, hypothesis_vector], axis=1)
-        mlp_input_dim = 2 * FLAGS.model_dim
+        mlp_input_dim = 2 * sentence_vector_dim
 
     if FLAGS.use_difference_feature:
         mlp_input = T.concatenate([mlp_input, premise_vector - hypothesis_vector], axis=1)
-        mlp_input_dim += FLAGS.model_dim
+        mlp_input_dim += sentence_vector_dim
 
     if FLAGS.use_product_feature:
         mlp_input = T.concatenate([mlp_input, premise_vector * hypothesis_vector], axis=1)
-        mlp_input_dim += FLAGS.model_dim
+        mlp_input_dim += sentence_vector_dim
 
     mlp_input = util.BatchNorm(mlp_input, mlp_input_dim, vs, "sentence_vectors", training_mode)
     mlp_input = util.Dropout(mlp_input, FLAGS.semantic_classifier_keep_rate, training_mode)
