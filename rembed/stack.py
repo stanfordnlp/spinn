@@ -325,7 +325,7 @@ class ThinStack(object):
         # merge -- then we don't have to mask it
         aux_outputs = [mask2 * m_output + (1. - mask2) * p_output
                        for p_output, m_output in zip(push_ret, merge_ret[1:])]
-        aux_stack_updates = {aux_stack: cuda_util.AdvancedIncSubtensor1Floats(set_instead_of_inc=True)(
+        aux_stack_updates = {aux_stack: cuda_util.AdvancedIncSubtensor1Floats(set_instead_of_inc=True, inplace=True)(
             aux_stack, aux_output, ptr_next)
             for aux_stack, aux_output in zip(self.aux_stacks, aux_outputs)}
 
@@ -634,7 +634,7 @@ class ThinStack(object):
 
                 # Run subtensor update on associated structure using the
                 # current cursor.
-                new_stack = cuda_util.AdvancedIncSubtensor1Floats()(
+                new_stack = cuda_util.AdvancedIncSubtensor1Floats(inplace=True)(
                     base, delta, cursor)
                 new_stacks[stack] = new_stack
 
@@ -651,13 +651,14 @@ class ThinStack(object):
                 mask_i = masks[m_delta.ndim - 1]
                 # TODO: Is this at all efficient? (Bring back GPURowSwitch?)
                 delta = (mask_i * m_delta + (1. - mask_i) * p_delta).sum(axis=0)
+                # TODO: we want this to be inplace
                 new_wrt_deltas[accum_delta] = accum_delta + delta
 
             # On push ops, backprop the stack_bwd error onto the embedding
             # parameters.
             # TODO make sparse?
             if compute_embedding_gradients:
-                new_stacks[dE] = cuda_util.AdvancedIncSubtensor1Floats()(
+                new_stacks[dE] = cuda_util.AdvancedIncSubtensor1Floats(inplace=True)(
                     new_stacks[dE], (1. - masks[1]) * main_grad, buffer_ids_t)
 
             updates = dict(new_wrt_deltas.items() + new_stacks.items())
