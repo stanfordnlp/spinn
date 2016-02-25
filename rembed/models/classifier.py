@@ -638,8 +638,9 @@ def run(only_forward=False):
                         vs.save_checkpoint(checkpoint_path + "_best", extra_vars=[step, best_dev_error])
 
             X_batch, transitions_batch, y_batch, num_transitions_batch = training_data_iter.next()
+            learning_rate = FLAGS.learning_rate * (FLAGS.learning_rate_decay_per_10k_steps ** (step / 10000))
             ret = update_fn(X_batch, transitions_batch, y_batch, num_transitions_batch,
-                            FLAGS.learning_rate, 1.0, 1.0, np.exp(step*np.log(FLAGS.scheduled_sampling_exponent_base)))
+                            learning_rate, 1.0, 1.0, np.exp(step*np.log(FLAGS.scheduled_sampling_exponent_base)))
             total_cost_val, xent_cost_val, transition_cost_val, action_acc_val, l2_cost_val, acc_val = ret
 
             if step % FLAGS.statistics_interval_steps == 0:
@@ -717,6 +718,7 @@ if __name__ == '__main__':
     gflags.DEFINE_integer("training_steps", 500000, "Stop training after this point.")
     gflags.DEFINE_integer("batch_size", 32, "SGD minibatch size.")
     gflags.DEFINE_float("learning_rate", 0.001, "Used in RMSProp.")
+    gflags.DEFINE_float("learning_rate_decay_per_10k_steps", 0.75, "Used in RMSProp.")
     gflags.DEFINE_float("clipping_max_value", 1.0, "")
     gflags.DEFINE_float("l2_lambda", 1e-5, "")
     gflags.DEFINE_float("init_range", 0.01, "Mainly used for softmax parameters. Range for uniform random init.")
