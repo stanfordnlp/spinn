@@ -8,6 +8,7 @@ from theano.sandbox.cuda.basic_ops import (gpu_contiguous, GpuFromHost, HostFrom
                                            gpu_from_host, host_from_gpu, GpuJoin)
 from theano.sandbox.cuda.opt import register_opt, local_optimizer
 from theano.sandbox.cuda.type import CudaNdarrayType
+from theano.tensor.basic import _scal_elemwise
 
 
 def strip_transfer(variable):
@@ -21,6 +22,11 @@ def strip_transfer(variable):
     if isinstance(variable.owner.op, (GpuFromHost, HostFromGpu)):
         return variable.owner.inputs[0]
     return variable
+
+
+@_scal_elemwise
+def add_inplace(a, *others):
+    pass
 
 
 class AdvancedSubtensor1Floats(T.subtensor.AdvancedSubtensor1):

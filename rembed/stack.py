@@ -648,7 +648,7 @@ class ThinStack(object):
                 # TODO: Is this at all efficient? (Bring back GPURowSwitch?)
                 delta = (mask_i * m_delta + (1. - mask_i) * p_delta).sum(axis=0)
                 # TODO: we want this to be inplace
-                new_wrt_deltas[accum_delta] = accum_delta + delta
+                new_wrt_deltas[accum_delta] = cuda_util.add_inplace(accum_delta, delta)
 
             # On push ops, backprop the stack_bwd error onto the embedding
             # parameters.
