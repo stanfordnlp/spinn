@@ -97,5 +97,5 @@ class RNN(object):
                 sequences=[raw_embeddings],
                 outputs_info=[hidden_init])[0]
 
-        self.embeddings = self.states[-1]
+        self.final_representations = self.states[-1]
         self.transitions_pred = None
