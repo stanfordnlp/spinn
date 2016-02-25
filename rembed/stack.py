@@ -70,7 +70,8 @@ class ThinStack(object):
                  use_attention=False,
                  premise_stack_tops=None,
                  attention_unit=None,
-                 is_hypothesis=False):
+                 is_hypothesis=False,
+                 name=None):
         """
         Construct a ThinStack.
 
@@ -147,6 +148,9 @@ class ThinStack(object):
         # Check whether we're processing the hypothesis or the premise
         self.is_hypothesis = is_hypothesis
 
+        self.name = name
+        self._prefix = "" if name is None else name + "/"
+
         self._make_params()
         self._make_shared()
         self._make_inputs()
@@ -183,36 +187,38 @@ class ThinStack(object):
         # timestep.
         stack_shape = (self.stack_size * self.batch_size, self.model_dim)
         stack_init = np.zeros(stack_shape, dtype=np.float32)
-        self.stack = theano.shared(stack_init, borrow=False, name="stack")
+        self.stack = theano.shared(stack_init, borrow=False,
+                                   name=self._prefix + "stack")
 
         # Build backward stack. This stores d(cost)/d(stack value) at each
         # timestep.
         stack_bwd_init = np.zeros(stack_shape, dtype=np.float32)
         self.stack_bwd = theano.shared(stack_bwd_init, borrow=False,
-                                       name="stack_bwd")
+                                       name=self._prefix + "stack_bwd")
 
         # Build auxiliary stacks for extra recurrence outputs.
         aux_stack_shapes = [(self.stack_size * self.batch_size,) + shape
                             for shape in self.recurrence.extra_outputs]
         self.aux_stacks = [theano.shared(np.zeros(shape, dtype=np.float32),
-                                         name="aux_stack_%i" % i)
+                                         name=self._prefix + "aux_stack_%i" % i)
                            for i, shape in enumerate(aux_stack_shapes)]
 
         # Build backward auxiliary stacks. These store d(cost)/d(auxiliary) at
         # each timestep.
         self.aux_bwd_stacks = [theano.shared(np.zeros(shape, dtype=np.float32),
-                                             name="aux_bwd_stack_%i" % i)
+                                             name=self._prefix + "aux_bwd_stack_%i" % i)
                                for i, shape in enumerate(aux_stack_shapes)]
 
         # Build cursor vector.
         cursors_init = np.zeros((self.batch_size,), dtype=np.float32) + self.seq_length
         self.cursors = theano.shared(cursors_init, borrow=False,
-                                     name="cursors")
+                                     name=self._prefix + "cursors")
 
         # Build queue matrix.
         queue_init = np.zeros((self.batch_size * ((2 * self.seq_length) + 1),),
                               dtype=np.float32)
-        self.queue = theano.shared(queue_init, borrow=False, name="queue")
+        self.queue = theano.shared(queue_init, borrow=False,
+                                   name=self._prefix + "queue")
 
         all_vars = [self.stack, self.stack_bwd, self.cursors, self.queue]
         all_vars += self.aux_stacks + self.aux_bwd_stacks
@@ -235,13 +241,13 @@ class ThinStack(object):
         self._zero()
 
     def _make_inputs(self):
-        self.X = self.X or T.imatrix("X")
-        self.transitions = self.transitions or T.imatrix("transitions")
+        self.X = self.X or T.imatrix(self._prefix + "X")
+        self.transitions = self.transitions or T.imatrix(self._prefix + "transitions")
 
     def _step(self, t, t_f, transitions_t, transitions_t_f, ss_mask_gen_matrix_t,
               buffer_cur_t, attention_hidden, buffer,
               ground_truth_transitions_visible, premise_stack_tops, *rest):
-        batch_size, _ = self.X.shape
+        batch_size = self.batch_size
 
         # Extract top buffer values.
         idxs = buffer_cur_t + self._buffer_shift
@@ -304,7 +310,7 @@ class ThinStack(object):
         # we're processing the hypothesis) calculate the attention weighed representation.
         if self.use_attention and self.is_hypothesis:
             attention_hidden = self._attention_unit(attention_hidden, stack_next[:, 0], premise_stack_tops,
-                self.model_dim, self._vs, name="attention_unit")
+                self.model_dim, self._vs, name=self._prefix + "attention_unit")
         # premise_stack_tops.shape[0]
 
         # Move buffer cursor as necessary. Since mask == 1 when merge, we
@@ -360,10 +366,11 @@ class ThinStack(object):
         # Allocate a "buffer" stack initialized with projected embeddings,
         # and maintain a cursor in this buffer.
         buffer_t = self._embedding_projection_network(
-            raw_embeddings, self.word_embedding_dim, self.model_dim, self._vs, name="project")
+            raw_embeddings, self.word_embedding_dim, self.model_dim, self._vs,
+            name=self._prefix + "project")
         if self.use_input_batch_norm:
-            buffer_t = util.BatchNorm(buffer_t, self.model_dim, self._vs, "buffer",
-                self.training_mode, axes=[0, 1])
+            buffer_t = util.BatchNorm(buffer_t, self.model_dim, self._vs,
+                self._prefix + "buffer", self.training_mode, axes=[0, 1])
         if self.use_input_dropout:
             buffer_t = util.Dropout(buffer_t, self.embedding_dropout_keep_rate, self.training_mode)
         buffer_emb_dim = self.model_dim
@@ -422,7 +429,7 @@ class ThinStack(object):
                 non_sequences=non_sequences,
                 outputs_info=outputs_info,
                 #strict=True,
-                name="fwd")
+                name=self._prefix + "fwd")
 
         ret_shift = 0 if self.interpolate else 1
         self.final_buf = scan_ret[ret_shift + 0][-1]
@@ -499,7 +506,7 @@ class ThinStack(object):
 
         # Build shared variables for accumulating wrt deltas.
         wrt_vars = [theano.shared(np.zeros(wrt_shape, dtype=np.float32),
-                                  name="bwd/wrt/%s" % wrt_i)
+                                  name=self._prefix + "bwd/wrt/%s" % wrt_i)
                     for wrt_i, wrt_shape in zip(wrt, wrt_shapes)]
         # All of these need to be zeroed out in between batches.
         self._zero_updates += wrt_vars
@@ -508,7 +515,7 @@ class ThinStack(object):
         if compute_embedding_gradients:
             dE = theano.shared(np.zeros(self.embeddings.get_value().shape,
                                         dtype=np.float32),
-                               name="bwd/wrt/embeddings")
+                               name=self._prefix + "bwd/wrt/embeddings")
             self._zero_updates.append(dE)
         else:
             # Make dE a dummy variable.
@@ -516,8 +523,8 @@ class ThinStack(object):
 
         # Useful batch zero-constants.
         zero_stack = T.zeros((self.batch_size, self.model_dim))
-        zero_extra_inps = [T.zeros((self.batch_size, aux_stack.shape[1]))
-                           for aux_stack in self.final_aux_stacks]
+        zero_extra_inps = [T.zeros((self.batch_size, extra_shape[-1]))
+                           for extra_shape in self.recurrence.extra_outputs]
 
         batch_size = self.batch_size
         batch_range = T.arange(batch_size)
@@ -689,8 +696,8 @@ class ThinStack(object):
         bscan_ret, self.bscan_updates = theano.scan(
                 step_b, sequences, outputs_info, non_sequences,
                 go_backwards=True,
-                strict=True,
-                name="stack_bwd")
+#                strict=True,
+                name=self._prefix + "stack_bwd")
 
         self.gradients = {wrt_i: self.bscan_updates[wrt_var]
                           for wrt_i, wrt_var in zip(wrt, wrt_vars)}

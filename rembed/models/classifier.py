@@ -186,7 +186,8 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
         embedding_dropout_keep_rate=FLAGS.embedding_keep_rate,
         ss_mask_gen=ss_mask_gen,
         ss_prob=ss_prob,
-        use_attention=FLAGS.use_attention)
+        use_attention=FLAGS.use_attention,
+        name="premise")
 
     premise_stack_tops = premise_model.stack_tops if FLAGS.use_attention else None
 
@@ -198,7 +199,8 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
         embedding_dropout_keep_rate=FLAGS.embedding_keep_rate,
         ss_mask_gen=ss_mask_gen,
         ss_prob=ss_prob,
-        use_attention=FLAGS.use_attention)
+        use_attention=FLAGS.use_attention,
+        name="hypothesis")
 
     # Extract top element of final stack timestep.
     premise_embeddings = premise_model.sentence_embeddings
