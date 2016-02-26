@@ -470,8 +470,12 @@ class ThinStack(object):
         def m_fwd(*inputs, **constants):
             return self.recurrence(inputs, **constants)[1]
 
-        f_p_delta = util.batch_subgraph_gradients(input_ndim, wrt, p_fwd)
-        f_m_delta = util.batch_subgraph_gradients(input_ndim, wrt, m_fwd)
+        f_p_delta = util.batch_subgraph_gradients(input_ndim, wrt, p_fwd,
+                                                  batch_size=self.batch_size,
+                                                  name=self._prefix + "bwd_graph_push")
+        f_m_delta = util.batch_subgraph_gradients(input_ndim, wrt, m_fwd,
+                                                  batch_size=self.batch_size,
+                                                  name=self._prefix + "bwd_graph_merge")
 
         return wrt, f_p_delta, f_m_delta
 
