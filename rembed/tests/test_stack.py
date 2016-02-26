@@ -1,5 +1,6 @@
 import unittest
 
+from nose.plugins.attrib import attr
 import numpy as np
 import theano
 from theano import tensor as T
@@ -226,6 +227,7 @@ class ThinStackBackpropTestCase(unittest.TestCase, BackpropTestMixin):
         self._test_backprop(False)
 
 
+
 class ThinStackTrackingBackpropTestCase(unittest.TestCase, BackpropTestMixin):
 
     def setUp(self):
@@ -438,6 +440,70 @@ class ThinStackTreeLSTMTrackingLSTMBackpropTestCase(ThinStackTrackingBackpropTes
 
         return locals()
 
+
+@attr("slow")
+class ThinStackSpeedTestCase(unittest.TestCase, BackpropTestMixin):
+
+    def setUp(self):
+        if 'gpu' not in theano.config.device:
+            raise RuntimeError("Thin stack only defined for GPU usage")
+
+        self.embedding_dim = self.model_dim = 100
+        self.vocab_size = 1000
+        self.seq_length = 50
+        self.batch_size = 256
+        self.num_classes = 2
+
+        spec = util.ModelSpec(self.model_dim, self.embedding_dim,
+                              self.batch_size, self.vocab_size,
+                              self.seq_length)
+
+        self.vs = vs = VariableStore()
+        def compose_network(inp, *args, **kwargs):
+            W = vs.add_param("W", (self.model_dim * 2, self.model_dim))
+            b = vs.add_param("b", (self.model_dim,),
+                             initializer=util.ZeroInitializer())
+            return T.dot(inp, W) + b
+
+        self.compose_network = compose_network
+        recurrence = Model0(spec, vs, compose_network)
+
+        self.X = T.imatrix("X")
+        self.transitions = T.imatrix("transitions")
+        self.y = T.ivector("y")
+
+        self.stack = ThinStack(spec, recurrence, IdentityLayer, 0.0, 1.0, vs,
+                               X=self.X, transitions=self.transitions,
+                               use_input_batch_norm=False,
+                               use_input_dropout=False)
+
+    def _run_batch(self, f):
+        # Simulate a batch of two token sequences, each with the same
+        # transition sequence
+        X = np.random.randint(0, self.vocab_size, size=(self.batch_size, self.seq_length)).astype(np.int32)
+        y = np.random.randint(0, self.num_classes, size=self.batch_size).astype(np.int32)
+        transitions = np.random.randint(0, 2, size=(self.batch_size, self.seq_length)).astype(np.int32)
+        transitions[:, -1] = 1
+
+        return f(X, transitions, y)
+
+    def test_speed(self):
+        W, b = self.vs.vars["W"], self.vs.vars["b"]
+
+        top = self.stack.final_stack[-self.batch_size:]
+        cost = self._make_cost(top)
+        error_signal = T.grad(cost, top)
+
+        # Build automatic backprop function.
+        self.stack.make_backprop_scan(error_signal, [self.y],
+                                      compute_embedding_gradients=False)
+        f = theano.function(
+            [self.X, self.transitions, self.y],
+            [cost] + self.stack.gradients.values(),
+            updates=self.stack.scan_updates + self.stack.bscan_updates)
+
+        for t in range(10):
+            self._run_batch(f)
 
 
 
