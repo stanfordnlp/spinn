@@ -443,7 +443,8 @@ def tensorx(name, ndim, dtype=theano.config.floatX):
     return T.TensorType(dtype, (False,) * ndim)(name)
 
 
-def batch_subgraph_gradients(g_in, wrt, f_g_out, name="batch_subgraph_grad"):
+def batch_subgraph_gradients(g_in, wrt, f_g_out, batch_size=None,
+                             name="batch_subgraph_grad"):
     """
     Build gradients w.r.t. some cost on a subgraph of a larger graph.
 
@@ -555,6 +556,7 @@ def batch_subgraph_gradients(g_in, wrt, f_g_out, name="batch_subgraph_grad"):
         # Calculate gradients independently for each example.
         ds = theano.scan(gradients_i, sequences=b_in + b_grad,
                          outputs_info=[None] * (n_in + len(wrt)),
+                         n_steps=batch_size,
                          name="%s/scan" % name)[0]
         return ds[:n_in], ds[n_in:]
 
