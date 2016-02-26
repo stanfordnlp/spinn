@@ -463,7 +463,7 @@ class ThinStack(object):
             self.final_weighed_representation = util.AttentionUnitFinalRepresentation(self.final_attn_hidden[-1],
                 self.embeddings, self.model_dim, self._vs)
 
-    def _make_backward_graphs(self):
+    def _make_backward_graphs(self, extra_graph_inputs):
         """Generate gradient subgraphs for this stack's recurrence."""
 
         input_ndim = [1] * 3
@@ -483,11 +483,15 @@ class ThinStack(object):
         def m_fwd(*inputs, **constants):
             return self.recurrence(inputs, **constants)[1]
 
+        extra_graph_inputs += self._vs.vars.values()
+
         f_p_delta = util.batch_subgraph_gradients(input_ndim, wrt, p_fwd,
                                                   batch_size=self.batch_size,
+                                                  extra_scan_inputs=extra_graph_inputs,
                                                   name=self._prefix + "bwd_graph_push")
         f_m_delta = util.batch_subgraph_gradients(input_ndim, wrt, m_fwd,
                                                   batch_size=self.batch_size,
+                                                  extra_scan_inputs=extra_graph_inputs,
                                                   name=self._prefix + "bwd_graph_merge")
 
         return wrt, f_p_delta, f_m_delta
@@ -514,7 +518,8 @@ class ThinStack(object):
         if extra_cost_inputs is None:
             extra_cost_inputs = []
 
-        wrt, f_push_delta, f_merge_delta = self._make_backward_graphs()
+        wrt, f_push_delta, f_merge_delta = self._make_backward_graphs(
+            extra_cost_inputs)
         wrt_shapes = [wrt_i.get_value().shape for wrt_i in wrt]
 
         # Build shared variables for accumulating wrt deltas.

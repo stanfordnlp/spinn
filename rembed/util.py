@@ -9,6 +9,7 @@ import numpy as np
 import theano
 from theano import ifelse, tensor as T
 from theano.compile.sharedvalue import SharedVariable
+from theano.gof.fg import MissingInputError
 from theano.sandbox.cuda import HostFromGpu
 from theano.sandbox.rng_mrg import MRG_RandomStreams
 
@@ -568,6 +569,7 @@ def tensorx(name, ndim, dtype=theano.config.floatX):
 
 
 def batch_subgraph_gradients(g_in, wrt, f_g_out, batch_size=None,
+                             extra_scan_inputs=None,
                              name="batch_subgraph_grad"):
     """
     Build gradients w.r.t. some cost on a subgraph of a larger graph.
@@ -660,7 +662,7 @@ def batch_subgraph_gradients(g_in, wrt, f_g_out, batch_size=None,
 
         def gradients_i(*inputs):
             """Compute all gradients for example `i`."""
-            in_i, grad_i = inputs[:n_in], inputs[n_in:]
+            in_i, grad_i = inputs[:n_in], inputs[n_in:n_in + n_grad]
             assert len(grad_i) == n_grad, "%i %i" % (len(grad_i), n_grad) # DEV
 
             # Build a clone of the subgradient graph with the actual batch
@@ -678,10 +680,18 @@ def batch_subgraph_gradients(g_in, wrt, f_g_out, batch_size=None,
             return d_in_ij + d_wrt_ij
 
         # Calculate gradients independently for each example.
-        ds = theano.scan(gradients_i, sequences=b_in + b_grad,
-                         outputs_info=[None] * (n_in + len(wrt)),
-                         n_steps=batch_size,
-                         name="%s/scan" % name)[0]
+        try:
+            ds = theano.scan(gradients_i, sequences=b_in + b_grad,
+                            outputs_info=[None] * (n_in + len(wrt)),
+                            non_sequences=extra_scan_inputs,
+                            n_steps=batch_size,
+                            strict=True,
+                            name="%s/scan" % name)[0]
+        except MissingInputError, e:
+            raise ValueError("batch_subgraph_gradients scan operates only in "
+                             "strict mode; pass all auxiliary values in a "
+                             "collection as argument `extra_scan_inputs`")
+
         return ds[:n_in], ds[n_in:]
 
     return batch_gradients
