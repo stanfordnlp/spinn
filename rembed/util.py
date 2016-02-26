@@ -1,15 +1,24 @@
-from collections import OrderedDict
+from collections import namedtuple, OrderedDict
 import cPickle
+from functools import wraps
 import itertools
 import math
 import random
 
 import numpy as np
 import theano
-from theano import tensor as T
+from theano import ifelse, tensor as T
+from theano.compile.sharedvalue import SharedVariable
+from theano.sandbox.cuda import HostFromGpu
+from theano.sandbox.rng_mrg import MRG_RandomStreams
+
+from rembed import cuda_util
 
 numpy_random = np.random.RandomState(1234)
-theano_random = T.shared_randomstreams.RandomStreams(numpy_random.randint(999999))
+theano_random = MRG_RandomStreams(numpy_random.randint(999999))
+
+ModelSpec = namedtuple("ModelSpec", ["model_dim", "word_embedding_dim",
+                                     "batch_size", "vocab_size", "seq_length"])
 
 # With loaded embedding matrix, the padding vector will be initialized to zero
 # and will not be trained. Hopefully this isn't a problem. It seems better than
@@ -76,22 +85,22 @@ def DoubleIdentityInitializer(range):
 
 def BatchNorm(x, input_dim, vs, name, training_mode, axes=[0], momentum=0.9):
     """Apply simple batch normalization.
-    This requires introducing new learned scale parameters, so it's 
-    important to use unique names unless you're sure you want to share 
+    This requires introducing new learned scale parameters, so it's
+    important to use unique names unless you're sure you want to share
     these parameters.
     """
 
     # Create the trained gamma and beta parameters.
-    g = vs.add_param("%s_bn_g" % name, (input_dim), 
+    g = vs.add_param("%s_bn_g" % name, (input_dim),
         initializer=OneInitializer())
-    b = vs.add_param("%s_bn_b" % name, (input_dim), 
+    b = vs.add_param("%s_bn_b" % name, (input_dim),
         initializer=ZeroInitializer())
 
     # Create the training set moving averages for test time use.
-    tracking_std = vs.add_param("%s_bn_ts" % name, (input_dim), 
+    tracking_std = vs.add_param("%s_bn_ts" % name, (input_dim),
         initializer=OneInitializer(),
         trainable=False)
-    tracking_mean = vs.add_param("%s_bn_tm" % name, (input_dim), 
+    tracking_mean = vs.add_param("%s_bn_tm" % name, (input_dim),
         initializer=ZeroInitializer(),
         trainable=False)
 
@@ -174,7 +183,7 @@ class VariableStore(object):
                     full_name = "%s/%s" % (self.prefix, key)
                     self.logger.Log(
                         "Restoring variable " + full_name, level=self.logger.DEBUG)
-                self.vars[key].set_value(cPickle.load(save_file), borrow=True)
+            self.vars[key].set_value(cPickle.load(save_file), borrow=True)
 
         extra_vars = []
         for _ in range(num_extra_vars):
@@ -221,7 +230,7 @@ def Dropout(inp, keep_rate, apply_dropout):
 
     dropout_mask = theano_random.binomial(n=1, p=keep_rate, size=inp.shape, dtype=theano.config.floatX)
 
-    dropout_candidate = dropout_mask * inp 
+    dropout_candidate = dropout_mask * inp
     rescaling_candidate = keep_rate * inp
     result = apply_dropout * dropout_candidate + (1 - apply_dropout) * rescaling_candidate
 
@@ -263,7 +272,7 @@ def TreeLSTMLayer(lstm_prev, external_state, full_memory_dim, vs, name="tree_lst
     # Apply nonlinearities
     i_gate = T.nnet.sigmoid(i_gate)
     fl_gate = T.nnet.sigmoid(fl_gate)
-    fr_gate = T.nnet.sigmoid(fr_gate) 
+    fr_gate = T.nnet.sigmoid(fr_gate)
     o_gate = T.nnet.sigmoid(o_gate)
     cell_inp = T.tanh(cell_inp)
 
@@ -324,9 +333,8 @@ def TrackingUnit(state_prev, inp, inp_dim, hidden_dim, vs, name="track_unit", ma
     return state, logits
 
 
-
-def TreeWangJiangAttentionUnit(attention_state_prev_l, attention_state_prev_r, current_stack_top, 
-        premise_stack_tops, projected_stack_tops, attention_dim, vs, name="attention_unit", 
+def TreeWangJiangAttentionUnit(attention_state_prev_l, attention_state_prev_r, current_stack_top,
+        premise_stack_tops, projected_stack_tops, attention_dim, vs, name="attention_unit",
         initializer=None):
     """
     This is for use in a Wang and Jiang style mLSTM attention formalism where a TreeLSTM, rather than
@@ -371,13 +379,13 @@ def TreeWangJiangAttentionUnit(attention_state_prev_l, attention_state_prev_r, c
 
     mlstm_input = T.concatenate([Y__alpha_t, current_stack_top], axis=1)
 
-    r_t = TreeLSTMLayer(T.concatenate([attention_state_prev_l, attention_state_prev_r], axis=1), 
+    r_t = TreeLSTMLayer(T.concatenate([attention_state_prev_l, attention_state_prev_r], axis=1),
                 mlstm_input, 2 * attention_dim, vs,  name="%s/lstm" % name, external_state_dim=2 * attention_dim)
 
     return r_t
 
 
-def WangJiangAttentionUnit(attention_state_prev, current_stack_top, premise_stack_tops, projected_stack_tops, attention_dim, 
+def WangJiangAttentionUnit(attention_state_prev, current_stack_top, premise_stack_tops, projected_stack_tops, attention_dim,
                     vs, name="attention_unit", initializer=None):
     """
     Args:
@@ -419,7 +427,7 @@ def WangJiangAttentionUnit(attention_state_prev, current_stack_top, premise_stac
     return r_t
 
 
-def RocktaschelAttentionUnit(attention_state_prev, current_stack_top, premise_stack_tops, projected_stack_tops, attention_dim, 
+def RocktaschelAttentionUnit(attention_state_prev, current_stack_top, premise_stack_tops, projected_stack_tops, attention_dim,
                     vs, name="attention_unit", initializer=None):
     """
     Args:
@@ -455,7 +463,7 @@ def RocktaschelAttentionUnit(attention_state_prev, current_stack_top, premise_st
     alpha_t = T.nnet.softmax(T.dot(M_t, w).T)
 
     # Shape B x k
-    Y__alpha_t = T.sum(premise_stack_tops * alpha_t.T[:, :, np.newaxis], axis=0) 
+    Y__alpha_t = T.sum(premise_stack_tops * alpha_t.T[:, :, np.newaxis], axis=0)
 
     # Mysterious Rocktaschel-style RNN update step.
     r_t = Y__alpha_t + T.tanh(T.dot(attention_state_prev, W_t))
@@ -464,7 +472,7 @@ def RocktaschelAttentionUnit(attention_state_prev, current_stack_top, premise_st
 
 def AttentionUnitFinalRepresentation(final_attention_state, final_stack_top, attention_dim, vs, initializer=None, name="attention_unit_final"):
     """Produces the complete representation of the aligned sentence pair."""
-    
+
     W_p = vs.add_param("%s_W_p" % name, (attention_dim, attention_dim), initializer=initializer)
     W_x = vs.add_param("%s_W_x" % name, (attention_dim, attention_dim), initializer=initializer)
     h_final = T.tanh(T.dot(final_attention_state, W_p) + T.dot(final_stack_top, W_x))
@@ -488,7 +496,7 @@ def MLP(inp, inp_dim, outp_dim, vs, layer=ReLULayer, hidden_dims=None,
     prev_val = inp
     dims = [inp_dim] + hidden_dims + [outp_dim]
     for i, (src_dim, tgt_dim) in enumerate(zip(dims, dims[1:])):
-        prev_val = layer(prev_val, src_dim, tgt_dim, vs, 
+        prev_val = layer(prev_val, src_dim, tgt_dim, vs,
                          use_bias=True,
                          name="%s/%i" % (name, i),
                          initializer=initializer)
@@ -536,19 +544,214 @@ def Momentum(cost, params, lr=0.01, momentum=0.9):
     return new_values
 
 
-def RMSprop(cost, params, lr=0.001, rho=0.9, epsilon=1e-6):
+def RMSprop(cost, params, lr=0.001, rho=0.9, epsilon=1e-6, grads=None):
     # From:
     # https://github.com/Newmu/Theano-Tutorials/blob/master/4_modern_net.py
-    grads = T.grad(cost=cost, wrt=params)
+    if grads is None:
+        grads = T.grad(cost=cost, wrt=params)
+    assert len(grads) == len(params)
+
     updates = []
     for p, g in zip(params, grads):
-        acc = theano.shared(p.get_value() * 0.)
+        acc = theano.shared(np.zeros_like(p.get_value(), dtype=np.float32),
+                            name="%s/rms/acc" % p.name)
         acc_new = rho * acc + (1 - rho) * g ** 2
         gradient_scaling = T.sqrt(acc_new + epsilon)
         g = g / gradient_scaling
         updates.append((acc, acc_new))
         updates.append((p, p - lr * g))
     return updates
+
+
+def tensorx(name, ndim, dtype=theano.config.floatX):
+    return T.TensorType(dtype, (False,) * ndim)(name)
+
+
+def batch_subgraph_gradients(g_in, wrt, f_g_out, batch_size=None,
+                             name="batch_subgraph_grad"):
+    """
+    Build gradients w.r.t. some cost on a subgraph of a larger graph.
+
+    Let G be a feedforward subgraph for which we want to compute gradients.
+    G has N_I inputs and N_O outputs.
+
+    This function will compute the *unaccumulated* batch gradients on the
+    subgraph G. That is, for a batch of M inputs, it allocates M separate
+    gradient entries and returns these without aggregating them. This is useful
+    for downstream uses that need to input-wise mask the gradients.
+
+    Args:
+        g_in: List of N_I inputs to G. Each element may be either a
+            symbolic Theano input variable or an integer (signifying the number
+            of dimensions of the input).
+        wrt: Any variables inside G for which we should also collect gradients.
+        f_g_out: Function which accepts N_I Theano vars and returns N_O Theano
+            vars.
+
+    Returns:
+        A function which accepts two arguments, `b_in` and `b_grad`.
+
+        `b_in` must be a list of N_I Theano batch variables representing inputs
+        to the subgraph G. (Each element of `b_in` has a leading batch axis and
+        is thus one dimension larger than its corresponding element of `g_in`).
+
+        `b_grad` must be a list of N_O Theano batch variables representing
+        cost gradients w.r.t. each of the graph outputs. Again, each element of
+        the list has a leading batch axis and is thus one dimension larger than
+        its corresponding output from `f_g_out`.
+
+        The function returns `(d_in, d_wrt)`, where
+
+        - `d_in` is a list of batch cost gradients with respect to each of the
+          corresponding elements of `g_in`. Each element of `d_in` has a
+          leading batch axis, and is thus one dimension larger than its
+          corresponding `g_in` element.
+        - `d_wrt` is a list of batch cost gradients with respect to each of the
+          corresponding elements of `wrt`. Each element of `d_wrt` has a
+          leading batch axis, and is thus one dimension larger than its
+          corresponding `wrt` element.
+    """
+
+    # Prepare graph inputs.
+    g_in = [in_i if isinstance(in_i, T.TensorVariable)
+            else tensorx("%s/in_%i" % (name, i), in_i)
+            for i, in_i in enumerate(g_in)]
+
+    # Build feedforward graph.
+    g_out = f_g_out(*g_in)
+    # Make sure it's a list of outputs.
+    g_out = [g_out] if not isinstance(g_out, (list, tuple)) else g_out
+
+    # Prepare symbolic gradient variables for each of the graph outputs.
+    grads_above = [tensorx("%s/grad_%s" % (name, out_i.name), out_i.ndim)
+                   for out_i in g_out]
+
+    # Compute gradients of subgraph beginning at `g_in` and ending at `g_out`,
+    # where the cost gradient w.r.t. each `g_out` is given by the corresponding
+    # entry in `grads_above`.
+    d_wrt, d_in = theano.gradient.subgraph_grad(
+            wrt, g_in, dict(zip(g_out, grads_above)))
+
+    # Strip any GPU<->host transfers that might have crept into this
+    # automatically constructed graph.
+    d_wrt = map(cuda_util.strip_transfer, d_wrt)
+    d_in = map(cuda_util.strip_transfer, d_in)
+
+    n_in, n_grad = len(g_in), len(grads_above)
+
+    def batch_gradients(b_in, b_grad):
+        """
+        Compute `d_wrt` and `d_in` for the given batch of inputs and gradients.
+
+        This method computes a scan over the batch. This may be inefficient for
+        some simple gradients.
+
+        For full spec, see documentation of containing function
+        `batch_subgraph_gradients`.
+        """
+        for j, (b_in_j, g_in_j) in enumerate(zip(b_in, g_in)):
+            assert b_in_j.ndim == g_in_j.ndim + 1, \
+                ("Batch inputs must conform with expected graph input dimensionality."
+                 " (#%i: batch %i, sym %i)" % (j, b_in_j.ndim, g_in_j.ndim))
+        for j, (b_grad_j, grad_j) in enumerate(zip(b_grad, grads_above)):
+            assert b_grad_j.ndim == grad_j.ndim + 1, \
+                ("Batch gradients must conform with expected graph gradient dimensionality."
+                 " (#%i: batch %i, sym %i)" % (j, b_grad_j.ndim, grad_j.ndim))
+
+        def gradients_i(*inputs):
+            """Compute all gradients for example `i`."""
+            in_i, grad_i = inputs[:n_in], inputs[n_in:]
+            assert len(grad_i) == n_grad, "%i %i" % (len(grad_i), n_grad) # DEV
+
+            # Build a clone of the subgradient graph with the actual batch
+            # inputs and gradients.
+            replace = {g_in_j: in_ij for g_in_j, in_ij in zip(g_in, in_i)}
+            replace.update({grads_above_j: grad_ij for grads_above_j, grad_ij
+                            in zip(grads_above, grad_i)})
+
+            # Clone each of the `j` gradient expressions for this example `i`.
+            d_in_ij = [theano.clone(d_in_j, replace=replace)
+                       for d_in_j in d_in]
+            d_wrt_ij = [theano.clone(d_wrt_j, replace=replace)
+                        for d_wrt_j in d_wrt]
+
+            return d_in_ij + d_wrt_ij
+
+        # Calculate gradients independently for each example.
+        ds = theano.scan(gradients_i, sequences=b_in + b_grad,
+                         outputs_info=[None] * (n_in + len(wrt)),
+                         n_steps=batch_size,
+                         name="%s/scan" % name)[0]
+        return ds[:n_in], ds[n_in:]
+
+    return batch_gradients
+
+
+def ensure_2d_arguments(f, squeeze_ret=True):
+    """Decorator which ensures all of its function's arguments are 2D."""
+    @wraps(f)
+    def wrapped(*args, **kwargs):
+        new_args = []
+        for arg in args:
+            if isinstance(arg, T.TensorVariable):
+                if arg.ndim == 1:
+                    arg = arg[np.newaxis, :]
+                elif arg.ndim > 2:
+                    raise RuntimeError("ensure_2d_arguments wrapped a function"
+                                       " which received an %i-d argument. "
+                                       "Don't know what to do.")
+            new_args.append(arg)
+
+        ret = f(*new_args, **kwargs)
+        if squeeze_ret:
+            if isinstance(ret, (list, tuple)):
+                ret = [ret_i.squeeze() for ret_i in ret]
+            elif isinstance(ret, T.TensorVariable):
+                ret = ret.squeeze()
+        return ret
+    return wrapped
+
+
+def prepare_updates_dict(updates):
+    """
+    Prepare a Theano `updates` dictionary.
+
+    Ensure that both keys and values are valid entries.
+    NB, this function is heavily coupled with its clients, and not intended for
+    general use..
+    """
+
+    def prepare_key(key, val):
+        if not isinstance(key, SharedVariable):
+            if isinstance(key.owner.inputs[0], SharedVariable):
+                # Extract shared from Update(shared)
+                return key.owner.inputs[0]
+            elif key.owner.inputs[0].owner.op.__class__ is HostFromGpu:
+                if isinstance(key.owner.inputs[0].owner.inputs[0], SharedVariable):
+                    # Extract shared from Update(HostFromGpu(shared))
+                    return key.owner.inputs[0].owner.inputs[0]
+            elif key.owner.op.__class__ is ifelse.IfElse:
+                # Assume that 'true' condition of ifelse involves the intended
+                # shared variable.
+                return prepare_key(key.owner.inputs[1], val)
+
+            raise ValueError("Invalid updates dict key/value: %s / %s"
+                             % (key, val))
+        return key
+
+    return {prepare_key(key, val): val for key, val in updates.iteritems()}
+
+
+def merge_updates(*updates_dicts):
+    all_updates = OrderedDict()
+    for updates_dict in updates_dicts:
+        for k, v in updates_dict.iteritems():
+            if k in all_updates:
+                all_updates[k] += v
+            else:
+                all_updates[k] = v
+
+    return all_updates
 
 
 def TrimDataset(dataset, seq_length, eval_mode=False, sentence_pair_data=False):
@@ -558,11 +761,11 @@ def TrimDataset(dataset, seq_length, eval_mode=False, sentence_pair_data=False):
     else:
         if sentence_pair_data:
             new_dataset = [example for example in dataset if
-                len(example["premise_transitions"]) <= seq_length and 
-                len(example["hypothesis_transitions"]) <= seq_length]   
+                len(example["premise_transitions"]) <= seq_length and
+                len(example["hypothesis_transitions"]) <= seq_length]
         else:
             new_dataset = [example for example in dataset if len(
-                example["transitions"]) <= seq_length]         
+                example["transitions"]) <= seq_length]
         return new_dataset
 
 
@@ -608,7 +811,7 @@ def CropAndPad(dataset, length, logger=None, sentence_pair_data=False):
     # the final stack top is the root of the tree. If cropping is used, it should
     # just introduce empty nodes into the tree.
     if sentence_pair_data:
-        keys = [("premise_transitions", "num_premise_transitions", "premise_tokens"), 
+        keys = [("premise_transitions", "num_premise_transitions", "premise_tokens"),
                 ("hypothesis_transitions", "num_hypothesis_transitions", "hypothesis_tokens")]
     else:
         keys = [("transitions", "num_transitions", "tokens")]
@@ -650,8 +853,10 @@ def MakeTrainingIterator(sources, batch_size):
 
 def MakeEvalIterator(sources, batch_size):
     # Make a list of minibatches from a dataset to use as an iterator.
-    # TODO(SB): Handle the last few examples in the eval set if they don't
+    # TODO(SB): Pad out the last few examples in the eval set if they don't
     # form a batch.
+
+    print "WARNING: May be discarding eval examples."
 
     dataset_size = len(sources[0])
     data_iter = []
@@ -667,7 +872,7 @@ def MakeEvalIterator(sources, batch_size):
     return data_iter
 
 
-def PreprocessDataset(dataset, vocabulary, seq_length, data_manager, eval_mode=False, logger=None, 
+def PreprocessDataset(dataset, vocabulary, seq_length, data_manager, eval_mode=False, logger=None,
                       sentence_pair_data=False):
     dataset = TrimDataset(dataset, seq_length, eval_mode=eval_mode, sentence_pair_data=sentence_pair_data)
     dataset = TokensToIDs(vocabulary, dataset, sentence_pair_data=sentence_pair_data)

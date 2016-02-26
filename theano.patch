@@ -1,0 +1,333 @@
+diff -x '*.pyc' -uwr theano-base/theano/compile/function_module.py theano/compile/function_module.py
+--- theano-base/theano/compile/function_module.py	2016-02-25 15:15:58.955999947 -0800
++++ theano/compile/function_module.py	2016-02-25 16:30:23.498999147 -0800
+@@ -132,11 +132,36 @@
+     def __init__(self, protected):
+         self.protected = list(protected)
+ 
++        # # JDEV
++        # print("====================init")
++        # print("\t", list(protected))
++        # print("\n\n")
++
+     def validate(self, fgraph):
+         if not hasattr(fgraph, 'destroyers'):
+             return True
+         for r in self.protected + list(fgraph.outputs):
+             if fgraph.destroyers(r):
++
++                # # JDEV
++                # if r in fgraph.outputs:
++                #     print("VIOLATION AND IN OUTPUTS!!!!!!!!!")
++                # else:
++                #     print ("VIOLATION AND NOT IN OUTPUTS@@@@@@@@@")
++                #     print (self.protected)
++
++                # JDEV
++                substrs = ["stack_copy", "queue_copy", "aux_stack",
++                           "aux_bwd_stack", "bwd/wrt"]
++                skip = False
++                for substr in substrs:
++                    if substr in str(r):
++                        skip = True
++                        print("SKIP ", r)
++                        break
++                if skip:
++                    continue
++
+                 raise gof.InconsistencyError("Trying to destroy a protected"
+                                              "Variable.", r)
+ 
+@@ -1063,6 +1088,13 @@
+     all_graph_inputs = gof.graph.inputs(fgraph.outputs)
+ 
+     for i in xrange(len(fgraph.outputs)):
++
++        # # JDEV
++        # print(fgraph.outputs[i])
++        # if str(fgraph.outputs[i]) in ["queue_orig", "cursors_orig", "stack_orig", "aux_stack_orig"]: #"AdvancedIncSubtensor" in str(fgraph.outputs[i]):
++        #     print("DEEEP", fgraph.outputs[i])
++        #     continue
++
+         views_of_output_i = set()
+         view_tree_set(alias_root(fgraph.outputs[i]), views_of_output_i)
+         copied = False
+@@ -1106,6 +1138,9 @@
+                                                 reason="insert_deepcopy")
+                             break
+                         else:
++                            if "AdvancedIncSubtensor" in str(fgraph.outputs[i]):
++                                print("DEEEP", fgraph.outputs[i])
++                                continue
+                             fgraph.change_input(
+                                 'output', i,
+                                 deep_copy_op(fgraph.outputs[i]),
+Only in theano/compile: function_module.py.orig
+diff -x '*.pyc' -uwr theano-base/theano/compile/pfunc.py theano/compile/pfunc.py
+--- theano-base/theano/compile/pfunc.py	2016-02-25 15:14:41.305999962 -0800
++++ theano/compile/pfunc.py	2016-02-24 14:47:12.173998320 -0800
+@@ -174,6 +174,45 @@
+                              'input. Consider substituting a non-shared'
+                              ' variable via the `givens` parameter') % v)
+ 
++    def find_path_to(output_var, input_var):
++        """
++        Returns a list of each variable on a (not
++        necessarily unique) path from input_var to
++        output_var, where each variable in the list has
++        the preceding variable as one of its inputs.
++        Returns None if no path exists.
++
++        """
++        # If output and input are the same we have a singleton path
++        if output_var is input_var:
++            return [output_var]
++
++        # If output has no inputs then there is no path
++        owner = output_var.owner
++
++        if owner is None:
++            return None
++
++        # If input_var is an input to the output node, there is a
++        # simple two element path
++        inputs = owner.inputs
++
++        if input_var in inputs:
++            return [input_var, output_var]
++
++        # Otherwise we must recurse by searching for a path to one
++        # of our inputs, then appending the output to that path
++        for ipt in inputs:
++            path = find_path_to(ipt, input_var)
++
++            if path is not None:
++                path.append(output_var)
++
++                return path
++
++        # Since none of the above methods returned a path, there is none
++        return None
++
+     # Fill update_d and update_expr with provided updates
+     if updates is None:
+         updates = []
+@@ -182,6 +221,7 @@
+             raise TypeError('update target must be a SharedVariable',
+                             store_into)
+         if store_into in update_d:
++            print(find_path_to(update_d[store_into], store_into))
+             raise ValueError('this shared variable already has an update '
+                              'expression',
+                              (store_into, update_d[store_into]))
+Only in theano: generated_version.py
+Only in theano/gof: opt.py.orig
+Only in theano/gof: opt.py.rej
+Only in theano-base/theano/gof: sandbox
+Only in theano-base/theano/misc: do_nightly_build
+Only in theano-base/theano/misc: do_nightly_build_send
+Only in theano-base/theano/misc: hooks
+diff -x '*.pyc' -uwr theano-base/theano/sandbox/cuda/basic_ops.py theano/sandbox/cuda/basic_ops.py
+--- theano-base/theano/sandbox/cuda/basic_ops.py	2016-02-25 15:15:59.006999947 -0800
++++ theano/sandbox/cuda/basic_ops.py	2016-02-06 14:51:38.247998272 -0800
+@@ -3634,7 +3634,7 @@
+         return str
+ 
+     def c_code_cache_version(self):
+-        return (6,)
++        return (7,)
+ 
+ gpu_join = GpuJoin()
+ 
+@@ -3809,7 +3809,7 @@
+ 
+     def c_code_cache_version(self):
+         parent_version = super(GpuAlloc, self).c_code_cache_version()
+-        return (parent_version, 10)
++        return (parent_version, 11)
+ 
+     def do_constant_folding(self, node):
+         for client in node.outputs[0].clients:
+@@ -3915,7 +3915,7 @@
+         return str
+ 
+     def c_code_cache_version(self):
+-        return (0,)
++        return (1,)
+ 
+ cp_on_negative_strides = CopyOnNegativeStrides()
+ 
+@@ -3992,7 +3992,7 @@
+         return str
+ 
+     def c_code_cache_version(self):
+-        return (2,)
++        return (4,)
+ 
+ gpu_contiguous = GpuContiguous()
+ 
+Only in theano/sandbox/cuda: basic_ops.py.orig
+Only in theano/sandbox/cuda: basic_ops.py.rej
+diff -x '*.pyc' -uwr theano-base/theano/sandbox/cuda/blas.py theano/sandbox/cuda/blas.py
+--- theano-base/theano/sandbox/cuda/blas.py	2016-02-25 15:15:59.011999947 -0800
++++ theano/sandbox/cuda/blas.py	2016-02-06 14:49:54.679998290 -0800
+@@ -439,7 +439,7 @@
+         return Apply(self, [z, a, x, y, b], [z.type()])
+ 
+     def c_code_cache_version(self):
+-        return (4,)
++        return (5,)
+ 
+     def c_code(self, node, name, inputs, outputs, sub):
+         #z_out = alpha * dot(x,y) + beta * z_in
+@@ -559,7 +559,7 @@
+         return Apply(self, [z, a, x, y, b], [z.type()])
+ 
+     def c_code_cache_version(self):
+-        return (3,)
++        return (4,)
+ 
+     def c_code(self, node, name, inputs, outputs, sub):
+         #z_out = alpha * dot(x,y) + beta * z_in
+diff -x '*.pyc' -uwr theano-base/theano/sandbox/cuda/blocksparse.py theano/sandbox/cuda/blocksparse.py
+--- theano-base/theano/sandbox/cuda/blocksparse.py	2016-02-25 15:14:41.498999962 -0800
++++ theano/sandbox/cuda/blocksparse.py	2016-02-06 14:49:54.683998290 -0800
+@@ -174,6 +174,7 @@
+   cudaError_t err;
+   PyArrayObject *aa = (PyArrayObject *)PyArray_Cast(a, NPY_INTP);
+   if (aa == NULL) { return -1; }
++  printf("SparseBlockGemv copy\\n");
+   err = cudaMemcpyAsync(b, PyArray_DATA(aa), PyArray_NBYTES(aa),
+                         cudaMemcpyHostToDevice);
+   Py_DECREF(aa);
+@@ -476,6 +477,7 @@
+   cudaError_t err;
+   PyArrayObject *aa = (PyArrayObject *)PyArray_Cast(a, NPY_INTP);
+   if (aa == NULL) { return -1; }
++  printf("SparseBlockOuter copy\\n");
+   err = cudaMemcpyAsync(b, PyArray_DATA(aa), PyArray_NBYTES(aa),
+                         cudaMemcpyHostToDevice);
+   Py_DECREF(aa);
+diff -x '*.pyc' -uwr theano-base/theano/sandbox/cuda/cuda_ndarray.cu theano/sandbox/cuda/cuda_ndarray.cu
+--- theano-base/theano/sandbox/cuda/cuda_ndarray.cu	2016-02-25 15:15:59.017999947 -0800
++++ theano/sandbox/cuda/cuda_ndarray.cu	2016-02-09 14:26:23.034998543 -0800
+@@ -2616,6 +2616,12 @@
+ 
+     if (cnda_copy_structure_to_device(rval))
+     {
++        printf("==============testing ");
++        CudaNdarray *cnda_o = (CudaNdarray *)o;
++        for (int dim = 0; dim < CudaNdarray_NDIM(cnda_o); dim++)
++            printf("%d ", CudaNdarray_HOST_DIMS(cnda_o)[dim]);
++        printf("\n");
++
+         PyErr_SetString(PyExc_RuntimeError,
+                 "CudaNdarray.__setitem__: syncing structure to device failed");
+         Py_DECREF(rval);
+@@ -4062,6 +4068,13 @@
+                 if(unbroadcast)
+                     cuda_dims = self;
+                 //copy from other into self
++
++                /* //JDEV */
++                /* printf("\theeeere\t"); */
++                /* for (int dim=0; dim<CudaNdarray_NDIM(other);dim++) */
++                /*     printf("%d ", CudaNdarray_HOST_DIMS(other)[dim]); */
++                /* printf("\n"); */
++
+                 k_elemwise_unary_rowmajor_copy<<<n_blocks, threads_per_block>>>(
+                         size,
+                         (unsigned int)other->nd,
+@@ -5151,6 +5164,8 @@
+             self->dev_structure = (int*)device_malloc(struct_size* sizeof(int));
+             if (NULL == self->dev_structure)
+             {
++                printf("======================= eerrr alloc");
++                PyErr_SetString(PyExc_RuntimeError, "error allocing struct");
+                 return -1;
+             }
+         }
+diff -x '*.pyc' -uwr theano-base/theano/sandbox/cuda/opt.py theano/sandbox/cuda/opt.py
+--- theano-base/theano/sandbox/cuda/opt.py	2016-02-25 15:15:59.028999947 -0800
++++ theano/sandbox/cuda/opt.py	2016-02-06 14:49:54.693998290 -0800
+@@ -1108,6 +1108,7 @@
+             x, y = host_input.owner.inputs[0:2]
+             coords = host_input.owner.inputs[2:]
+             set_instead_of_inc = host_input.owner.op.set_instead_of_inc
++            inplace = host_input.owner.op.inplace
+             if set_instead_of_inc and config.warn.gpu_set_subtensor1:
+                 warnings.warn(
+                     'Although your current code is fine, please note that '
+@@ -1123,10 +1124,10 @@
+                 x.ndim != 2 or
+                 y.ndim != 2):
+ 
+-                gpu_op = GpuAdvancedIncSubtensor1(
++                gpu_op = GpuAdvancedIncSubtensor1(inplace=inplace,
+                     set_instead_of_inc=set_instead_of_inc)
+             else:
+-                gpu_op = GpuAdvancedIncSubtensor1_dev20(
++                gpu_op = GpuAdvancedIncSubtensor1_dev20(inplace=inplace,
+                     set_instead_of_inc=set_instead_of_inc)
+             return [gpu_op(as_cuda_ndarray_variable(x),
+                            as_cuda_ndarray_variable(y), *coords)]
+@@ -1148,8 +1149,10 @@
+             gpu_y, = y.owner.inputs
+         else:
+             gpu_y = as_cuda_ndarray_variable(y)
++        print("=============", node, go_gpu)
+         if go_gpu:
+             set_instead_of_inc = node.op.set_instead_of_inc
++            inplace = node.op.inplace
+             if set_instead_of_inc and config.warn.gpu_set_subtensor1:
+                 warnings.warn(
+                     'Although your current code is fine, please note that '
+@@ -1165,10 +1168,10 @@
+             if (compute_capability < 2 or
+                 x.ndim != 2 or
+                 y.ndim != 2):
+-                gpu_op = GpuAdvancedIncSubtensor1(
++                gpu_op = GpuAdvancedIncSubtensor1(inplace=inplace,
+                     set_instead_of_inc=set_instead_of_inc)
+             else:
+-                gpu_op = GpuAdvancedIncSubtensor1_dev20(
++                gpu_op = GpuAdvancedIncSubtensor1_dev20(inplace=inplace,
+                     set_instead_of_inc=set_instead_of_inc)
+             return [host_from_gpu(gpu_op(gpu_x, gpu_y, *coords))]
+     return False
+diff -x '*.pyc' -uwr theano-base/theano/sandbox/cuda/type.py theano/sandbox/cuda/type.py
+--- theano-base/theano/sandbox/cuda/type.py	2016-02-25 15:14:41.592999962 -0800
++++ theano/sandbox/cuda/type.py	2016-02-06 14:49:54.697998290 -0800
+@@ -572,7 +572,7 @@
+             }
+         }
+         """,
+-        version=3)
++        version=4)
+ 
+ 
+ # THIS WORKS But CudaNdarray instances don't compare equal to one
+Only in theano-base/theano/scan_module: numpy_api_changes.diff
+diff -x '*.pyc' -uwr theano-base/theano/scan_module/scan_op.py theano/scan_module/scan_op.py
+--- theano-base/theano/scan_module/scan_op.py	2016-02-25 15:15:59.060999947 -0800
++++ theano/scan_module/scan_op.py	2016-02-06 15:00:06.776998180 -0800
+@@ -865,6 +865,7 @@
+                                mode=compilation_mode,
+                                name=self.name,
+                                profile=profile,
++                               accept_inplace=True,
+                                on_unused_input='ignore')
+ 
+         # Analyse the compile inner function to determine which inputs and
+Only in theano-base/theano/scan_module: scan_perform.pyx
+diff -x '*.pyc' -uwr theano-base/theano/scan_module/scan.py theano/scan_module/scan.py
+--- theano-base/theano/scan_module/scan.py	2016-02-25 15:14:41.709999962 -0800
++++ theano/scan_module/scan.py	2016-02-23 15:30:32.441999791 -0800
+@@ -813,6 +813,7 @@
+                        mode=compile.mode.Mode(linker='py',
+                                               optimizer=None),
+                        on_unused_input='ignore',
++                       accept_inplace=True,
+                        profile=False)
+ 
+     ##
