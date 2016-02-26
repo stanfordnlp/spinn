@@ -1,7 +1,7 @@
 diff -x '*.pyc' -uwr theano-base/theano/compile/function_module.py theano/compile/function_module.py
 --- theano-base/theano/compile/function_module.py	2016-02-25 15:15:58.955999947 -0800
-+++ theano/compile/function_module.py	2016-02-25 15:02:57.806998150 -0800
-@@ -132,11 +132,34 @@
++++ theano/compile/function_module.py	2016-02-25 16:30:23.498999147 -0800
+@@ -132,11 +132,36 @@
      def __init__(self, protected):
          self.protected = list(protected)
  
@@ -24,19 +24,21 @@ diff -x '*.pyc' -uwr theano-base/theano/compile/function_module.py theano/compil
 +                #     print (self.protected)
 +
 +                # JDEV
-+                substrs = ["stack_copy[cuda]", "queue_copy[cuda]", "aux_stack",
++                substrs = ["stack_copy", "queue_copy", "aux_stack",
 +                           "aux_bwd_stack", "bwd/wrt"]
 +                skip = False
 +                for substr in substrs:
 +                    if substr in str(r):
 +                        skip = True
++                        print("SKIP ", r)
++                        break
 +                if skip:
 +                    continue
 +
                  raise gof.InconsistencyError("Trying to destroy a protected"
                                               "Variable.", r)
  
-@@ -1063,6 +1086,13 @@
+@@ -1063,6 +1088,13 @@
      all_graph_inputs = gof.graph.inputs(fgraph.outputs)
  
      for i in xrange(len(fgraph.outputs)):
@@ -50,7 +52,7 @@ diff -x '*.pyc' -uwr theano-base/theano/compile/function_module.py theano/compil
          views_of_output_i = set()
          view_tree_set(alias_root(fgraph.outputs[i]), views_of_output_i)
          copied = False
-@@ -1106,6 +1136,9 @@
+@@ -1106,6 +1138,9 @@
                                                  reason="insert_deepcopy")
                              break
                          else:
