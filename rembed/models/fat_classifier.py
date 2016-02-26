@@ -106,7 +106,7 @@ def build_sentence_model(cls, vocab_size, seq_length, tokens, transitions,
         sentence_vector_dim = FLAGS.model_dim / 2
     else:
         sentence_vector = sentence_model.final_representations.reshape((-1, FLAGS.model_dim))
-        sentence_vector_dim = FLAGS.model_dim / 2
+        sentence_vector_dim = FLAGS.model_dim
 
     sentence_vector = util.BatchNorm(sentence_vector, sentence_vector_dim, vs, "sentence_vector", training_mode)
     sentence_vector = util.Dropout(sentence_vector, FLAGS.semantic_classifier_keep_rate, training_mode)
