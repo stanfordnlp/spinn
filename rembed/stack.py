@@ -407,8 +407,8 @@ class ThinStack(object):
             outputs_info.append(None)
 
         # Prepare data to scan over.
-        sequences = [T.arange(1, transitions.shape[0] + 1),
-                     T.arange(1, transitions.shape[0] + 1, dtype="float32"),
+        sequences = [T.arange(1, self.seq_length + 1),
+                     T.arange(1, self.seq_length + 1, dtype="float32"),
                      transitions, transitions_f]
         if self.interpolate:
             # Generate Bernoulli RVs to simulate scheduled sampling
@@ -688,7 +688,7 @@ class ThinStack(object):
         transitions_f = T.cast(self.transitions.dimshuffle(1, 0),
                                dtype=theano.config.floatX)
 
-        ts_f = T.cast(T.arange(1, transitions_f.shape[0] + 1), dtype=theano.config.floatX)
+        ts_f = T.cast(T.arange(1, self.seq_length + 1), dtype=theano.config.floatX)
 
         # Representation of buffer using embedding indices rather than values
         id_buffer = T.cast(self.X.flatten(), theano.config.floatX)
@@ -717,6 +717,7 @@ class ThinStack(object):
         bscan_ret, self.bscan_updates = theano.scan(
                 step_b, sequences, outputs_info, non_sequences,
                 go_backwards=True,
+                n_steps=self.seq_length,
 #                strict=True,
                 name=self._prefix + "stack_bwd")
 
