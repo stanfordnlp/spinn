@@ -501,6 +501,7 @@ class ThinStackSpeedTestCase(unittest.TestCase, BackpropTestMixin):
             [self.X, self.transitions, self.y],
             [cost] + self.stack.gradients.values(),
             updates=self.stack.scan_updates + self.stack.bscan_updates)
+        theano.printing.debugprint(f.maker.fgraph.outputs[1])
 
         for t in range(10):
             self._run_batch(f)
