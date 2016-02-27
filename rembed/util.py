@@ -864,7 +864,7 @@ def ensure_2d_arguments(f, squeeze_ret=True):
         for arg in args:
             if isinstance(arg, T.TensorVariable):
                 if arg.ndim == 1:
-                    arg = arg[np.newaxis, :]
+                    arg = arg.dimshuffle("x", 0)
                 elif arg.ndim > 2:
                     raise RuntimeError("ensure_2d_arguments wrapped a function"
                                        " which received an %i-d argument. "
