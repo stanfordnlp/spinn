@@ -22,6 +22,12 @@
 \usepackage{ifthen}
 \usepackage{framed}
 
+
+\newcommand\todo[1]{\textcolor{blue}{\textbf{TODO:} #1}}
+\newcommand\result[1]{\textcolor{red}{\textbf{RESULT NEEDED:} #1}}
+\newcommand\question[1]{\textcolor{orange}{\textbf{OPEN QUESTION:} #1}}
+ 
+
 \newcount\colveccount
 \newcommand*\colvec[1]{
         \global\colveccount#1
@@ -73,6 +79,7 @@
 \newcommand{\word}[1]{\emph{#1}}
 \newcommand{\fulllabel}[2]{\b{#1}\newline\textsc{#2}}
 
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%% Code to simulate natbib's citealt, which prints citations with
 %%%%% no parentheses:
@@ -100,13 +107,13 @@ Samuel R.\ Bowman$^{\ast\dag}$ \\
 Jon Gauthier$^{\dag\ddag}$ \\
 \texttt{jgauthie@stanford.edu} \\
 \And
-Abhinav Rastogi$^{\dag\S}$ \\
+Abhinav Rastogi$^{\S\mathparagraph}$ \\
 \texttt{arastogi@stanford.edu} \\
 \AND
-Raghav Gupta$^{\dag\mathparagraph}$ \\
+Raghav Gupta$^{\parallel}$ \\
 \texttt{rgupta93@stanford.edu} \\
 \And
-Christopher D.\ Manning$^{\ast\dag\mathparagraph}$\\
+Christopher D.\ Manning$^{\ast\dag\parallel}$\\
 \texttt{manning@stanford.edu}\\
 \And
 Christopher Potts$^{\ast}$\\
@@ -116,7 +123,8 @@ Christopher Potts$^{\ast}$\\
 $^{\dag}$Stanford NLP Group\quad
 $^{\ddag}$Stanford Symbolic Systems}\\
 {$^{\S}$Stanford Electrical Engineering\quad
-$^{\mathparagraph}$Stanford Computer Science}
+$^{\mathparagraph}$Stanford AI Lab\quad
+$^{\parallel}$Stanford Computer Science}
 }
 
 \date{}
@@ -134,14 +142,8 @@ $^{\mathparagraph}$Stanford Computer Science}
 \def\colspaceM{4.0mm}
 \def\colspaceL{4.25mm}
 
-\newcommand\todo[1]{\textcolor{red}{\textbf{TODO:} #1}}
-\newcommand\note[1]{\textcolor{blue}{\textbf{NOTE:} #1}}
-
-
 \begin{document}
 \maketitle
-\todo{Anonymize.}
-
 \begin{abstract}
 \begin{itemize}
 \item TreeRNNs are great, don't work for big data.
@@ -150,6 +152,7 @@ $^{\mathparagraph}$Stanford Computer Science}
 \end{itemize}
 \end{abstract}
 
+\todo{Anonymize.}
 
 \section{Introduction}
 
