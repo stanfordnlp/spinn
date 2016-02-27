@@ -98,33 +98,31 @@ class SharedRecurrenceMixin(object):
     def _tracking_lstm_predict(self, inputs, network):
         # TODO(SB): Offer more buffer content than just the top as input.
         c1, c2, buffer_top, tracking_hidden = inputs[:4]
-        inp = T.concatenate([c1, c2, buffer_top], axis=1)
-        return network(tracking_hidden, inp, self._spec.model_dim * 3,
+        inp = (c1, c2, buffer_top)
+        return network(tracking_hidden, inp, (self._spec.model_dim,) * 3,
                        self.tracking_lstm_hidden_dim, self._vs,
                        name="prediction_and_tracking")
 
     def _predict(self, inputs, network):
         # TODO(SB): Offer more buffer content than just the top as input.
-        c1, c2, buffer_top = inputs[:3]
-        inp = T.concatenate([c1, c2, buffer_top], axis=1)
-        return network(inp, self._spec.model_dim * 3,
+        inp = tuple(inputs[:3])
+        return network(inp, (self._spec.model_dim,) * 3,
                        util.NUM_TRANSITION_TYPES, self._vs,
                        name="prediction_and_tracking")
 
     def _merge(self, inputs, network):
-        c1, c2 = inputs[:2]
-        merge_items = T.concatenate([c1, c2], axis=1)
+        merge_items = tuple(inputs[:2])
         if self.use_tracking_lstm:
-            # NB: Unlike in the previous implementation, context-sensitive 
-            # composition (aka the tracking--composition connection) is not 
-            # optional here. It helps performance, so this shouldn't be a 
+            # NB: Unlike in the previous implementation, context-sensitive
+            # composition (aka the tracking--composition connection) is not
+            # optional here. It helps performance, so this shouldn't be a
             # big problem.
             tracking_h_t = inputs[3][:, :self.tracking_lstm_hidden_dim]
             return network(merge_items, tracking_h_t, self._spec.model_dim,
                            self._vs, name="compose",
                            external_state_dim=self.tracking_lstm_hidden_dim)
         else:
-            return network(merge_items, self._spec.model_dim * 2,
+            return network(merge_items, (self._spec.model_dim,) * 2,
                            self._spec.model_dim, self._vs, name="compose")
 
 

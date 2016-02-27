@@ -24,10 +24,9 @@ class ThinStackTestCase(unittest.TestCase):
         spec = util.ModelSpec(embedding_dim, embedding_dim, self.batch_size,
                               vocab_size, seq_length)
 
-        def compose_network(inp, inp_dim, outp_dim, vs, name="compose"):
+        def compose_network((c1, c2), inp_dim, outp_dim, vs, name="compose"):
             # Just add the two embeddings!
-            W = T.concatenate([T.eye(outp_dim), T.eye(outp_dim)], axis=0)
-            return inp.dot(W)
+            return c1 + c2
 
         X = T.imatrix("X")
         transitions = T.imatrix("transitions")
@@ -146,11 +145,11 @@ class ThinStackBackpropTestCase(unittest.TestCase, BackpropTestMixin):
                               self.seq_length)
 
         self.vs = vs = VariableStore()
-        def compose_network(inp, *args, **kwargs):
+        def compose_network((c1, c2), *args, **kwargs):
             W = vs.add_param("W", (self.model_dim * 2, self.model_dim))
             b = vs.add_param("b", (self.model_dim,),
                              initializer=util.ZeroInitializer())
-            return T.dot(inp, W) + b
+            return T.dot(T.concatenate([c1, c2], axis=1), W) + b
 
         self.compose_network = compose_network
         recurrence = Model0(spec, vs, compose_network)
@@ -170,11 +169,8 @@ class ThinStackBackpropTestCase(unittest.TestCase, BackpropTestMixin):
         # seq_length * batch_size * emb_dim
         X_emb = self.stack.embeddings[self.X].dimshuffle(1, 0, 2)
 
-        z1 = T.concatenate([X_emb[1], X_emb[0]], axis=1)
-        c1 = self.compose_network(z1)
-
-        z2 = T.concatenate([X_emb[2], c1], axis=1)
-        c2 = self.compose_network(z2)
+        c1 = self.compose_network((X_emb[1], X_emb[0]))
+        c2 = self.compose_network((X_emb[2], c1))
 
         return c2
 
@@ -241,8 +237,8 @@ class ThinStackTrackingBackpropTestCase(unittest.TestCase, BackpropTestMixin):
 
         self.vs = VariableStore()
 
-        def compose_network(inp, hidden, *args, **kwargs):
-            conc = T.concatenate([hidden, inp], axis=1)
+        def compose_network((c1, c2), hidden, *args, **kwargs):
+            conc = T.concatenate([hidden, c1, c2], axis=1)
 
             W = self.vs.add_param("W", (self.model_dim / 2 + self.model_dim * 2, self.model_dim))
             b = self.vs.add_param("b", (self.model_dim,),
@@ -459,11 +455,13 @@ class ThinStackSpeedTestCase(unittest.TestCase, BackpropTestMixin):
                               self.seq_length)
 
         self.vs = vs = VariableStore()
-        def compose_network(inp, *args, **kwargs):
-            W = vs.add_param("W", (self.model_dim * 2, self.model_dim))
+        def compose_network((c1, c2), *args, **kwargs):
+            W1 = vs.add_param("W1", (self.model_dim, self.model_dim))
+            W2 = vs.add_param("W2", (self.model_dim, self.model_dim))
             b = vs.add_param("b", (self.model_dim,),
                              initializer=util.ZeroInitializer())
-            return T.dot(inp, W) + b
+            # TODO inplace add?
+            return T.dot(c1, W1) + T.dot(c2, W2) + b
 
         self.compose_network = compose_network
         recurrence = Model0(spec, vs, compose_network)
@@ -488,8 +486,6 @@ class ThinStackSpeedTestCase(unittest.TestCase, BackpropTestMixin):
         return f(X, transitions, y)
 
     def test_speed(self):
-        W, b = self.vs.vars["W"], self.vs.vars["b"]
-
         top = self.stack.final_stack[-self.batch_size:]
         cost = self._make_cost(top)
         error_signal = T.grad(cost, top)

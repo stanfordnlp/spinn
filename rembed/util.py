@@ -206,9 +206,20 @@ def ReLULayer(inp, inp_dim, outp_dim, vs, name="relu_layer", use_bias=True, init
 
 
 def Linear(inp, inp_dim, outp_dim, vs, name="linear_layer", use_bias=True, initializer=None):
-    W = vs.add_param("%s_W" %
-                     name, (inp_dim, outp_dim), initializer=initializer)
-    outp = inp.dot(W)
+    if isinstance(inp, tuple):
+        assert isinstance(inp_dim, tuple)
+        Ws = [vs.add_param("%s_W%i" % (name, i), (dim_i, outp_dim),
+                           initializer=initializer)
+              for i, dim_i in enumerate(inp_dim)]
+
+        outp = T.dot(inp[0], Ws[0])
+        for inp_i, W_i in zip(inp[1:], Ws[1:]):
+            # TODO inplace add?
+            outp += T.dot(inp_i, W_i)
+    else:
+        W = vs.add_param("%s_W" %
+                         name, (inp_dim, outp_dim), initializer=initializer)
+        outp = inp.dot(W)
 
     if use_bias:
         b = vs.add_param("%s_b" % name, (outp_dim,),
@@ -248,8 +259,16 @@ def TreeLSTMLayer(lstm_prev, external_state, full_memory_dim, vs, name="tree_lst
     assert full_memory_dim % 2 == 0, "Input is concatenated (h, c); dim must be even."
     hidden_dim = full_memory_dim / 2
 
-    W = vs.add_param("%s/W" % name, (hidden_dim * 2 + external_state_dim, hidden_dim * 5),
-                     initializer=initializer)
+    assert isinstance(lstm_prev, tuple)
+    l_prev, r_prev = lstm_prev
+
+    W_l = vs.add_param("%s/W_l" % name, (hidden_dim, hidden_dim * 5),
+                       initializer=initializer)
+    W_r = vs.add_param("%s/W_r" % name, (hidden_dim, hidden_dim * 5),
+                       initializer=initializer)
+    if external_state_dim > 0:
+        W_ext = vs.add_param("%s/W_ext", (external_state_dim, hidden_dim * 5),
+                             initializer=initializer)
     b = vs.add_param("%s/b" % name, (hidden_dim * 5,),
                      initializer=TreeLSTMBiasInitializer())
 
@@ -257,17 +276,16 @@ def TreeLSTMLayer(lstm_prev, external_state, full_memory_dim, vs, name="tree_lst
         return gate_data[:, i * hidden_dim:(i + 1) * hidden_dim]
 
     # Decompose previous LSTM value into hidden and cell value
-    l_h_prev = lstm_prev[:, :hidden_dim]
-    l_c_prev = lstm_prev[:, hidden_dim:2 * hidden_dim]
-    r_h_prev = lstm_prev[:, 2 * hidden_dim:3 * hidden_dim]
-    r_c_prev = lstm_prev[:, 3 * hidden_dim:]
-    if external_state_dim == 0:
-        h_prev = T.concatenate([l_h_prev, r_h_prev], axis=1)
-    else:
-        h_prev = T.concatenate([l_h_prev, external_state, r_h_prev], axis=1)
+    l_h_prev = l_prev[:, :hidden_dim]
+    l_c_prev = l_prev[:,  hidden_dim:]
+    r_h_prev = r_prev[:, :hidden_dim]
+    r_c_prev = r_prev[:,  hidden_dim:]
+
+    gates = T.dot(l_h_prev, W_l) + T.dot(r_h_prev, W_r) + b
+    if external_state_dim > 0:
+        gates += T.dot(external_state, W_ext)
 
     # Compute and slice gate values
-    gates = T.dot(h_prev, W) + b
     i_gate, fl_gate, fr_gate, o_gate, cell_inp = [slice_gate(gates, i) for i in range(5)]
 
     # Apply nonlinearities
@@ -288,10 +306,6 @@ def LSTMLayer(lstm_prev, inp, inp_dim, full_memory_dim, vs, name="lstm", initial
     assert full_memory_dim % 2 == 0, "Input is concatenated (h, c); dim must be even."
     hidden_dim = full_memory_dim / 2
 
-    # input -> hidden mapping
-    W = vs.add_param("%s_W" % name, (inp_dim, hidden_dim * 4), initializer=initializer)
-    # hidden -> hidden mapping
-    U = vs.add_param("%s_U" % name, (hidden_dim, hidden_dim * 4), initializer=initializer)
     # gate biases
     # TODO(jgauthier): support excluding params from regularization
     b = vs.add_param("%s_b" % name, (hidden_dim * 4,),
@@ -305,7 +319,15 @@ def LSTMLayer(lstm_prev, inp, inp_dim, full_memory_dim, vs, name="lstm", initial
     c_prev = lstm_prev[:, hidden_dim:]
 
     # Compute and slice gate values
-    gates = T.dot(inp, W) + T.dot(h_prev, U) + b
+    # input -> hidden mapping
+    gates = Linear(inp, inp_dim, hidden_dim * 4, vs,
+                   name="%s/inp/linear" % name,
+                   initializer=initializer, use_bias=False)
+    # hidden -> hidden mapping
+    gates += Linear(h_prev, hidden_dim, hidden_dim * 4, vs,
+                    name="%s/hid/linear" % name,
+                    initializer=initializer, use_bias=False)
+    gates += b
     i_gate, f_gate, o_gate, cell_inp = [slice_gate(gates, i) for i in range(4)]
 
     # Apply nonlinearities
