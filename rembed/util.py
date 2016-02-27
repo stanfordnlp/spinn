@@ -749,8 +749,8 @@ def batch_subgraph_gradients(g_in, wrt, f_g_out, batch_size=None,
     g_out = [g_out] if not isinstance(g_out, (list, tuple)) else g_out
 
     # Prepare symbolic gradient variables for each of the graph outputs.
-    grads_above = [tensorx("%s/grad_%s" % (name, out_i.name), out_i.ndim)
-                   for out_i in g_out]
+    grads_above = [tensorx("%s/grad_%s" % (name, out_i.name or i), out_i.ndim)
+                   for i, out_i in enumerate(g_out)]
 
     # Compute gradients of subgraph beginning at `g_in` and ending at `g_out`,
     # where the cost gradient w.r.t. each `g_out` is given by the corresponding
