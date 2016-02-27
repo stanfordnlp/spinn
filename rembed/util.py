@@ -568,6 +568,130 @@ def tensorx(name, ndim, dtype=theano.config.floatX):
     return T.TensorType(dtype, (False,) * ndim)(name)
 
 
+def subgraph_grad(wrt, end, start=None, cost=None, details=False):
+    '''
+    With respect to `wrt`, computes gradients of cost and/or from
+    existing `start` gradients, up to the `end` variables of a
+    symbolic digraph.  In other words, computes gradients for a
+    subgraph of the symbolic theano function. Ignores all disconnected
+    inputs.
+    This can be useful when one needs to perform the gradient descent
+    iteratively (e.g. one layer at a time in an MLP), or when a
+    particular operation is not differentiable in theano
+    (e.g. stochastic sampling from a multinomial). In the latter case,
+    the gradient of the non-differentiable process could be
+    approximated by user-defined formula, which could be calculated
+    using the gradients of a cost with respect to samples (0s and
+    1s). These gradients are obtained by performing a subgraph_grad
+    from the `cost` or previously known gradients (`start`) up to the
+    outputs of the stochastic process (`end`).  A dictionary mapping
+    gradients obtained from the user-defined differentiation of the
+    process, to variables, could then be fed into another
+    subgraph_grad as `start` with any other `cost` (e.g. weight
+    decay).
+    In an MLP, we could use subgraph_grad to iteratively backpropagate:
+    .. code-block:: python
+        x, t = theano.tensor.fvector('x'), theano.tensor.fvector('t')
+        w1 = theano.shared(np.random.randn(3,4))
+        w2 = theano.shared(np.random.randn(4,2))
+        a1 = theano.tensor.tanh(theano.tensor.dot(x,w1))
+        a2 = theano.tensor.tanh(theano.tensor.dot(a1,w2))
+        cost2 = theano.tensor.sqr(a2 - t).sum()
+        cost2 += theano.tensor.sqr(w2.sum())
+        cost1 = theano.tensor.sqr(w1.sum())
+        params = [[w2],[w1]]
+        costs = [cost2,cost1]
+        grad_ends = [[a1], [x]]
+        next_grad = None
+        param_grads = []
+        for i in xrange(2):
+            param_grad, next_grad = theano.subgraph_grad(
+                wrt=params[i], end=grad_ends[i],
+                start=next_grad, cost=costs[i]
+            )
+            next_grad = dict(zip(grad_ends[i], next_grad))
+            param_grads.extend(param_grad)
+    :type wrt: list of variables
+    :param wrt:
+      Gradients are computed with respect to `wrt`.
+    :type end: list of variables
+    :param end:
+      Theano variables at which to end gradient descent (they are
+      considered constant in theano.grad).  For convenience, the
+      gradients with respect to these variables are also returned.
+    :type start: dictionary of variables
+    :param start:
+      If not None, a dictionary mapping variables to their
+      gradients. This is useful when the gradient on some variables
+      are known. These are used to compute the gradients backwards up
+      to the variables in `end` (they are used as known_grad in
+      theano.grad).
+    :type cost: scalar (0-dimensional) variable
+    :param cost:
+      Additional costs for which to compute the gradients.  For
+      example, these could be weight decay, an l1 constraint, MSE,
+      NLL, etc. May optionally be None if start is provided.  Warning
+      : If the gradients of `cost` with respect to any of the `start`
+      variables is already part of the `start` dictionary, then it may
+      be counted twice with respect to `wrt` and `end`.
+      .. warning::
+        If the gradients of `cost` with respect to any of the `start`
+        variables is already part of the `start` dictionary, then it
+        may be counted twice with respect to `wrt` and `end`.
+    :type details: bool
+    :param details:
+      When True, additionally returns the list of gradients from
+      `start` and of `cost`, respectively, with respect to `wrt` (not
+      `end`).
+    :rtype: Tuple of 2 or 4 Lists of Variables
+    :return: Returns lists of gradients with respect to `wrt` and `end`,
+            respectively.
+    .. versionadded:: 0.7
+    '''
+    assert ((cost is not None) or (start is not None))
+    assert isinstance(end, list)
+    assert isinstance(wrt, list)
+    if start is not None:
+        assert isinstance(start, dict)
+
+    params = list(set(wrt + end))
+
+    start_grads = None
+    cost_grads = None
+    if start is not None:
+        start_grads = list(theano.grad(
+            cost=None, wrt=params, known_grads=start,
+            consider_constant=end,
+            disconnected_inputs='ignore',
+            return_disconnected='None'))
+
+    if cost is not None:
+        cost_grads = list(theano.grad(
+            cost=cost, wrt=params,
+            consider_constant=end,
+            disconnected_inputs='ignore',
+            return_disconnected='None'))
+
+    grads = None
+    if start is None:
+        grads = cost_grads
+    else:
+        grads = start_grads
+        if cost_grads is not None:
+            for i in range(len(grads)):
+                grads[i] += cost_grads[i]
+
+    pgrads = OrderedDict(itertools.izip(params, grads))
+    # separate wrt from end grads:
+    wrt_grads = list(pgrads[k] for k in wrt)
+    end_grads = list(pgrads[k] for k in end)
+
+    if details:
+        return wrt_grads, end_grads, start_grads, cost_grads
+
+    return wrt_grads, end_grads
+
+
 def batch_subgraph_gradients(g_in, wrt, f_g_out, batch_size=None,
                              extra_scan_inputs=None,
                              name="batch_subgraph_grad"):
@@ -631,8 +755,7 @@ def batch_subgraph_gradients(g_in, wrt, f_g_out, batch_size=None,
     # Compute gradients of subgraph beginning at `g_in` and ending at `g_out`,
     # where the cost gradient w.r.t. each `g_out` is given by the corresponding
     # entry in `grads_above`.
-    d_wrt, d_in = theano.gradient.subgraph_grad(
-            wrt, g_in, dict(zip(g_out, grads_above)))
+    d_wrt, d_in = subgraph_grad(wrt, g_in, dict(zip(g_out, grads_above)))
 
     # Strip any GPU<->host transfers that might have crept into this
     # automatically constructed graph.
@@ -660,10 +783,38 @@ def batch_subgraph_gradients(g_in, wrt, f_g_out, batch_size=None,
                 ("Batch gradients must conform with expected graph gradient dimensionality."
                  " (#%i: batch %i, sym %i)" % (j, b_grad_j.ndim, grad_j.ndim))
 
+        # Some gradients may be `None` (i.e., there is no differentiable path
+        # between an input / a wrt variable and any output). We should
+        # intelligently skip accumulating gradients for these variables.
+        #
+        # Just keep a map of index in scan output -> index in d_wrt or d_in:
+        d_in_idxs = [i for i, d_in_i in enumerate(d_in)
+                     if d_in_i is not None]
+        d_wrt_idxs = [i for i, d_wrt_i in enumerate(d_wrt)
+                      if d_wrt_i is not None]
+        # Remove all the uninteresting disconnected gradients now:
+        b_in_squashed, d_in_squashed = [], []
+        for b_in_j, d_in_j in zip(b_in, d_in):
+            if d_in_j is not None:
+                b_in_squashed.append(b_in_j)
+                d_in_squashed.append(d_in_j)
+        d_wrt_squashed = filter(None, d_wrt)
+
+        n_in_squashed = len(d_in_squashed)
+        n_wrt_squashed = len(d_wrt_squashed)
+        n_outputs = n_in_squashed + n_wrt_squashed
+
+        ret_inp = [None] * n_in
+        ret_wrt = [None] * len(wrt)
+
+        if n_in_squashed + n_wrt_squashed == 0:
+            # No gradients! Just send out Nones.
+            return ret_inp, ret_wrt
+
         def gradients_i(*inputs):
             """Compute all gradients for example `i`."""
-            in_i, grad_i = inputs[:n_in], inputs[n_in:n_in + n_grad]
-            assert len(grad_i) == n_grad, "%i %i" % (len(grad_i), n_grad) # DEV
+            in_i = inputs[:n_in_squashed]
+            grad_i = inputs[n_in_squashed:n_in_squashed + n_grad]
 
             # Build a clone of the subgradient graph with the actual batch
             # inputs and gradients.
@@ -673,26 +824,34 @@ def batch_subgraph_gradients(g_in, wrt, f_g_out, batch_size=None,
 
             # Clone each of the `j` gradient expressions for this example `i`.
             d_in_ij = [theano.clone(d_in_j, replace=replace)
-                       for d_in_j in d_in]
+                       for d_in_j in d_in_squashed]
             d_wrt_ij = [theano.clone(d_wrt_j, replace=replace)
-                        for d_wrt_j in d_wrt]
+                        for d_wrt_j in d_wrt_squashed]
 
             return d_in_ij + d_wrt_ij
 
         # Calculate gradients independently for each example.
         try:
-            ds = theano.scan(gradients_i, sequences=b_in + b_grad,
-                            outputs_info=[None] * (n_in + len(wrt)),
-                            non_sequences=extra_scan_inputs,
-                            n_steps=batch_size,
-                            strict=True,
-                            name="%s/scan" % name)[0]
+            ds = theano.scan(gradients_i,
+                             sequences=b_in_squashed + list(b_grad),
+                             outputs_info=[None] * n_outputs,
+                             non_sequences=extra_scan_inputs,
+                             n_steps=batch_size,
+                             strict=True,
+                             name="%s/scan" % name)[0]
         except MissingInputError, e:
             raise ValueError("batch_subgraph_gradients scan operates only in "
                              "strict mode; pass all auxiliary values in a "
                              "collection as argument `extra_scan_inputs`")
 
-        return ds[:n_in], ds[n_in:]
+        # For gradients which are not none, copy onto `ret_*`
+        ds_in, ds_wrt = ds[:n_in_squashed], ds[n_in_squashed:]
+        for ds_in_j, destination_j in zip(ds_in, d_in_idxs):
+            ret_inp[destination_j] = ds_in_j
+        for ds_wrt_j, destination_j in zip(ds_wrt, d_wrt_idxs):
+            ret_wrt[destination_j] = ds_wrt_j
+
+        return ret_inp, ret_wrt
 
     return batch_gradients
 

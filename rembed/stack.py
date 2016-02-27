@@ -604,6 +604,7 @@ class ThinStack(object):
                                     T.set_subtensor(stack_bwd_t[-self.batch_size:], error_signal),
                                     stack_bwd_t)
 
+
             # Retrieve all relevant inputs/outputs at this timestep.
             t_c1, t_c2, inputs, grads = \
                 lookup(t_f, stack_final, stack_2_ptrs_t, buffer_cur_t,
@@ -620,6 +621,9 @@ class ThinStack(object):
                 "%i %i" % (len(m_delta_inp), len(p_delta_inp))
             assert len(m_delta_wrt) == len(p_delta_wrt), \
                 "%i %i" % (len(m_delta_wrt), len(p_delta_wrt))
+            assert len(m_delta_inp) == 3 + len(self.aux_stacks), \
+                "%i %i" % (len(m_delta_inp), 3 + len(self.aux_stacks))
+            assert len(m_delta_wrt) == len(wrt)
 
             # Retrieve embedding indices on buffer at this timestep.
             # (Necessary for sending embedding gradients.)
@@ -645,10 +649,18 @@ class ThinStack(object):
             for stack, cursor, m_delta, p_delta in zip(stacks, cursors, m_delta_inp, p_delta_inp):
                 if stack is None or cursor is None:
                     continue
-                base = new_stacks.get(stack, stack)
+                elif m_delta is None and p_delta is None:
+                    # Disconnected gradient.
+                    continue
 
-                mask_i = masks[m_delta.ndim - 1]
-                delta = mask_i * m_delta + (1. - mask_i) * p_delta
+                base = new_stacks.get(stack, stack)
+                mask_i = masks[(m_delta or p_delta).ndim - 1]
+                if m_delta is None:
+                    delta = (1. - mask_i) * p_delta
+                elif p_delta is None:
+                    delta = mask_i * m_delta
+                else:
+                    delta = mask_i * m_delta + (1. - mask_i) * p_delta
 
                 # Run subtensor update on associated structure using the
                 # current cursor.
@@ -659,16 +671,26 @@ class ThinStack(object):
             # Accumulate wrt deltas, switching over push/merge decision.
             new_wrt_deltas = {}
             for i, (accum_delta, m_delta, p_delta) in enumerate(zip(wrt_deltas, m_delta_wrt, p_delta_wrt)):
+                if m_delta is None and p_delta is None:
+                    # Disconnected gradient.
+                    continue
+
                 # Check that tensors returned by delta functions match shape
                 # expectations.
-                assert accum_delta.ndim == m_delta.ndim - 1, \
+                assert m_delta is None or accum_delta.ndim == m_delta.ndim - 1, \
                     "%i %i" % (accum_delta.ndim, m_delta.ndim)
-                assert accum_delta.ndim == p_delta.ndim - 1, \
+                assert p_delta is None or accum_delta.ndim == p_delta.ndim - 1, \
                     "%i %i" % (accum_delta.ndim, p_delta.ndim)
 
-                mask_i = masks[m_delta.ndim - 1]
+                mask_i = masks[(m_delta or p_delta).ndim - 1]
+                if m_delta is None:
+                    delta = (1. - mask_i) * p_delta
+                elif p_delta is None:
+                    delta = mask_i * m_delta
+                else:
+                    delta = mask_i * m_delta + (1. - mask_i) * p_delta
                 # TODO: Is this at all efficient? (Bring back GPURowSwitch?)
-                delta = (mask_i * m_delta + (1. - mask_i) * p_delta).sum(axis=0)
+                delta = delta.sum(axis=0)
                 # TODO: we want this to be inplace
                 new_wrt_deltas[accum_delta] = cuda_util.add_inplace(accum_delta, delta)
 
@@ -677,7 +699,7 @@ class ThinStack(object):
             # TODO make sparse?
             if compute_embedding_gradients:
                 new_stacks[dE] = cuda_util.AdvancedIncSubtensor1Floats(inplace=True)(
-                    new_stacks[dE], (1. - masks[1]) * main_grad, buffer_ids_t)
+                    new_stacks.get(dE, dE), (1. - masks[1]) * main_grad, buffer_ids_t)
 
             updates = dict(new_wrt_deltas.items() + new_stacks.items())
             updates = util.prepare_updates_dict(updates)

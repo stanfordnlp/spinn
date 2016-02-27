@@ -19,6 +19,8 @@ def strip_transfer(variable):
     function returns `variable` unchanged.
     """
 
+    if variable is None:
+        return
     if isinstance(variable.owner.op, (GpuFromHost, HostFromGpu)):
         return variable.owner.inputs[0]
     return variable
