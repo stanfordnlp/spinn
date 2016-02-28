@@ -119,7 +119,10 @@ def build_sentence_model(cls, vocab_size, seq_length, tokens, transitions,
         sentence_vector, sentence_vector_dim, num_classes, vs,
         name="semantic_classifier", use_bias=True)
 
-    return model, logits
+    def zero_fn():
+        model.zero()
+
+    return model, logits, zero_fn
 
 
 def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
@@ -256,7 +259,11 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
         prev_features, prev_features_dim, num_classes, vs,
         name="semantic_classifier", use_bias=True)
 
-    return premise_model, hypothesis_model, logits
+    def zero_fn():
+        premise_model.zero()
+        hypothesis_model.zero()
+
+    return premise_model, hypothesis_model, logits, zero_fn
 
 
 def build_cost(logits, targets):
@@ -318,7 +325,7 @@ def build_transition_cost(logits, targets, num_transitions):
     return cost, acc
 
 
-def evaluate(eval_fn, eval_set, logger, step):
+def evaluate(eval_fn, eval_set, logger, step, zero_fn):
     # Evaluate
     acc_accum = 0.0
     action_acc_accum = 0.0
@@ -334,12 +341,15 @@ def evaluate(eval_fn, eval_set, logger, step):
         acc_accum += acc_value
         action_acc_accum += action_acc_value
         eval_batches += 1.0
+
+        # Zero out all auxiliary variables.
+        zero_fn()
     logger.Log("Step: %i\tEval acc: %f\t %f\t%s" %
               (step, acc_accum / eval_batches, action_acc_accum / eval_batches, eval_set[0]))
     return acc_accum / eval_batches
 
 
-def evaluate_expanded(eval_fn, eval_set, eval_path, logger, step, sentence_pair_data, ind_to_word):
+def evaluate_expanded(eval_fn, eval_set, eval_path, logger, step, sentence_pair_data, ind_to_word, zero_fn):
     """
     Write the  gold parses and predicted parses in the files <eval_out_path>.gld and <eval_out_path>.tst
     respectively. These files can be given as inputs to Evalb to evaluate parsing performance -
@@ -368,6 +378,9 @@ def evaluate_expanded(eval_fn, eval_set, eval_path, logger, step, sentence_pair_
                 acc_accum += acc_value
                 action_acc_accum += action_acc_value
                 eval_batches += 1.0
+
+                # Zero out all auxiliary variables.
+                zero_fn()
 
                 # write each predicted transition to file
                 for orig_transitions, pred_logit_hyp, pred_logit_prem, tokens, true_class, example_sem_logits \
@@ -519,7 +532,7 @@ def run(only_forward=False):
         transitions = T.itensor3("transitions")
         num_transitions = T.imatrix("num_transitions")
 
-        premise_model, hypothesis_model, logits = build_sentence_pair_model(
+        premise_model, hypothesis_model, logits, zero_fn = build_sentence_pair_model(
             model_cls, len(vocabulary), FLAGS.seq_length,
             X, transitions, len(data_manager.LABEL_MAP), training_mode, ground_truth_transitions_visible, vs,
             initial_embeddings=initial_embeddings, project_embeddings=(not train_embeddings),
@@ -534,7 +547,7 @@ def run(only_forward=False):
         transitions = T.imatrix("transitions")
         num_transitions = T.vector("num_transitions", dtype="int32")
 
-        model, logits = build_sentence_model(
+        model, logits, zero_fn = build_sentence_model(
             model_cls, len(vocabulary), FLAGS.seq_length,
             X, transitions, len(data_manager.LABEL_MAP), training_mode, ground_truth_transitions_visible, vs,
             initial_embeddings=initial_embeddings, project_embeddings=(not train_embeddings),
@@ -614,7 +627,7 @@ def run(only_forward=False):
         for eval_set, eval_out_path in zip(eval_iterators, eval_output_paths):
             logger.Log("Writing eval output for %s." % (eval_set[0],))
             evaluate_expanded(eval_fn, eval_set, eval_out_path, logger, step,
-                              data_manager.SENTENCE_PAIR_DATA, ind_to_word)
+                              data_manager.SENTENCE_PAIR_DATA, ind_to_word, zero_fn)
     else:
         # Train
         extra_cost_inputs = [y, training_mode, ground_truth_transitions_visible]
@@ -692,7 +705,7 @@ def run(only_forward=False):
         for step in range(step, FLAGS.training_steps):
             if step % FLAGS.eval_interval_steps == 0:
                 for index, eval_set in enumerate(eval_iterators):
-                    acc = evaluate(eval_fn, eval_set, logger, step)
+                    acc = evaluate(eval_fn, eval_set, logger, step, zero_fn)
                     if FLAGS.ckpt_on_best_dev_error and index == 0 and (1 - acc) < 0.99 * best_dev_error and step > 1000:
                         best_dev_error = 1 - acc
                         logger.Log("Checkpointing with new best dev accuracy of %f" % acc)
@@ -714,11 +727,7 @@ def run(only_forward=False):
                 vs.save_checkpoint(checkpoint_path, extra_vars=[step, best_dev_error])
 
             # Zero out all auxiliary variables.
-            if data_manager.SENTENCE_PAIR_DATA:
-                premise_model.zero()
-                hypothesis_model.zero()
-            else:
-                model.zero()
+            zero_fn()
 
 
 if __name__ == '__main__':
