@@ -670,7 +670,7 @@ class ThinStack(object):
 
             # Accumulate wrt deltas, switching over push/merge decision.
             new_wrt_deltas = {}
-            for i, (accum_delta, m_delta, p_delta) in enumerate(zip(wrt_deltas, m_delta_wrt, p_delta_wrt)):
+            for i, (wrt_var, accum_delta, m_delta, p_delta) in enumerate(zip(wrt, wrt_deltas, m_delta_wrt, p_delta_wrt)):
                 if m_delta is None and p_delta is None:
                     # Disconnected gradient.
                     continue
@@ -678,9 +678,9 @@ class ThinStack(object):
                 # Check that tensors returned by delta functions match shape
                 # expectations.
                 assert m_delta is None or accum_delta.ndim == m_delta.ndim - 1, \
-                    "%i %i" % (accum_delta.ndim, m_delta.ndim)
+                    "%s %i %i" % (wrt_var.name, accum_delta.ndim, m_delta.ndim)
                 assert p_delta is None or accum_delta.ndim == p_delta.ndim - 1, \
-                    "%i %i" % (accum_delta.ndim, p_delta.ndim)
+                    "%s %i %i" % (wrt_var.name, accum_delta.ndim, p_delta.ndim)
 
                 mask_i = masks[(m_delta or p_delta).ndim - 1]
                 if m_delta is None:
