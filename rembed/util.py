@@ -659,10 +659,10 @@ def batch_subgraph_gradients(g_in, wrt, f_g_out, batch_size=None,
                   return_disconnected="None")
 
     def dot_grad_override(op, inp, grads):
-        # HACK: Get super grads
         x, y = inp
         xdim, ydim = x.type.ndim, y.type.ndim
 
+        # HACK: Get super grads
         gz, = grads
         xgrad, ygrad = op.grad(inp, grads)
 

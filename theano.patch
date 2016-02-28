@@ -124,12 +124,89 @@ Only in theano: generated_version.py
 Only in theano/gof: opt.py.orig
 Only in theano/gof: opt.py.rej
 Only in theano-base/theano/gof: sandbox
+diff -x '*.pyc' -uwr theano-base/theano/gradient.py theano/gradient.py
+--- theano-base/theano/gradient.py	2016-02-25 15:14:41.434999962 -0800
++++ theano/gradient.py	2016-02-27 20:07:31.618998747 -0800
+@@ -361,7 +361,8 @@
+ 
+ def grad(cost, wrt, consider_constant=None,
+          disconnected_inputs='raise', add_names=True,
+-         known_grads=None, return_disconnected='zero',
++         known_grads=None, grad_overrides=None,
++         return_disconnected='zero',
+          null_gradients='raise'):
+     """
+     Return symbolic gradients for one or more variables with respect to some
+@@ -558,7 +559,8 @@
+             assert g.type.dtype in tensor.float_dtypes
+ 
+     rval = _populate_grad_dict(var_to_app_to_idx,
+-                               grad_dict, wrt, cost_name)
++                               grad_dict, wrt, cost_name,
++                               overrides=grad_overrides)
+ 
+     for i in xrange(len(rval)):
+         if isinstance(rval[i].type, NullType):
+@@ -932,7 +934,8 @@
+ 
+ 
+ def _populate_grad_dict(var_to_app_to_idx,
+-                        grad_dict, wrt, cost_name=None):
++                        grad_dict, wrt, cost_name=None,
++                        overrides=None):
+     """
+         Helper function for grad function.
+ 
+@@ -963,6 +966,8 @@
+     # its inputs' gradients
+     term_dict = OrderedDict()
+ 
++    overrides = overrides or {}
++
+     def access_term_cache(node):
+         """ Populates term_dict[node] and returns it """
+ 
+@@ -1110,6 +1115,9 @@
+                                 str(o_shape) + " on an output of shape " +
+                                 str(g_shape))
+ 
++                if node.op.__class__ in overrides:
++                    input_grads = overrides[node.op.__class__](node.op, inputs, new_output_grads)
++                else:
+                 input_grads = node.op.grad(inputs, new_output_grads)
+ 
+                 if input_grads is None:
+@@ -1292,11 +1300,11 @@
+                         if isinstance(term.type, DisconnectedType):
+                             continue
+ 
+-                        if hasattr(var, 'ndim') and term.ndim != var.ndim:
+-                            raise ValueError(
+-                                ("%s.grad returned a term with"
+-                                 " %d dimensions, but %d are required.") % (
+-                                     str(node.op), term.ndim, var.ndim))
++                        # if hasattr(var, 'ndim') and term.ndim != var.ndim:
++                        #     raise ValueError(
++                        #         ("%s.grad returned a term with"
++                        #          " %d dimensions, but %d are required.") % (
++                        #              str(node.op), term.ndim, var.ndim))
+ 
+                         terms.append(term)
+ 
+@@ -1318,6 +1326,7 @@
+                 # this variable isn't connected to the cost in the
+                 # computational graph
+                 grad_dict[var] = disconnected_type()
++
+         # end if cache miss
+         return grad_dict[var]
+ 
 Only in theano-base/theano/misc: do_nightly_build
 Only in theano-base/theano/misc: do_nightly_build_send
 Only in theano-base/theano/misc: hooks
 diff -x '*.pyc' -uwr theano-base/theano/sandbox/cuda/basic_ops.py theano/sandbox/cuda/basic_ops.py
 --- theano-base/theano/sandbox/cuda/basic_ops.py	2016-02-25 15:15:59.006999947 -0800
-+++ theano/sandbox/cuda/basic_ops.py	2016-02-06 14:51:38.247998272 -0800
++++ theano/sandbox/cuda/basic_ops.py	2016-02-26 15:40:16.571999684 -0800
 @@ -3634,7 +3634,7 @@
          return str
  
@@ -166,8 +243,6 @@ diff -x '*.pyc' -uwr theano-base/theano/sandbox/cuda/basic_ops.py theano/sandbox
  
  gpu_contiguous = GpuContiguous()
  
-Only in theano/sandbox/cuda: basic_ops.py.orig
-Only in theano/sandbox/cuda: basic_ops.py.rej
 diff -x '*.pyc' -uwr theano-base/theano/sandbox/cuda/blas.py theano/sandbox/cuda/blas.py
 --- theano-base/theano/sandbox/cuda/blas.py	2016-02-25 15:15:59.011999947 -0800
 +++ theano/sandbox/cuda/blas.py	2016-02-06 14:49:54.679998290 -0800
