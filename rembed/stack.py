@@ -68,7 +68,7 @@ class ThinStack(object):
                  premise_stack_tops=None,
                  attention_unit=None,
                  is_hypothesis=False,
-                 name=None):
+                 name="stack"):
         """
         Construct a ThinStack.
 
@@ -157,10 +157,15 @@ class ThinStack(object):
         self.name = name
         self._prefix = "" if name is None else name + "/"
 
+        # Track variable store contents before / after graph construction.
+        vars_before = set(self._vs.vars.keys())
+
         self._make_params()
         self._make_shared()
         self._make_inputs()
         self._make_scan()
+
+        self._vars = set(self._vs.vars.keys()) - vars_before
 
         if make_test_fn:
             scan_fn = theano.function([self.X, self.transitions, self.training_mode,
@@ -470,8 +475,8 @@ class ThinStack(object):
         input_ndim += [len(extra_output_shape) + 1
                        for extra_output_shape in self.recurrence.extra_outputs]
 
-        wrt = [var for var in self._vs.trainable_vars.values()
-               if var != self.embeddings]
+        wrt = [self._vs.vars[key] for key in self._vars
+               if self._vs.vars[key] != self.embeddings]
 
         # TODO handle gradient of action prediction
         # TODO would it pay off to force these to have the same concrete
