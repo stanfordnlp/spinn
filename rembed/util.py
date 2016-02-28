@@ -267,7 +267,7 @@ def TreeLSTMLayer(lstm_prev, external_state, full_memory_dim, vs, name="tree_lst
     W_r = vs.add_param("%s/W_r" % name, (hidden_dim, hidden_dim * 5),
                        initializer=initializer)
     if external_state_dim > 0:
-        W_ext = vs.add_param("%s/W_ext", (external_state_dim, hidden_dim * 5),
+        W_ext = vs.add_param("%s/W_ext" % name, (external_state_dim, hidden_dim * 5),
                              initializer=initializer)
     b = vs.add_param("%s/b" % name, (hidden_dim * 5,),
                      initializer=TreeLSTMBiasInitializer())
