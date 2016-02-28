@@ -466,8 +466,8 @@ class ThinStack(object):
     def _make_backward_graphs(self, extra_graph_inputs):
         """Generate gradient subgraphs for this stack's recurrence."""
 
-        input_ndim = [1] * 3
-        input_ndim += [len(extra_output_shape)
+        input_ndim = [2] * 3
+        input_ndim += [len(extra_output_shape) + 1
                        for extra_output_shape in self.recurrence.extra_outputs]
 
         wrt = [var for var in self._vs.trainable_vars.values()
@@ -732,7 +732,7 @@ class ThinStack(object):
         # More helpers (not referenced directly in code, but we need to include
         # them as non-sequences to satisfy scan strict mode)
         non_sequences += [self.stack, self.buffer_t] + self.aux_stacks + self.final_aux_stacks
-        non_sequences += self._vs.vars.values() + extra_cost_inputs
+        non_sequences += [self.X, self.transitions] + self._vs.vars.values() + extra_cost_inputs
         if self.premise_stack_tops:
             non_sequences.append(self.premise_stack_tops)
 
