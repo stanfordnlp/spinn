@@ -105,10 +105,10 @@ def build_sentence_model(cls, vocab_size, seq_length, tokens, transitions,
 
     # Extract top element of final stack timestep.
     if FLAGS.lstm_composition:
-        sentence_vector = sentence_model.sentence_embeddings[:, :FLAGS.model_dim / 2]
+        sentence_vector = model.sentence_embeddings[:, :FLAGS.model_dim / 2]
         sentence_vector_dim = FLAGS.model_dim / 2
     else:
-        sentence_vector = sentence_model.sentence_embeddings
+        sentence_vector = model.sentence_embeddings
         sentence_vector_dim = FLAGS.model_dim
 
     sentence_vector = util.BatchNorm(sentence_vector, sentence_vector_dim, vs, "sentence_vector", training_mode)
@@ -617,7 +617,7 @@ def run(only_forward=False):
                               data_manager.SENTENCE_PAIR_DATA, ind_to_word)
     else:
         # Train
-        extra_cost_inputs = [X, transitions, y, training_mode, ground_truth_transitions_visible]
+        extra_cost_inputs = [y, training_mode, ground_truth_transitions_visible]
         if data_manager.SENTENCE_PAIR_DATA:
             premise_error_signal = T.grad(total_cost, premise_stack_top)
             premise_model.make_backprop_scan(premise_error_signal,
