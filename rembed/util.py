@@ -667,20 +667,15 @@ def batch_subgraph_gradients(g_in, wrt, f_g_out, batch_size=None,
         xgrad, ygrad = op.grad(inp, grads)
 
         if xdim == ydim == 2:
-            # TODO this can be a batched gemv, I think
-            def scan_f(x_i, Y):
-                return T.outer(x_i.T, Y)
-            ygrad = theano.scan(scan_f, sequences=[x, gz], n_steps=batch_size)[0]
+            # HACK: Compute the Jacobian of this `dot` op. We will yield a
+            # rank-3 tensor rather than a gradient matrix.
+            ygrad = T.batched_dot(x.dimshuffle(0, 1, "x"),
+                                  gz.dimshuffle(0, "x", 1))
 
         # TODO patternbroadcast?
 
         return xgrad, ygrad
 
-    def sum_grad_override(op, inp, grads):
-        print "________________ here"
-        return grads
-
-    print "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<"
     d_wrt = T.grad(cost=None, wrt=wrt, known_grads=known_grads,
                    consider_constant=g_in, disconnected_inputs="ignore",
                    return_disconnected="None",
