@@ -878,15 +878,16 @@ def MakeEvalIterator(sources, batch_size):
     start = -batch_size
     while True:
         start += batch_size
-        if start >= dataset_size:
-            if start != dataset_size:
-                print "Skipping " + str(start - dataset_size) + " eval examples."
-            break
-        data_iter.append(tuple(source[start:start + batch_size]
-                               for source in sources))
+        
+        candidate_batch = tuple(source[start:start + batch_size]
+                               for source in sources)
+        if len(candidate_batch[0]) == batch_size:
+            data_iter.append(candidate_batch)
+        else:
+            print "Skipping " + len(candidate_batch[0]) + " examples."
 
     for item in data_iter:
-        assert len(item[0]) == batch_size
+        assert len(item[0]) == batch_size   
     return data_iter
 
 
