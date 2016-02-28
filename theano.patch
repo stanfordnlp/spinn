@@ -126,7 +126,7 @@ Only in theano/gof: opt.py.rej
 Only in theano-base/theano/gof: sandbox
 diff -x '*.pyc' -uwr theano-base/theano/gradient.py theano/gradient.py
 --- theano-base/theano/gradient.py	2016-02-25 15:14:41.434999962 -0800
-+++ theano/gradient.py	2016-02-27 20:07:31.618998747 -0800
++++ theano/gradient.py	2016-02-27 20:10:36.933998714 -0800
 @@ -361,7 +361,8 @@
  
  def grad(cost, wrt, consider_constant=None,
@@ -176,7 +176,7 @@ diff -x '*.pyc' -uwr theano-base/theano/gradient.py theano/gradient.py
                  input_grads = node.op.grad(inputs, new_output_grads)
  
                  if input_grads is None:
-@@ -1292,11 +1300,11 @@
+@@ -1292,11 +1300,17 @@
                          if isinstance(term.type, DisconnectedType):
                              continue
  
@@ -185,6 +185,12 @@ diff -x '*.pyc' -uwr theano-base/theano/gradient.py theano/gradient.py
 -                                ("%s.grad returned a term with"
 -                                 " %d dimensions, but %d are required.") % (
 -                                     str(node.op), term.ndim, var.ndim))
++                        # JDEV: Let gradient ops change output ndim.
++                        # This is required in order to support Jacobian outputs
++                        # when hacky Jacobian overrides are passed. It would be
++                        # cleaner to make a "fork" of this function and its
++                        # dependents which is explicitly a Jacobian function.
++                        #
 +                        # if hasattr(var, 'ndim') and term.ndim != var.ndim:
 +                        #     raise ValueError(
 +                        #         ("%s.grad returned a term with"
@@ -193,7 +199,7 @@ diff -x '*.pyc' -uwr theano-base/theano/gradient.py theano/gradient.py
  
                          terms.append(term)
  
-@@ -1318,6 +1326,7 @@
+@@ -1318,6 +1332,7 @@
                  # this variable isn't connected to the cost in the
                  # computational graph
                  grad_dict[var] = disconnected_type()
