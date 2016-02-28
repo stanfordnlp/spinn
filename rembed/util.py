@@ -857,7 +857,7 @@ def MakeTrainingIterator(sources, batch_size):
 
         while True:
             start += batch_size
-            if start > dataset_size:
+            if start > dataset_size - batch_size:
                 # Start another epoch.
                 start = 0
                 random.shuffle(order)
@@ -884,14 +884,11 @@ def MakeEvalIterator(sources, batch_size):
 
         candidate_batch = tuple(source[start:start + batch_size]
                                for source in sources)
-        
+
         if len(candidate_batch[0]) == batch_size:
             data_iter.append(candidate_batch)
         else:
-            print "Skipping " + str(len(candidate_batch[0])) + " examples."
-
-    for item in data_iter:
-        assert len(item[0]) == batch_size   
+            print "Skipping " + str(len(candidate_batch[0])) + " examples."  
     return data_iter
 
 
