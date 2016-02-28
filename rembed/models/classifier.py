@@ -638,6 +638,8 @@ def run(only_forward=False):
             new_values = util.merge_updates(
                 premise_model.scan_updates + premise_model.bscan_updates,
                 hypothesis_model.scan_updates + hypothesis_model.bscan_updates).items()
+            other_params = set(vs.trainable_vars.keys()) - premise_model._vars
+            other_params -= hypothesis_model._vars
         else:
             error_signal = T.grad(total_cost, stack_top)
             model.make_backprop_scan(error_signal,
@@ -648,8 +650,9 @@ def run(only_forward=False):
             gradients = model.gradients
 
             new_values = model.scan_updates.items() + model.bscan_updates.items()
+            other_params = set(vs.trainable_vars.keys()) - model._vars
 
-        # Remove null gradients.
+        # Remove null stack parameter gradients.
         null_gradients = set()
         for key, val in gradients.iteritems():
             if val is None:
@@ -659,6 +662,11 @@ def run(only_forward=False):
                    % ", ".join(str(k) for k in null_gradients), logger.WARNING)
         for key in null_gradients:
             del gradients[key]
+
+        # Calculate gradients for items before/after stack fprop.
+        other_params = [vs.vars[param] for param in other_params]
+        other_grads = T.grad(total_cost, wrt=other_params)
+        gradients.update(zip(other_params, other_grads))
 
         new_values += util.RMSprop(total_cost, gradients.keys(), lr,
                                    grads=gradients.values())
