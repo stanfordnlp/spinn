@@ -884,7 +884,7 @@ def MakeEvalIterator(sources, batch_size):
         if len(candidate_batch[0]) == batch_size:
             data_iter.append(candidate_batch)
         else:
-            print "Skipping " + len(candidate_batch[0]) + " examples."
+            print "Skipping " + str(len(candidate_batch[0])) + " examples."
 
     for item in data_iter:
         assert len(item[0]) == batch_size   
