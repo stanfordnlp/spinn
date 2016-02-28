@@ -334,6 +334,13 @@ def evaluate(eval_fn, eval_set, logger, step):
         acc_accum += acc_value
         action_acc_accum += action_acc_value
         eval_batches += 1.0
+
+        # Zero out all auxiliary variables.
+        if data_manager.SENTENCE_PAIR_DATA:
+            premise_model.zero()
+            hypothesis_model.zero()
+        else:
+            model.zero()
     logger.Log("Step: %i\tEval acc: %f\t %f\t%s" %
               (step, acc_accum / eval_batches, action_acc_accum / eval_batches, eval_set[0]))
     return acc_accum / eval_batches
@@ -368,6 +375,13 @@ def evaluate_expanded(eval_fn, eval_set, eval_path, logger, step, sentence_pair_
                 acc_accum += acc_value
                 action_acc_accum += action_acc_value
                 eval_batches += 1.0
+
+                # Zero out all auxiliary variables.
+                if data_manager.SENTENCE_PAIR_DATA:
+                    premise_model.zero()
+                    hypothesis_model.zero()
+                else:
+                    model.zero()
 
                 # write each predicted transition to file
                 for orig_transitions, pred_logit_hyp, pred_logit_prem, tokens, true_class, example_sem_logits \
