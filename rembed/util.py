@@ -636,80 +636,70 @@ def batch_subgraph_gradients(g_in, wrt, f_g_out, batch_size=None,
           corresponding `wrt` element.
     """
 
-    # Prepare graph inputs.
-    g_in = [in_i if isinstance(in_i, T.TensorVariable)
-            else tensorx("%s/in_%i" % (name, i), in_i)
-            for i, in_i in enumerate(g_in)]
+    wrt = tuple(wrt)
 
-    # Build feedforward graph.
-    g_out = f_g_out(*g_in)
-    # Make sure it's a list of outputs.
-    g_out = [g_out] if not isinstance(g_out, (list, tuple)) else g_out
+    def deltas(b_inps, b_grads):
+        b_inps = tuple(b_inps)
 
-    # Prepare symbolic gradient variables for each of the graph outputs.
-    grads_above = [tensorx("%s/grad_%s" % (name, out_i.name or i), out_i.ndim)
-                   for i, out_i in enumerate(g_out)]
-    known_grads = dict(zip(g_out, grads_above))
+        # Build feedforward graph.
+        b_out = f_g_out(*b_inps)
+        # Make sure it's a list of outputs.
+        b_out = [b_out] if not isinstance(b_out, (list, tuple)) else b_out
 
-    def dot_grad_override(op, inp, grads):
-        x, y = inp
-        xdim, ydim = x.type.ndim, y.type.ndim
+        def dot_grad_override(op, inp, grads):
+            x, y = inp
+            xdim, ydim = x.type.ndim, y.type.ndim
 
-        # HACK: Get super grads
-        gz, = grads
-        xgrad, ygrad = op.grad(inp, grads)
+            # HACK: Get super grads
+            gz, = grads
+            xgrad, ygrad = op.grad(inp, grads)
 
-        if xdim == ydim == 2:
-            # HACK: Compute the Jacobian of this `dot` op. We will yield a
-            # rank-3 tensor rather than a gradient matrix.
-            ygrad = T.batched_dot(x.dimshuffle(0, 1, "x"),
-                                  gz.dimshuffle(0, "x", 1))
+            if xdim == ydim == 2:
+                # HACK: Compute the Jacobian of this `dot` op. We will yield a
+                # rank-3 tensor rather than a gradient matrix.
+                ygrad = T.batched_dot(x.dimshuffle(0, 1, "x"),
+                                    gz.dimshuffle(0, "x", 1))
 
-        # TODO patternbroadcast?
+            # TODO patternbroadcast?
 
-        return xgrad, ygrad
+            return xgrad, ygrad
 
-    # Compute gradients of subgraph beginning at `g_in` and ending at `g_out`,
-    # where the cost gradient w.r.t. each `g_out` is given by the corresponding
-    # entry in `grads_above`.
-    d_all = T.grad(cost=None, wrt=g_in + wrt, known_grads=known_grads,
-                   consider_constant=g_in, disconnected_inputs="ignore",
-                   return_disconnected="None",
-                   use_overrides=set(wrt),
-                   grad_overrides={T.Dot: dot_grad_override})
-    d_in, d_wrt = d_all[:len(g_in)], d_all[len(g_in):]
+        # Compute gradients of subgraph beginning at `g_in` and ending at `g_out`,
+        # where the cost gradient w.r.t. each `g_out` is given by the corresponding
+        # entry in `grads_above`.
+        known_grads = dict(zip(b_out, b_grads))
+        d_all = T.grad(cost=None, wrt=b_inps + wrt,
+                       known_grads=known_grads,
+                       consider_constant=b_inps,
+                       disconnected_inputs="ignore",
+                       return_disconnected="None",
+                       use_overrides=set(wrt),
+                       grad_overrides={T.Dot: dot_grad_override})
+        d_in, d_wrt = d_all[:len(b_inps)], d_all[len(b_inps):]
 
-    # Strip any GPU<->host transfers that might have crept into this
-    # automatically constructed graph.
-    d_wrt = map(cuda_util.strip_transfer, d_wrt)
-    d_in = map(cuda_util.strip_transfer, d_in)
-    if d_wrt:
-        for i in range(len(d_wrt)):
-            if d_wrt[i] is None:
-                continue
-            # HACK: Strip off DimShuffle(Elemwise(DimShuffle(Sum))). This is what
-            # comes out for bias gradients.. don't ask me why.
-            if isinstance(d_wrt[i].owner.op, T.DimShuffle):
-                base = d_wrt[i].owner
-                if isinstance(base.inputs[0].owner.op, T.Elemwise):
-                    base = base.inputs[0].owner
-                    if isinstance(base.inputs[0].owner.op, T.DimShuffle):
+        # Strip any GPU<->host transfers that might have crept into this
+        # automatically constructed graph.
+        d_wrt = map(cuda_util.strip_transfer, d_wrt)
+        d_in = map(cuda_util.strip_transfer, d_in)
+        if d_wrt:
+            for i in range(len(d_wrt)):
+                if d_wrt[i] is None:
+                    continue
+                # HACK: Strip off DimShuffle(Elemwise(DimShuffle(Sum))). This is what
+                # comes out for bias gradients.. don't ask me why.
+                if isinstance(d_wrt[i].owner.op, T.DimShuffle):
+                    base = d_wrt[i].owner
+                    if isinstance(base.inputs[0].owner.op, T.Elemwise):
                         base = base.inputs[0].owner
-                        if isinstance(base.inputs[0].owner.op, T.Sum):
+                        if isinstance(base.inputs[0].owner.op, T.DimShuffle):
                             base = base.inputs[0].owner
-                            d_wrt[i] = base.inputs[0]
+                            if isinstance(base.inputs[0].owner.op, T.Sum):
+                                base = base.inputs[0].owner
+                                d_wrt[i] = base.inputs[0]
 
-    def gradients(b_in, b_grad):
-        replace = {g_in_i: in_i for g_in_i, in_i in zip(g_in, b_in)}
-        replace.update({grads_above_i: b_grad_i for grads_above_i, b_grad_i
-                        in zip(grads_above, b_grad)})
+        return d_in, d_wrt
 
-        d_wrt_ = [theano.clone(d_wrt_i, replace=replace) if d_wrt_i is not None else None for d_wrt_i in d_wrt]
-        d_in_ = [theano.clone(d_in_i, replace=replace) if d_in_i is not None else None for d_in_i in d_in]
-
-        return d_in_, d_wrt_
-
-    return gradients
+    return deltas
 
 
 def ensure_2d_arguments(f, squeeze_ret=True):
