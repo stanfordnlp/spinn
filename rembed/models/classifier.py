@@ -318,7 +318,7 @@ def build_transition_cost(logits, targets, num_transitions):
     return cost, acc
 
 
-def evaluate(eval_fn, eval_set, logger, step):
+def evaluate(eval_fn, eval_set, logger, step, sentence_pair_data=False):
     # Evaluate
     acc_accum = 0.0
     action_acc_accum = 0.0
@@ -336,7 +336,7 @@ def evaluate(eval_fn, eval_set, logger, step):
         eval_batches += 1.0
 
         # Zero out all auxiliary variables.
-        if data_manager.SENTENCE_PAIR_DATA:
+        if sentence_pair_data:
             premise_model.zero()
             hypothesis_model.zero()
         else:
@@ -377,7 +377,7 @@ def evaluate_expanded(eval_fn, eval_set, eval_path, logger, step, sentence_pair_
                 eval_batches += 1.0
 
                 # Zero out all auxiliary variables.
-                if data_manager.SENTENCE_PAIR_DATA:
+                if sentence_pair_data:
                     premise_model.zero()
                     hypothesis_model.zero()
                 else:
@@ -706,7 +706,7 @@ def run(only_forward=False):
         for step in range(step, FLAGS.training_steps):
             if step % FLAGS.eval_interval_steps == 0:
                 for index, eval_set in enumerate(eval_iterators):
-                    acc = evaluate(eval_fn, eval_set, logger, step)
+                    acc = evaluate(eval_fn, eval_set, logger, step, data_manager.SENTENCE_PAIR_DATA)
                     if FLAGS.ckpt_on_best_dev_error and index == 0 and (1 - acc) < 0.99 * best_dev_error and step > 1000:
                         best_dev_error = 1 - acc
                         logger.Log("Checkpointing with new best dev accuracy of %f" % acc)
