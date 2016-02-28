@@ -712,6 +712,11 @@ def run(only_forward=False):
                         vs.save_checkpoint(checkpoint_path + "_best", extra_vars=[step, best_dev_error])
 
             X_batch, transitions_batch, y_batch, num_transitions_batch = training_data_iter.next()
+            # HACK: Drop training batches which aren't well-sized. (Will only
+            # trigger for the final batch in a dataset.)
+            if X_batch.shape[0] != FLAGS.batch_size:
+                continue
+
             learning_rate = FLAGS.learning_rate * (FLAGS.learning_rate_decay_per_10k_steps ** (step / 10000))
             ret = update_fn(X_batch, transitions_batch, y_batch, num_transitions_batch,
                             learning_rate, 1.0, 1.0, np.exp(step*np.log(FLAGS.scheduled_sampling_exponent_base)))
