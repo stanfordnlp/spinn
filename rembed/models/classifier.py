@@ -505,7 +505,6 @@ def run(only_forward=False):
             util.MakeEvalIterator((e_X, e_transitions, e_y, e_num_transitions), FLAGS.batch_size)))
 
     # Set up the placeholders.
-
     y = T.vector("y", dtype="int32")
     lr = T.scalar("lr")
     training_mode = T.scalar("training_mode")  # 1: Training with dropout, 0: Eval

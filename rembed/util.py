@@ -896,6 +896,9 @@ def MakeEvalIterator(sources, batch_size):
             break
         data_iter.append(tuple(source[start:start + batch_size]
                                for source in sources))
+
+    for item in data_iter:
+        assert len(item[0]) == batch_size
     return data_iter
 
 
