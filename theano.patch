@@ -126,57 +126,99 @@ Only in theano/gof: opt.py.rej
 Only in theano-base/theano/gof: sandbox
 diff -x '*.pyc' -uwr theano-base/theano/gradient.py theano/gradient.py
 --- theano-base/theano/gradient.py	2016-02-25 15:14:41.434999962 -0800
-+++ theano/gradient.py	2016-02-27 20:10:36.933998714 -0800
-@@ -361,7 +361,8 @@
++++ theano/gradient.py	2016-02-28 14:38:31.291998413 -0800
+@@ -361,7 +361,9 @@
  
  def grad(cost, wrt, consider_constant=None,
           disconnected_inputs='raise', add_names=True,
 -         known_grads=None, return_disconnected='zero',
-+         known_grads=None, grad_overrides=None,
++         known_grads=None, use_overrides=None,
++         grad_overrides=None,
 +         return_disconnected='zero',
           null_gradients='raise'):
      """
      Return symbolic gradients for one or more variables with respect to some
-@@ -558,7 +559,8 @@
+@@ -558,7 +560,9 @@
              assert g.type.dtype in tensor.float_dtypes
  
      rval = _populate_grad_dict(var_to_app_to_idx,
 -                               grad_dict, wrt, cost_name)
 +                               grad_dict, wrt, cost_name,
++                               use_overrides=use_overrides,
 +                               overrides=grad_overrides)
  
      for i in xrange(len(rval)):
          if isinstance(rval[i].type, NullType):
-@@ -932,7 +934,8 @@
+@@ -932,7 +936,9 @@
  
  
  def _populate_grad_dict(var_to_app_to_idx,
 -                        grad_dict, wrt, cost_name=None):
 +                        grad_dict, wrt, cost_name=None,
++                        use_overrides=None,
 +                        overrides=None):
      """
          Helper function for grad function.
  
-@@ -963,6 +966,8 @@
+@@ -961,16 +967,26 @@
+     """
+     # build a dict mapping node to the terms node contributes to each of
      # its inputs' gradients
-     term_dict = OrderedDict()
+-    term_dict = OrderedDict()
++    g_term_dict = OrderedDict()
++    g_term_dict_overrides = OrderedDict()
  
+-    def access_term_cache(node):
++    use_overrides = use_overrides or set(wrt)
 +    overrides = overrides or {}
 +
-     def access_term_cache(node):
++    def access_term_cache(node, do_override=False):
          """ Populates term_dict[node] and returns it """
  
-@@ -1110,6 +1115,9 @@
++        if do_override:
++            term_dict = g_term_dict_overrides
++        else:
++            term_dict = g_term_dict
++
+         if node not in term_dict:
+ 
+             inputs = node.inputs
+ 
+-            output_grads = [access_grad_cache(var) for var in node.outputs]
++            output_grads = [access_grad_cache(var, do_override=do_override)
++                            for var in node.outputs]
+ 
+             # list of bools indicating if each output is connected to the cost
+             outputs_connected = [not isinstance(g.type, DisconnectedType)
+@@ -1110,6 +1126,9 @@
                                  str(o_shape) + " on an output of shape " +
                                  str(g_shape))
  
-+                if node.op.__class__ in overrides:
++                if do_override and node.op.__class__ in overrides:
 +                    input_grads = overrides[node.op.__class__](node.op, inputs, new_output_grads)
 +                else:
                  input_grads = node.op.grad(inputs, new_output_grads)
  
                  if input_grads is None:
-@@ -1292,11 +1300,17 @@
+@@ -1266,7 +1285,7 @@
+         return term_dict[node]
+ 
+     # populate grad_dict[var] and return it
+-    def access_grad_cache(var):
++    def access_grad_cache(var, do_override=False):
+         if var not in grad_dict:
+             # If var is not in grad_dict already, we must compute it
+             if var in var_to_app_to_idx:
+@@ -1276,7 +1295,7 @@
+                 for node in node_to_idx:
+                     for idx in node_to_idx[node]:
+ 
+-                        term = access_term_cache(node)[idx]
++                        term = access_term_cache(node, do_override=do_override)[idx]
+ 
+                         if not isinstance(term, gof.Variable):
+                             raise TypeError(
+@@ -1292,11 +1311,17 @@
                          if isinstance(term.type, DisconnectedType):
                              continue
  
@@ -199,13 +241,19 @@ diff -x '*.pyc' -uwr theano-base/theano/gradient.py theano/gradient.py
  
                          terms.append(term)
  
-@@ -1318,6 +1332,7 @@
+@@ -1318,10 +1343,12 @@
                  # this variable isn't connected to the cost in the
                  # computational graph
                  grad_dict[var] = disconnected_type()
 +
          # end if cache miss
          return grad_dict[var]
+ 
+-    rval = [access_grad_cache(elem) for elem in wrt]
++    rval = [access_grad_cache(elem, do_override=elem in use_overrides)
++            for elem in wrt]
+ 
+     return rval
  
 Only in theano-base/theano/misc: do_nightly_build
 Only in theano-base/theano/misc: do_nightly_build_send

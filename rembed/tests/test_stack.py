@@ -209,12 +209,13 @@ class ThinStackBackpropTestCase(unittest.TestCase, BackpropTestMixin):
         real_ret = f(X, transitions, y)
         b_cost, b_dW, b_db = real_ret[:3]
 
-        np.testing.assert_almost_equal(b_cost_sim, b_cost)
-        np.testing.assert_almost_equal(b_dW_sim, b_dW)
-        np.testing.assert_almost_equal(b_db_sim, b_db)
+        np.testing.assert_almost_equal(b_cost_sim, b_cost, decimal=4)
+        np.testing.assert_almost_equal(b_dW_sim, b_dW, decimal=4)
+        np.testing.assert_almost_equal(b_db_sim, b_db, decimal=4)
 
         if embedding_grad:
-            np.testing.assert_almost_equal(b_embedding_gradients_sim, real_ret[3])
+            np.testing.assert_almost_equal(b_embedding_gradients_sim, real_ret[3],
+                                           decimal=4)
 
     def test_backprop_with_embedding_gradients(self):
         self._test_backprop(True)

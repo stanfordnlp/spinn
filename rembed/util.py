@@ -651,13 +651,6 @@ def batch_subgraph_gradients(g_in, wrt, f_g_out, batch_size=None,
                    for i, out_i in enumerate(g_out)]
     known_grads = dict(zip(g_out, grads_above))
 
-    # Compute gradients of subgraph beginning at `g_in` and ending at `g_out`,
-    # where the cost gradient w.r.t. each `g_out` is given by the corresponding
-    # entry in `grads_above`.
-    d_in = T.grad(cost=None, wrt=g_in, known_grads=known_grads,
-                  consider_constant=g_in, disconnected_inputs="ignore",
-                  return_disconnected="None")
-
     def dot_grad_override(op, inp, grads):
         x, y = inp
         xdim, ydim = x.type.ndim, y.type.ndim
@@ -676,10 +669,15 @@ def batch_subgraph_gradients(g_in, wrt, f_g_out, batch_size=None,
 
         return xgrad, ygrad
 
-    d_wrt = T.grad(cost=None, wrt=wrt, known_grads=known_grads,
+    # Compute gradients of subgraph beginning at `g_in` and ending at `g_out`,
+    # where the cost gradient w.r.t. each `g_out` is given by the corresponding
+    # entry in `grads_above`.
+    d_all = T.grad(cost=None, wrt=g_in + wrt, known_grads=known_grads,
                    consider_constant=g_in, disconnected_inputs="ignore",
                    return_disconnected="None",
+                   use_overrides=set(wrt),
                    grad_overrides={T.Dot: dot_grad_override})
+    d_in, d_wrt = d_all[:len(g_in)], d_all[len(g_in):]
 
     # Strip any GPU<->host transfers that might have crept into this
     # automatically constructed graph.
