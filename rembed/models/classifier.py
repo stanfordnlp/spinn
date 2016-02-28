@@ -649,6 +649,16 @@ def run(only_forward=False):
 
             new_values = model.scan_updates.items() + model.bscan_updates.items()
 
+        # Remove null gradients.
+        null_gradients = set()
+        for key, val in gradients.iteritems():
+            if val is None:
+                null_gradients.add(key)
+        logger.Log("The following parameters have null (disconnected) cost "
+                   "gradients and will not be trained: %s"
+                   % ", ".join(str(k) for k in null_gradients), logger.WARNING)
+        for key in null_gradients:
+            del gradients[key]
 
         new_values += util.RMSprop(total_cost, gradients.keys(), lr,
                                    grads=gradients.values())

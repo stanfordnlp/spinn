@@ -690,19 +690,21 @@ def batch_subgraph_gradients(g_in, wrt, f_g_out, batch_size=None,
     # automatically constructed graph.
     d_wrt = map(cuda_util.strip_transfer, d_wrt)
     d_in = map(cuda_util.strip_transfer, d_in)
-    if d_wrt and d_wrt[1] is not None:
-        # HACK: Strip off DimShuffle(Elemwise(DimShuffle(Sum))). This is what
-        # comes out for bias gradients.. don't ask me why.
-        if isinstance(d_wrt[1].owner.op, T.DimShuffle):
-            base = d_wrt[1].owner
-            if isinstance(base.inputs[0].owner.op, T.Elemwise):
-                base = base.inputs[0].owner
-                if isinstance(base.inputs[0].owner.op, T.DimShuffle):
+    if d_wrt:
+        for i in range(len(d_wrt)):
+            if d_wrt[i] is None:
+                continue
+            # HACK: Strip off DimShuffle(Elemwise(DimShuffle(Sum))). This is what
+            # comes out for bias gradients.. don't ask me why.
+            if isinstance(d_wrt[i].owner.op, T.DimShuffle):
+                base = d_wrt[i].owner
+                if isinstance(base.inputs[0].owner.op, T.Elemwise):
                     base = base.inputs[0].owner
-                    if isinstance(base.inputs[0].owner.op, T.Sum):
+                    if isinstance(base.inputs[0].owner.op, T.DimShuffle):
                         base = base.inputs[0].owner
-                        newval = base.inputs[0]
-                        d_wrt[1] = newval
+                        if isinstance(base.inputs[0].owner.op, T.Sum):
+                            base = base.inputs[0].owner
+                            d_wrt[i] = base.inputs[0]
 
     def gradients(b_in, b_grad):
         replace = {g_in_i: in_i for g_in_i, in_i in zip(g_in, b_in)}
@@ -715,137 +717,6 @@ def batch_subgraph_gradients(g_in, wrt, f_g_out, batch_size=None,
         return d_in_, d_wrt_
 
     return gradients
-
-
-    # n_in, n_grad = len(g_in), len(grads_above)
-
-    # def batch_gradients(b_in, b_grad):
-    #     """
-    #     Compute `d_wrt` and `d_in` for the given batch of inputs and gradients.
-
-    #     This method computes a scan over the batch. This may be inefficient for
-    #     some simple gradients.
-
-    #     For full spec, see documentation of containing function
-    #     `batch_subgraph_gradients`.
-    #     """
-    #     for j, (b_in_j, g_in_j) in enumerate(zip(b_in, g_in)):
-    #         assert b_in_j.ndim == g_in_j.ndim + 1, \
-    #             ("Batch inputs must conform with expected graph input dimensionality."
-    #              " (#%i: batch %i, sym %i)" % (j, b_in_j.ndim, g_in_j.ndim))
-    #     for j, (b_grad_j, grad_j) in enumerate(zip(b_grad, grads_above)):
-    #         assert b_grad_j.ndim == grad_j.ndim + 1, \
-    #             ("Batch gradients must conform with expected graph gradient dimensionality."
-    #              " (#%i: batch %i, sym %i)" % (j, b_grad_j.ndim, grad_j.ndim))
-
-    #     # Some gradients may be `None` (i.e., there is no differentiable path
-    #     # between an input / a wrt variable and any output). We should
-    #     # intelligently skip accumulating gradients for these variables.
-    #     #
-    #     # Just keep a map of index in scan output -> index in d_wrt or d_in:
-    #     d_in_idxs = [i for i, d_in_i in enumerate(d_in)
-    #                  if d_in_i is not None]
-    #     d_wrt_idxs = [i for i, d_wrt_i in enumerate(d_wrt)
-    #                   if d_wrt_i is not None]
-    #     # Remove all the uninteresting disconnected gradients now:
-    #     b_in_squashed, d_in_squashed = [], []
-    #     for b_in_j, d_in_j in zip(b_in, d_in):
-    #         if d_in_j is not None:
-    #             b_in_squashed.append(b_in_j)
-    #             d_in_squashed.append(d_in_j)
-    #     d_wrt_squashed = filter(None, d_wrt)
-
-    #     n_in_squashed = len(d_in_squashed)
-    #     n_wrt_squashed = len(d_wrt_squashed)
-    #     n_outputs = n_in_squashed + n_wrt_squashed
-
-    #     ret_inp = [None] * n_in
-    #     ret_wrt = [None] * len(wrt)
-
-    #     if n_in_squashed + n_wrt_squashed == 0:
-    #         # No gradients! Just send out Nones.
-    #         return ret_inp, ret_wrt
-
-    #     replace = {g_in_i: in_i for g_in_i, in_i in zip(g_in, b_in)}
-    #     replace.update({grads_above_i: b_grad_i for grads_above_i, b_grad_i
-    #                     in zip(grads_above, b_grad)})
-
-    #     for i, d_in_i in enumerate(d_in):
-    #         if d_in_i is not None:
-    #             ret_inp[i] = theano.clone(d_in_i, replace=replace)
-    #     for i, d_wrt_i in enumerate(d_wrt):
-    #         if d_wrt_i is not None:
-    #             ret_wrt[i] = theano.clone(d_wrt_i, replace=replace)
-
-    #     # def gradients_j(source, *inputs):
-    #     #     """Compute gradient `j` for all examples."""
-    #     #     t = inputs[0]
-    #     #     inp = inputs[1:1 + n_in_squashed]
-    #     #     grads = inputs[1 + n_in_squashed:1 + n_in_squashed + n_grad]
-
-    #     #     replace = {g_in_i: in_i for g_in_i, in_i in zip(g_in, inp)}
-    #     #     replace.update({grads_above_i: grad_i for grads_above_i, grad_i
-    #     #                     in zip(grads_above, grads)})
-
-    #     #     return theano.clone(source[t], replace=replace)
-
-    #     # ds_in = theano.scan(partial(gradients_j, d_in),
-    #     #                     sequences=[T.constant(d_in_idxs)] + b_in_squashed + list(b_grad),
-    #     #                     outputs_info=[None],
-    #     #                     non_sequences=extra_scan_inputs,
-    #     #                     n_steps=n_in_squashed,
-    #     #                     strict=True,
-    #     #                     name="%s/inp_scan" % name)[0]
-    #     # ds_wrt = theano.scan(partial(gradients_j, d_wrt),
-    #     #                      sequences=[T.constant(d_wrt_idxs)] + b_in_squashed + list(b_grad),
-    #     #                      outputs_info=[None],
-    #     #                      non_sequences=extra_scan_inputs,
-    #     #                      n_steps=n_wrt_squashed,
-    #     #                      strict=True,
-    #     #                      name="%s/wrt_scan" % name)[0]
-
-    #     # def gradients_i(*inputs):
-    #     #     """Compute all gradients for example `i`."""
-    #     #     in_i = inputs[:n_in_squashed]
-    #     #     grad_i = inputs[n_in_squashed:n_in_squashed + n_grad]
-
-    #     #     # Build a clone of the subgradient graph with the actual batch
-    #     #     # inputs and gradients.
-    #     #     replace = {g_in_j: in_ij for g_in_j, in_ij in zip(g_in, in_i)}
-    #     #     replace.update({grads_above_j: grad_ij for grads_above_j, grad_ij
-    #     #                     in zip(grads_above, grad_i)})
-
-    #     #     # Clone each of the `j` gradient expressions for this example `i`.
-    #     #     d_in_ij = [theano.clone(d_in_j, replace=replace)
-    #     #                for d_in_j in d_in_squashed]
-    #     #     d_wrt_ij = [theano.clone(d_wrt_j, replace=replace)
-    #     #                 for d_wrt_j in d_wrt_squashed]
-
-    #     #     return d_in_ij + d_wrt_ij
-
-    #     # # Calculate gradients independently for each example.
-    #     # try:
-    #     #     ds = theano.scan(gradients_i,
-    #     #                      sequences=b_in_squashed + list(b_grad),
-    #     #                      outputs_info=[None] * n_outputs,
-    #     #                      non_sequences=extra_scan_inputs,
-    #     #                      n_steps=batch_size,
-    #     #                      strict=True,
-    #     #                      name="%s/scan" % name)[0]
-    #     # except MissingInputError, e:
-    #     #     raise ValueError("batch_subgraph_gradients scan operates only in "
-    #     #                      "strict mode; pass all auxiliary values in a "
-    #     #                      "collection as argument `extra_scan_inputs`")
-
-# #         # For gradients which are not none, copy onto `ret_*`
-# #         for ds_in_j, destination_j in zip(ds_in, d_in_idxs):
-# #             ret_inp[destination_j] = ds_in_j
-# #         for ds_wrt_j, destination_j in zip(ds_wrt, d_wrt_idxs):
-# #             ret_wrt[destination_j] = ds_wrt_j
-
-    #     return ret_inp, ret_wrt
-
-    # return batch_gradients
 
 
 def ensure_2d_arguments(f, squeeze_ret=True):

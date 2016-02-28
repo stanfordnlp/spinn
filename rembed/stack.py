@@ -743,7 +743,7 @@ class ThinStack(object):
 #                strict=True,
                 name=self._prefix + "stack_bwd")
 
-        self.gradients = {wrt_i: self.bscan_updates[wrt_var]
+        self.gradients = {wrt_i: self.bscan_updates.get(wrt_var)
                           for wrt_i, wrt_var in zip(wrt, wrt_vars)}
         if compute_embedding_gradients:
             self.embedding_gradients = self.bscan_updates[dE]
