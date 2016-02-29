@@ -631,6 +631,10 @@ def run(only_forward=False):
         # Train
         extra_cost_inputs = [y, training_mode, ground_truth_transitions_visible]
         if data_manager.SENTENCE_PAIR_DATA:
+            # The two models use slices of the original data.
+            # Pass the original data as a non-sequence input as well.
+            extra_cost_inputs += [X, transitions]
+
             premise_error_signal = T.grad(total_cost, premise_stack_top)
             premise_model.make_backprop_scan(premise_error_signal,
                                              extra_cost_inputs=extra_cost_inputs,
