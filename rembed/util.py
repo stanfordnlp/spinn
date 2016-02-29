@@ -156,10 +156,6 @@ class VariableStore(object):
             keys = self.savable_vars
         save_file = open(filename, 'w')  # this will overwrite current contents
         for key in keys:
-            if self.logger:
-                full_name = "%s/%s" % (self.prefix, key)
-                self.logger.Log(
-                    "Saving variable " + full_name, level=self.logger.DEBUG)
             cPickle.dump(self.vars[key].get_value(borrow=True), save_file, -1)  # the -1 is for HIGHEST_PROTOCOL
         for var in extra_vars:
             cPickle.dump(var, save_file, -1)

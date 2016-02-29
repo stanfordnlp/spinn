@@ -735,8 +735,8 @@ if __name__ == '__main__':
     gflags.DEFINE_float("transition_cost_scale", 1.0, "Multiplied by the transition cost.")
 
     # Display settings.
-    gflags.DEFINE_integer("statistics_interval_steps", 50, "Print training set results at this interval.")
-    gflags.DEFINE_integer("eval_interval_steps", 50, "Evaluate at this interval.")
+    gflags.DEFINE_integer("statistics_interval_steps", 100, "Print training set results at this interval.")
+    gflags.DEFINE_integer("eval_interval_steps", 100, "Evaluate at this interval.")
 
     gflags.DEFINE_integer("ckpt_interval_steps", 5000, "Update the checkpoint on disk at this interval.")
     gflags.DEFINE_boolean("ckpt_on_best_dev_error", True, "If error on the first eval set (the dev set) is "
