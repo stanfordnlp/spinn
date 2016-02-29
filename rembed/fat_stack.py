@@ -253,19 +253,22 @@ class HardStack(object):
 
         if self._prediction_and_tracking_network is not None:
             # We are predicting our own stack operations.
+            h_dim = self.model_dim / 2 # TODO(SB): Turn this off when not using TreeLSTM.
+
             predict_inp = T.concatenate(
-                [stack_t[:, 0, :self.model_dim], stack_t[:, 1, :self.model_dim], buffer_top_t], axis=1)
+                [stack_t[:, 0, :h_dim], stack_t[:, 1, :h_dim], 
+                buffer_top_t / 2], axis=1)
 
             if self.use_tracking_lstm:
                 # Update the hidden state and obtain predicted actions.
                 tracking_hidden, actions_t = self._prediction_and_tracking_network(
-                    tracking_hidden, predict_inp, self.model_dim * 3,
+                    tracking_hidden, predict_inp, h_dim * 3,
                     self.tracking_lstm_hidden_dim, self._vs,
                     name="prediction_and_tracking")
             else:
                 # Obtain predicted actions directly.
                 actions_t = self._prediction_and_tracking_network(
-                    predict_inp, self.model_dim * 3, util.NUM_TRANSITION_TYPES, self._vs,
+                    predict_inp, h_dim * 3, util.NUM_TRANSITION_TYPES, self._vs,
                     name="prediction_and_tracking")
 
         if self.train_with_predicted_transitions:
