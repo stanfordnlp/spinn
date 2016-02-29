@@ -548,6 +548,7 @@ class ThinStack(object):
         zero_stack = T.zeros((self.batch_size, self.model_dim))
         zero_extra_inps = [T.zeros((self.batch_size, extra_shape[-1]))
                            for extra_shape in self.recurrence.extra_outputs]
+        zero_wrts = [T.zeros(wrt_shape) for wrt_shape in wrt_shapes]
 
         batch_size = self.batch_size
         batch_range = T.arange(batch_size)
@@ -675,7 +676,7 @@ class ThinStack(object):
 
             # Accumulate wrt deltas, switching over push/merge decision.
             new_wrt_deltas = {}
-            for i, (wrt_var, accum_delta, m_delta, p_delta) in enumerate(zip(wrt, wrt_deltas, m_delta_wrt, p_delta_wrt)):
+            for i, (wrt_var, wrt_zero, accum_delta, m_delta, p_delta) in enumerate(zip(wrt, zero_wrts, wrt_deltas, m_delta_wrt, p_delta_wrt)):
                 if m_delta is None and p_delta is None:
                     # Disconnected gradient.
                     continue
@@ -689,15 +690,15 @@ class ThinStack(object):
 
                 mask_i = masks[(m_delta or p_delta).ndim - 1]
                 if m_delta is None:
-                    delta = (1. - mask_i) * p_delta
+                    delta = T.switch(mask_i, wrt_zero, p_delta)
                 elif p_delta is None:
-                    delta = mask_i * m_delta
+                    delta = T.switch(mask_i, m_delta, wrt_zero)
                 else:
-                    delta = mask_i * m_delta + (1. - mask_i) * p_delta
+                    delta = T.switch(mask_i, m_delta, p_delta)
                 # TODO: Is this at all efficient? (Bring back GPURowSwitch?)
                 delta = delta.sum(axis=0)
                 # TODO: we want this to be inplace
-                new_wrt_deltas[accum_delta] = cuda_util.add_inplace(accum_delta, delta)
+                new_wrt_deltas[accum_delta] = accum_delta + delta
 
             # On push ops, backprop the stack_bwd error onto the embedding
             # parameters.

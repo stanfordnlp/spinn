@@ -1,3 +1,4 @@
+from functools import wraps
 import os.path
 
 import theano
@@ -6,7 +7,7 @@ from theano import tensor as T
 from theano.sandbox.cuda import GpuOp, as_cuda_ndarray_variable, device_properties
 from theano.sandbox.cuda.basic_ops import (gpu_contiguous, GpuFromHost, HostFromGpu,
                                            gpu_from_host, host_from_gpu, GpuJoin)
-from theano.sandbox.cuda.opt import register_opt, local_optimizer
+from theano.sandbox.cuda.opt import register_opt, local_optimizer, register_specialize_device
 from theano.sandbox.cuda.type import CudaNdarrayType
 from theano.tensor.basic import _scal_elemwise
 
@@ -26,8 +27,22 @@ def strip_transfer(variable):
     return variable
 
 
+def elemwise_add_force_inplace_tag(fn):
+    def inner(*args, **kwargs):
+        var = fn(*args, **kwargs)
+        var.owner.op.scalar_op.is_mask = True
+        return var
+    return inner
+
+
+@elemwise_add_force_inplace_tag
 @_scal_elemwise
 def add_inplace(a, *others):
+    pass
+
+@elemwise_add_force_inplace_tag
+@_scal_elemwise
+def mul_inplace(a, *others):
     pass
 
 
@@ -988,3 +1003,336 @@ def local_gpu_join_unsafe(node):
             replacement_node = host_from_gpu(GpuJoinUnsafe()(*new_a_and_t))
 
             return [replacement_node]
+
+
+class GpuRowSwitch(GpuOp):
+    """
+    Row-wise switch between rank-2 matrices on the GPU.
+    DOES NOT support broadcasting arguments (e.g. T.switch(mask, A, 0)).
+    >>> A
+    [[ 0.01902644  0.70658928  0.10509603]
+     [ 0.2654964   0.08410256  0.96556276]
+     [ 0.06885902  0.49623388  0.18812495]
+     [ 0.56566966  0.52721274  0.48890418]]
+    >>> B
+    [[ 0.44089654  0.46353787  0.59428871]
+     [ 0.88936949  0.74785614  0.80535758]
+     [ 0.88973558  0.21844074  0.12561291]
+     [ 0.01211281  0.86583334  0.9793455 ]]
+    >>> mask
+    [1 0 0 1]
+    >>> GpuRowSwitch()(mask, A, B).eval()
+    [[ 0.01902644  0.70658928  0.10509603]
+     [ 0.88936949  0.74785614  0.80535758]
+     [ 0.88973558  0.21844074  0.12561291]
+     [ 0.56566966  0.52721274  0.48890418]]
+    """
+
+    nin = 3
+    nout = 1
+
+    def make_node(self, cond, ift, iff):
+        if any(ift.broadcastable) or any(iff.broadcastable):
+            raise ValueError("GPURowSwitch cannot operate on broadcastable "
+                             "output arguments (ift %s, iff %s)."
+                             % ift.broadcastable, iff.broadcastable)
+        out_type = ift.dtype
+
+        cond = as_cuda_ndarray_variable(
+                T.cast(cond.flatten(), "float32"))
+        ift = as_cuda_ndarray_variable(ift)
+        iff = as_cuda_ndarray_variable(iff)
+
+        assert ift.type.dtype == iff.type.dtype
+        assert cond.ndim == 1, cond.ndim
+        assert ift.ndim == iff.ndim
+
+        return gof.Apply(self, [cond, ift, iff],
+                         [CudaNdarrayType(broadcastable=ift.broadcastable,
+                                          dtype=out_type)()])
+
+    def perform(self, node, inp, out):
+        raise NotImplementedError("GPUSwitch is GPU only")
+
+    def c_support_code(self):
+        """Defines the abstract row-switching kernel used in this op."""
+
+        return """
+__global__ void k_row_switch(int ndim,
+                             int shape1, int shape2, int shape3,
+                             int stride1, int stride2, int stride3,
+                             const float* cond, const float* ift,
+                             const float* iff, float* out) {
+  // batch index
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  if (idx < 0 || idx >= shape1) {
+    return;
+  }
+  const float *src = ((int) cond[idx]) ? ift : iff;
+  int offset = idx * stride1;
+  int lastDim = ndim == 2 ? shape2 : shape3;
+  int lastStride = ndim == 2 ? stride2 : stride3;
+  if (ndim == 3) {
+      // index within the example
+      int axis1_idx = blockIdx.y * blockDim.y + threadIdx.y;
+      offset += axis1_idx * stride2;
+  }
+  for (int j = 0; j < lastDim; j++) {
+    out[offset + j * lastStride] = src[offset + j * lastStride];
+  }
+  return;
+}
+""" % locals()
+
+    def c_code(self, node, name, inp, out, sub):
+        """Generates code to instantiate this op for these particular inputs."""
+
+        cond, ift, iff = inp
+        out, = out
+        fail = sub["fail"]
+
+        return """
+int err, N, N2, ndim;
+cudaError_t sts;
+int threads_per_block1, n_blocks1;
+int threads_per_block2 = 1, n_blocks2 = 1;
+const int *dims, *strides;
+N = CudaNdarray_SIZE(%(cond)s);
+printf("size %%d\\n", N);
+ndim = CudaNdarray_NDIM(%(ift)s);
+switch (ndim) {
+    case 3:
+        N2 = CudaNdarray_HOST_DIMS(%(ift)s)[1];
+        threads_per_block2 = std::min(N2, NUM_VECTOR_OP_THREADS_PER_BLOCK);
+        n_blocks2 = std::min(NUM_VECTOR_OP_BLOCKS,
+                             (N2 + NUM_VECTOR_OP_THREADS_PER_BLOCK - 1) / NUM_VECTOR_OP_THREADS_PER_BLOCK);
+        // NB: no break!
+    case 2:
+        threads_per_block1 = std::min(N, NUM_VECTOR_OP_THREADS_PER_BLOCK);
+        n_blocks1 = std::min(NUM_VECTOR_OP_BLOCKS,
+                             (N + NUM_VECTOR_OP_THREADS_PER_BLOCK - 1) / NUM_VECTOR_OP_THREADS_PER_BLOCK);
+        break;
+    default:
+        return 1;
+}
+dim3 n_blocks(n_blocks1, n_blocks2);
+dim3 threads_per_block(threads_per_block1, threads_per_block2);
+// Allocate the output array
+Py_XDECREF(%(out)s);
+%(out)s = (CudaNdarray *) CudaNdarray_NewDims(ndim, CudaNdarray_HOST_DIMS(%(ift)s));
+if (!%(out)s) {
+    %(fail)s;
+}
+dims = CudaNdarray_DIMS(%(ift)s);
+strides = CudaNdarray_STRIDES(%(ift)s);
+// Instantiate the kernel.
+//
+// TODO: Assumes stride of ift, iff are the same
+k_row_switch<<<n_blocks, threads_per_block>>>(
+    ndim,
+    dims[0], dims[1], dims[2],
+    strides[0], strides[1], strides[2],
+    CudaNdarray_DEV_DATA(%(cond)s),
+    CudaNdarray_DEV_DATA(%(ift)s),
+    CudaNdarray_DEV_DATA(%(iff)s),
+    CudaNdarray_DEV_DATA(%(out)s));
+// Force async kernel instances to sync at this thread barrier
+CNDA_THREAD_SYNC;
+sts = cudaGetLastError();
+if (cudaSuccess != sts) {
+    PyErr_Format(PyExc_RuntimeError, "Cuda error: k_row_switch: %%s.",
+                 cudaGetErrorString(sts));
+    %(fail)s;
+}
+""" % locals()
+
+
+@register_specialize_device("fast_compile")
+@local_optimizer([theano.tensor.Elemwise, theano.scalar.Switch])
+def local_gpua_row_switch(node):
+    """
+    Detects eligible Switch instances and replaces them with a GPU
+    row switch.
+    """
+
+    print "-------------", node, node.op.scalar_op.__class__
+    if (node.op.__class__ == T.Elemwise
+        and node.op.scalar_op.__class__ != theano.scalar.Switch):
+        return False
+    print "\tstill here!"
+
+    cond, ift, iff = node.inputs
+    out, = node.outputs
+
+    # Only applies to Switch instances where a vector mask broadcasts over
+    # matrices.
+    bcast = cond.broadcastable
+    print "\t", bcast
+    if not bcast or not (not bcast[0] and all(bcast[1:])
+                         and ift.ndim in [2, 3]):
+        return False
+
+    if not (ift.dtype == iff.dtype == "float32"):
+        return False
+
+    if cond.owner and isinstance(cond.owner.op, HostFromGpu):
+        gpu_cond, = cond.owner.inputs
+    else:
+        gpu_cond = as_cuda_ndarray_variable(
+                T.cast(cond.flatten(), "float32"))
+
+    if ift.owner and isinstance(ift.owner.op, HostFromGpu):
+        gpu_ift, = ift.owner.inputs
+    else:
+        gpu_ift = as_cuda_ndarray_variable(ift)
+
+    if iff.owner and isinstance(iff.owner.op, HostFromGpu):
+        gpu_iff, = iff.owner.inputs
+    else:
+        gpu_iff = as_cuda_ndarray_variable(iff)
+
+    gpu_op = GpuRowSwitch()
+    return [HostFromGpu()(gpu_op(cond, gpu_ift, gpu_iff))]
+
+
+class GpuTensorMaskedAccum(GpuOp):
+    """
+    Row-wise switch between rank-2 matrices on the GPU.
+    DOES NOT support broadcasting arguments (e.g. T.switch(mask, A, 0)).
+    >>> A
+    [[ 0.01902644  0.70658928  0.10509603]
+     [ 0.2654964   0.08410256  0.96556276]
+     [ 0.06885902  0.49623388  0.18812495]
+     [ 0.56566966  0.52721274  0.48890418]]
+    >>> B
+    [[ 0.44089654  0.46353787  0.59428871]
+     [ 0.88936949  0.74785614  0.80535758]
+     [ 0.88973558  0.21844074  0.12561291]
+     [ 0.01211281  0.86583334  0.9793455 ]]
+    >>> mask
+    [1 0 0 1]
+    >>> GpuRowSwitch()(mask, A, B).eval()
+    [[ 0.01902644  0.70658928  0.10509603]
+     [ 0.88936949  0.74785614  0.80535758]
+     [ 0.88973558  0.21844074  0.12561291]
+     [ 0.56566966  0.52721274  0.48890418]]
+    """
+
+    nin = 3
+    nout = 1
+
+    def make_node(self, cond, ift, iff):
+        if any(ift.broadcastable) or any(iff.broadcastable):
+            raise ValueError("GPURowSwitch cannot operate on broadcastable "
+                             "output arguments (ift %s, iff %s)."
+                             % ift.broadcastable, iff.broadcastable)
+        out_type = ift.dtype
+
+        cond = as_cuda_ndarray_variable(
+                T.cast(cond.flatten(), "float32"))
+        ift = as_cuda_ndarray_variable(ift)
+        iff = as_cuda_ndarray_variable(iff)
+
+        assert ift.type.dtype == iff.type.dtype
+        assert cond.ndim == 1, cond.ndim
+        assert ift.ndim == iff.ndim
+
+        return gof.Apply(self, [cond, ift, iff],
+                         [CudaNdarrayType(broadcastable=ift.broadcastable,
+                                          dtype=out_type)()])
+
+    def perform(self, node, inp, out):
+        raise NotImplementedError("GPUSwitch is GPU only")
+
+    def c_support_code(self):
+        """Defines the abstract row-switching kernel used in this op."""
+
+        return """
+__global__ void k_row_switch(int ndim,
+                             int shape1, int shape2, int shape3,
+                             int stride1, int stride2, int stride3,
+                             const float* cond, const float* ift,
+                             const float* iff, float* out) {
+  // batch index
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  if (idx < 0 || idx >= shape1) {
+    return;
+  }
+  const float *src = ((int) cond[idx]) ? ift : iff;
+  int offset = idx * stride1;
+  int lastDim = ndim == 2 ? shape2 : shape3;
+  int lastStride = ndim == 2 ? stride2 : stride3;
+  if (ndim == 3) {
+      // index within the example
+      int axis1_idx = blockIdx.y * blockDim.y + threadIdx.y;
+      offset += axis1_idx * stride2;
+  }
+  for (int j = 0; j < lastDim; j++) {
+    out[offset + j * lastStride] = src[offset + j * lastStride];
+  }
+  return;
+}
+""" % locals()
+
+    def c_code(self, node, name, inp, out, sub):
+        """Generates code to instantiate this op for these particular inputs."""
+
+        cond, ift, iff = inp
+        out, = out
+        fail = sub["fail"]
+
+        return """
+int err, N, N2, ndim;
+cudaError_t sts;
+int threads_per_block1, n_blocks1;
+int threads_per_block2 = 1, n_blocks2 = 1;
+const int *dims, *strides;
+N = CudaNdarray_SIZE(%(cond)s);
+printf("size %%d\\n", N);
+ndim = CudaNdarray_NDIM(%(ift)s);
+switch (ndim) {
+    case 3:
+        N2 = CudaNdarray_HOST_DIMS(%(ift)s)[1];
+        threads_per_block2 = std::min(N2, NUM_VECTOR_OP_THREADS_PER_BLOCK);
+        n_blocks2 = std::min(NUM_VECTOR_OP_BLOCKS,
+                             (N2 + NUM_VECTOR_OP_THREADS_PER_BLOCK - 1) / NUM_VECTOR_OP_THREADS_PER_BLOCK);
+        // NB: no break!
+    case 2:
+        threads_per_block1 = std::min(N, NUM_VECTOR_OP_THREADS_PER_BLOCK);
+        n_blocks1 = std::min(NUM_VECTOR_OP_BLOCKS,
+                             (N + NUM_VECTOR_OP_THREADS_PER_BLOCK - 1) / NUM_VECTOR_OP_THREADS_PER_BLOCK);
+        break;
+    default:
+        return 1;
+}
+dim3 n_blocks(n_blocks1, n_blocks2);
+dim3 threads_per_block(threads_per_block1, threads_per_block2);
+// Allocate the output array
+Py_XDECREF(%(out)s);
+%(out)s = (CudaNdarray *) CudaNdarray_NewDims(ndim, CudaNdarray_HOST_DIMS(%(ift)s));
+if (!%(out)s) {
+    %(fail)s;
+}
+dims = CudaNdarray_DIMS(%(ift)s);
+strides = CudaNdarray_STRIDES(%(ift)s);
+// Instantiate the kernel.
+//
+// TODO: Assumes stride of ift, iff are the same
+k_row_switch<<<n_blocks, threads_per_block>>>(
+    ndim,
+    dims[0], dims[1], dims[2],
+    strides[0], strides[1], strides[2],
+    CudaNdarray_DEV_DATA(%(cond)s),
+    CudaNdarray_DEV_DATA(%(ift)s),
+    CudaNdarray_DEV_DATA(%(iff)s),
+    CudaNdarray_DEV_DATA(%(out)s));
+// Force async kernel instances to sync at this thread barrier
+CNDA_THREAD_SYNC;
+sts = cudaGetLastError();
+if (cudaSuccess != sts) {
+    PyErr_Format(PyExc_RuntimeError, "Cuda error: k_row_switch: %%s.",
+                 cudaGetErrorString(sts));
+    %(fail)s;
+}
+""" % locals()
+
