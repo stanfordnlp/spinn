@@ -28,10 +28,8 @@ FIXED_PARAMETERS = {
     "word_embedding_dim":	"300",
     "model_dim":   "300",
     "seq_length":	"100",
-    "eval_seq_length":	"150",
-    "clipping_max_value":  "5.0",
+    "eval_seq_length":	"100",
     "batch_size":  "32",
-    "init_range": "0.005",
     "ckpt_path":    os.path.join("/scr/", getpass.getuser(), "/"),  # Launching user's home scr dir
     "log_path":    os.path.join("/scr/", getpass.getuser(),  "/")  # Launching user's home scr dir
 }

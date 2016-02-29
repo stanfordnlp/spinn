@@ -804,9 +804,9 @@ if __name__ == '__main__':
     gflags.DEFINE_integer("batch_size", 32, "SGD minibatch size.")
     gflags.DEFINE_float("learning_rate", 0.001, "Used in RMSProp.")
     gflags.DEFINE_float("learning_rate_decay_per_10k_steps", 0.75, "Used in RMSProp.")
-    gflags.DEFINE_float("clipping_max_value", 1.0, "")
+    gflags.DEFINE_float("clipping_max_value", 5.0, "")
     gflags.DEFINE_float("l2_lambda", 1e-5, "")
-    gflags.DEFINE_float("init_range", 0.01, "Mainly used for softmax parameters. Range for uniform random init.")
+    gflags.DEFINE_float("init_range", 0.005, "Mainly used for softmax parameters. Range for uniform random init.")
     gflags.DEFINE_float("transition_cost_scale", 1.0, "Multiplied by the transition cost.")
 
     # Display settings.
