@@ -720,7 +720,7 @@ def run(only_forward=False):
             if X_batch.shape[0] != FLAGS.batch_size:
                 continue
 
-            learning_rate = FLAGS.learning_rate * (FLAGS.learning_rate_decay_per_10k_steps ** (step / 10000))
+            learning_rate = FLAGS.learning_rate * (FLAGS.learning_rate_decay_per_10k_steps ** (step / 10000.0))
             ret = update_fn(X_batch, transitions_batch, y_batch, num_transitions_batch,
                             learning_rate, 1.0, 1.0, np.exp(step*np.log(FLAGS.scheduled_sampling_exponent_base)))
             total_cost_val, xent_cost_val, transition_cost_val, action_acc_val, l2_cost_val, acc_val = ret
