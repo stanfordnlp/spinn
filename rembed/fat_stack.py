@@ -256,8 +256,7 @@ class HardStack(object):
             h_dim = self.model_dim / 2 # TODO(SB): Turn this off when not using TreeLSTM.
 
             predict_inp = T.concatenate(
-                [stack_t[:, 0, :h_dim], stack_t[:, 1, :h_dim], 
-                buffer_top_t / 2], axis=1)
+                [stack_t[:, 0, :h_dim], stack_t[:, 1, :h_dim], buffer_top_t[:, :h_dim]], axis=1)
 
             if self.use_tracking_lstm:
                 # Update the hidden state and obtain predicted actions.
