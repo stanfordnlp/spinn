@@ -23,6 +23,7 @@ from functools import partial
 import os
 import pprint
 import sys
+import time
 
 import gflags
 from theano import tensor as T
@@ -704,6 +705,11 @@ def run(only_forward=False):
             allow_input_downcast=True)
         logger.Log("Training.")
 
+        outer_time = 0.0
+        inner_time = 0.0
+
+        start_outer = time.time()
+
         # Main training loop.
         for step in range(step, FLAGS.training_steps):
             if step % FLAGS.eval_interval_steps == 0:
@@ -721,8 +727,10 @@ def run(only_forward=False):
                 continue
 
             learning_rate = FLAGS.learning_rate * (FLAGS.learning_rate_decay_per_10k_steps ** (step / 10000.0))
+            start_inner = time.time()
             ret = update_fn(X_batch, transitions_batch, y_batch, num_transitions_batch,
                             learning_rate, 1.0, 1.0, np.exp(step*np.log(FLAGS.scheduled_sampling_exponent_base)))
+            inner_time += time.time() - start_inner
             total_cost_val, xent_cost_val, transition_cost_val, action_acc_val, l2_cost_val, acc_val = ret
 
             if step % FLAGS.statistics_interval_steps == 0:
@@ -736,6 +744,11 @@ def run(only_forward=False):
 
             # Zero out all auxiliary variables.
             zero_fn()
+
+        outer_time = time.time() - start_outer
+
+        print "Outer time: ", outer_time
+        print "Inner time: ", inner_time
 
 
 if __name__ == '__main__':
