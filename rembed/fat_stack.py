@@ -303,7 +303,7 @@ class HardStack(object):
             merge_value = self._compose_network(merge_items, tracking_h_t, self.model_dim,
                 self._vs, name="compose", external_state_dim=self.tracking_lstm_hidden_dim)
         else:
-            merge_value = self._compose_network(merge_items, self.model_dim * 2, self.model_dim,
+            merge_value = self._compose_network(merge_items, (self.model_dim,) * 2, self.model_dim,
                 self._vs, name="compose")
 
         # Compute new stack value.
