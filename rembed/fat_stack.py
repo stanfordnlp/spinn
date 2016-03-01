@@ -440,6 +440,7 @@ class HardStack(object):
         stack_ind = 0 if self.interpolate else 1
         self.final_stack = scan_ret[0][stack_ind][-1]
         self.final_representations = self.final_stack[:, 0, :self.model_dim]
+        self.embeddings = self.final_stack[:, 0]
 
         if self._predict_transitions:
             self.transitions_pred = scan_ret[0][-1].dimshuffle(1, 0, 2)
