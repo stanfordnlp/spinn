@@ -394,32 +394,33 @@ We evaluate five models on the SNLI task. Each uses 150d hidden states:
     \toprule
 Model                   & Trained params.    &   Train  &   Test \\
 \midrule
-\multicolumn{4}{c}{\bf Non-NN results}\\
+\multicolumn{4}{c}{Previous non-NN results}\\
 \midrule
 Lexicalized classifier \cite{snli:emnlp2015}
                         & --                 &   99.7   &   78.2      \\
 \midrule
-\multicolumn{4}{c}{\bf Previous NN results without attention}\\
+\multicolumn{4}{c}{Previous NN results without attention}\\
 \midrule
 100d LSTM encoders \cite{snli:emnlp2015}
                         & 221k               &   84.8   &   77.6      \\
 1024d pretrained GRU encoders \cite{DBLP:journals/corr/VendrovKFU15}
                         & 15m                &   98.8   &   81.4       \\
-\todo{[SB] Import baselines from page}  
-                        & ?                  &   ?      &   81?       \\
-\todo{[SB] Import baselines from page}  
-                        & ?                  &   ?      &   81?       \\
-\midrule
-\multicolumn{4}{c}{\bf Previous NN results with attention}\\
-\midrule
-\todo{[SB] Import baselines from page}  
-                        & ?                  &   ?      &   81?       \\
-\todo{[SB] Import baselines from page}  
-                        & ?                  &   ?      &   81?       \\
+300d Tree-based CNN encoders \cite{mou2015recognizing}
+                        & 3.5m               &   83.4   &   82.1       \\
 \todo{[SB] Import baselines from page}  
                         & ?                  &   ?      &   81?       \\
 \midrule
-\multicolumn{4}{c}{\bf New results}\\
+\multicolumn{4}{c}{Previous NN results with attention}\\
+\midrule
+100d LSTM w/ word-by-word attention \cite{rocktaschel2015reasoning}
+                        & 252k               &   85.3   &   83.5       \\
+300d mLSTM word-by-word attention model \cite{DBLP:journals/corr/WangJ15b}
+                        & 1.9m               &   92.0   &   86.1      \\
+300d LSTMN with deep attention fusion \cite{cheng2016long} (1.4m params) 92.3    89.1
+
+                        & 1.4m               &   92.3   &   89.1      \\
+\midrule
+\multicolumn{4}{c}{New results}\\
 \midrule150d LSTM RNN           & ?                  &   ?      &   81?       \\
 150d TB TreeLSTM    
                         & ?                  &   ?      &   82?       \\
