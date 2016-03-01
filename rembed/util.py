@@ -397,9 +397,9 @@ def TreeWangJiangAttentionUnit(attention_state_prev_l, attention_state_prev_r, c
     Y__alpha_t = T.sum(premise_stack_tops * alpha_t.T[:, :, np.newaxis], axis=0)
 
     mlstm_input = T.concatenate([Y__alpha_t, current_stack_top], axis=1)
-
-    r_t = TreeLSTMLayer(T.concatenate([attention_state_prev_l, attention_state_prev_r], axis=1),
-                mlstm_input, 2 * attention_dim, vs,  name="%s/lstm" % name, external_state_dim=2 * attention_dim)
+    lstm_prev = (attention_state_prev_l, attention_state_prev_r)
+    r_t = TreeLSTMLayer(lstm_prev, mlstm_input, 2 * attention_dim, vs, 
+            name="%s/lstm" % name, external_state_dim=2 * attention_dim)
 
     return r_t
 
