@@ -218,13 +218,13 @@ class HardStack(object):
         if self.initial_embeddings is not None:
             def EmbeddingInitializer(shape):
                 return self.initial_embeddings
-            self.embeddings = self._vs.add_param(
+            self.word_embeddings = self._vs.add_param(
                     "embeddings", (self.vocab_size, self.word_embedding_dim),
                     initializer=EmbeddingInitializer,
                     trainable=False,
                     savable=False)
         else:
-            self.embeddings = self._vs.add_param(
+            self.word_embeddings = self._vs.add_param(
                 "embeddings", (self.vocab_size, self.word_embedding_dim))
 
     def _make_inputs(self):
@@ -354,7 +354,7 @@ class HardStack(object):
         stack_merged = T.zeros(stack_shape)
 
         # Look up all of the embeddings that will be used.
-        raw_embeddings = self.embeddings[self.X]  # batch_size * seq_length * emb_dim
+        raw_embeddings = self.word_embeddings[self.X]  # batch_size * seq_length * emb_dim
 
         if self.context_sensitive_shift:
             # Use the raw embedding vectors, they will be combined with the hidden state of
