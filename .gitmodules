@@ -1,0 +1,3 @@
+[submodule "theano"]
+	path = theano
+	url = git://github.com/hans/theano-hacked.git
