@@ -480,7 +480,8 @@ class HardStack(object):
         if self.initialize_hyp_tracking_state and not self.is_hypothesis:
             # Store the final c states of the tracking unit.
             self.tracking_c_state_final = scan_ret[0][stack_ind+2][-1][:, self.tracking_lstm_hidden_dim:]
-
+        else:
+            self.tracking_c_state_final = None
 
 class Model0(HardStack):
 
