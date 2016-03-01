@@ -548,7 +548,10 @@ class ThinStack(object):
         zero_stack = T.zeros((self.batch_size, self.model_dim))
         zero_extra_inps = [T.zeros((self.batch_size, extra_shape[-1]))
                            for extra_shape in self.recurrence.extra_outputs]
-        zero_wrts = [T.zeros(wrt_shape) for wrt_shape in wrt_shapes]
+        # Zero Jacobian matrices for masked reductions during backprop. May not
+        # be used.
+        zero_jac_wrts = [T.zeros((self.batch_size,) + wrt_shape)
+                         for wrt_shape in wrt_shapes]
 
         batch_size = self.batch_size
         batch_range = T.arange(batch_size)
@@ -676,7 +679,9 @@ class ThinStack(object):
 
             # Accumulate wrt deltas, switching over push/merge decision.
             new_wrt_deltas = {}
-            for i, (wrt_var, wrt_zero, accum_delta, m_delta, p_delta) in enumerate(zip(wrt, zero_wrts, wrt_deltas, m_delta_wrt, p_delta_wrt)):
+            wrt_data = enumerate(zip(wrt, zero_jac_wrts, wrt_deltas,
+                                     m_delta_wrt, p_delta_wrt))
+            for i, (wrt_var, wrt_zero, accum_delta, m_delta, p_delta) in wrt_data:
                 if m_delta is None and p_delta is None:
                     # Disconnected gradient.
                     continue

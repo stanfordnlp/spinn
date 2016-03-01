@@ -1047,9 +1047,10 @@ class GpuRowSwitch(GpuOp):
         assert cond.ndim == 1, cond.ndim
         assert ift.ndim == iff.ndim
 
-        return gof.Apply(self, [cond, ift, iff],
-                         [CudaNdarrayType(broadcastable=ift.broadcastable,
-                                          dtype=out_type)()])
+        return theano.gof.Apply(
+            self, [cond, ift, iff],
+            [CudaNdarrayType(broadcastable=ift.broadcastable,
+                             dtype=out_type)()])
 
     def perform(self, node, inp, out):
         raise NotImplementedError("GPUSwitch is GPU only")
@@ -1192,36 +1193,56 @@ def local_gpua_row_switch(node):
     return [HostFromGpu()(gpu_op(cond, gpu_ift, gpu_iff))]
 
 
-class GpuTensorMaskedAccum(GpuOp):
+class GpuMaskedCAReduce(GpuOp):
+
+    # DEV: Only supporting reduce_100 with switch over mask vector.
+    # No promise re: what will happen elsewhere... !
+
     """
-    Row-wise switch between rank-2 matrices on the GPU.
-    DOES NOT support broadcasting arguments (e.g. T.switch(mask, A, 0)).
-    >>> A
-    [[ 0.01902644  0.70658928  0.10509603]
-     [ 0.2654964   0.08410256  0.96556276]
-     [ 0.06885902  0.49623388  0.18812495]
-     [ 0.56566966  0.52721274  0.48890418]]
-    >>> B
-    [[ 0.44089654  0.46353787  0.59428871]
-     [ 0.88936949  0.74785614  0.80535758]
-     [ 0.88973558  0.21844074  0.12561291]
-     [ 0.01211281  0.86583334  0.9793455 ]]
+    Reduce two rank-N tensors with some elemwise op, masking over the first
+    dimension to produce an N-1 dimensional result.
+
+    >>> ift
+    array([[[ 3.,  1.],
+            [ 4.,  8.]],
+
+           [[ 9.,  4.],
+            [ 3.,  6.]],
+
+           [[ 5.,  2.],
+            [ 6.,  2.]]])
+    >>> iff
+    array([[[ 10.,   3.],
+            [  3.,   5.]],
+
+           [[  2.,   1.],
+            [  5.,   9.]],
+
+           [[  0.,   6.],
+            [  3.,   4.]]])
     >>> mask
-    [1 0 0 1]
-    >>> GpuRowSwitch()(mask, A, B).eval()
-    [[ 0.01902644  0.70658928  0.10509603]
-     [ 0.88936949  0.74785614  0.80535758]
-     [ 0.88973558  0.21844074  0.12561291]
-     [ 0.56566966  0.52721274  0.48890418]]
+    [0 1 0]
+    >>> GpuMaskedCAReduce(theano.scalar.add)(mask, ift, iff).eval()
+    array([[ 19.,  13.],
+           [  9.,  15.]])
+    >>> iff[0] + ift[1] + iff[2]
+    array([[ 19.,  13.],
+           [  9.,  15.]])
     """
 
     nin = 3
     nout = 1
 
+    def __hash__(self):
+        return hash(type(self))
+
+    def __eq__(self, other):
+        return type(self) == type(other)
+
     def make_node(self, cond, ift, iff):
         if any(ift.broadcastable) or any(iff.broadcastable):
-            raise ValueError("GPURowSwitch cannot operate on broadcastable "
-                             "output arguments (ift %s, iff %s)."
+            raise ValueError("GpuMaskedCAReduce cannot operate on "
+                             "broadcastable output arguments (ift %s, iff %s)."
                              % ift.broadcastable, iff.broadcastable)
         out_type = ift.dtype
 
@@ -1229,107 +1250,188 @@ class GpuTensorMaskedAccum(GpuOp):
                 T.cast(cond.flatten(), "float32"))
         ift = as_cuda_ndarray_variable(ift)
         iff = as_cuda_ndarray_variable(iff)
+        # TODO check contiguous?
 
         assert ift.type.dtype == iff.type.dtype
         assert cond.ndim == 1, cond.ndim
         assert ift.ndim == iff.ndim
 
-        return gof.Apply(self, [cond, ift, iff],
-                         [CudaNdarrayType(broadcastable=ift.broadcastable,
-                                          dtype=out_type)()])
+        out_bcast = ift.broadcastable[1:]
+        return theano.gof.Apply(
+            self, [cond, ift, iff],
+            [CudaNdarrayType(broadcastable=out_bcast,
+                             dtype=out_type)()])
 
     def perform(self, node, inp, out):
-        raise NotImplementedError("GPUSwitch is GPU only")
+        raise NotImplementedError("GpuMaskedCAReduce is GPU only")
+
+    def c_code_cache_version(self):
+        return 18
 
     def c_support_code(self):
         """Defines the abstract row-switching kernel used in this op."""
+            # reduce_fct = self._assign_reduce(node, nodename, "myresult",
+            #                                  "X[a * sX0 + b * sX1 + c * sX2]",
+            #                                  {}, True)
+            # reduce_init = self._assign_init("X[a * sX0 + 0 * sX1 + c * sX2]")
 
         return """
-__global__ void k_row_switch(int ndim,
-                             int shape1, int shape2, int shape3,
-                             int stride1, int stride2, int stride3,
-                             const float* cond, const float* ift,
-                             const float* iff, float* out) {
-  // batch index
-  int idx = blockIdx.x * blockDim.x + threadIdx.x;
-  if (idx < 0 || idx >= shape1) {
-    return;
+        // A, B, C = x.shape[1, 0, 2]
+        // D = C / 32
+        // n_blocks(A, D)
+static __global__ void k_masked_careduce(const int A, const int B,
+                                         const int C, const int D,
+                                         const float *X,
+                                         const int sX0, const int sX1,
+                                         const int sX2,
+                                         const float *Y, // Strides must be the same as X
+                                         const float *mask,
+                                         const int sMask,
+                                         float *Z,
+                                         const int sZ0, const int sZ1) {
+  const int threadCount = blockDim.x;
+  const int threadNum = threadIdx.x;
+  float myresult = 0.0f;
+
+  if (warpSize != 32)
+    return; //TODO: set error code
+
+  for (int a = blockIdx.x; a < A; a += gridDim.x) {
+    for (int i2_D = blockIdx.y; i2_D < D; i2_D += gridDim.y) {
+      int c = i2_D * 32 + threadIdx.x;
+      if (c < C) {
+        myresult = 0.0f;
+        const float *X_base = &(X[a * sX0 + 0 * sX1 + c * sX2]);
+        const float *Y_base = &(Y[a * sX0 + 0 * sX1 + c * sX2]);
+
+        for (int b = 0; b < B; b++) {
+          float X_b = X_base[b * sX1];
+          float Y_b = Y_base[b * sX1];
+          float mask_b = mask[b * sMask];
+
+          // TODO: Faster to do a comparison + ternary op here?
+          myresult += mask_b * X_b + (1.0 - mask_b) * Y_b;
+        }
+        Z[a * sZ0 + c * sZ1] = myresult;
+      }
+    }
   }
-  const float *src = ((int) cond[idx]) ? ift : iff;
-  int offset = idx * stride1;
-  int lastDim = ndim == 2 ? shape2 : shape3;
-  int lastStride = ndim == 2 ? stride2 : stride3;
-  if (ndim == 3) {
-      // index within the example
-      int axis1_idx = blockIdx.y * blockDim.y + threadIdx.y;
-      offset += axis1_idx * stride2;
-  }
-  for (int j = 0; j < lastDim; j++) {
-    out[offset + j * lastStride] = src[offset + j * lastStride];
-  }
-  return;
 }
 """ % locals()
 
     def c_code(self, node, name, inp, out, sub):
         """Generates code to instantiate this op for these particular inputs."""
 
-        cond, ift, iff = inp
+        mask, x, y = inp
         out, = out
         fail = sub["fail"]
 
+        # TODO: Assumes out is alloced. OK?
+
         return """
-int err, N, N2, ndim;
-cudaError_t sts;
-int threads_per_block1, n_blocks1;
-int threads_per_block2 = 1, n_blocks2 = 1;
-const int *dims, *strides;
-N = CudaNdarray_SIZE(%(cond)s);
-printf("size %%d\\n", N);
-ndim = CudaNdarray_NDIM(%(ift)s);
-switch (ndim) {
-    case 3:
-        N2 = CudaNdarray_HOST_DIMS(%(ift)s)[1];
-        threads_per_block2 = std::min(N2, NUM_VECTOR_OP_THREADS_PER_BLOCK);
-        n_blocks2 = std::min(NUM_VECTOR_OP_BLOCKS,
-                             (N2 + NUM_VECTOR_OP_THREADS_PER_BLOCK - 1) / NUM_VECTOR_OP_THREADS_PER_BLOCK);
-        // NB: no break!
-    case 2:
-        threads_per_block1 = std::min(N, NUM_VECTOR_OP_THREADS_PER_BLOCK);
-        n_blocks1 = std::min(NUM_VECTOR_OP_BLOCKS,
-                             (N + NUM_VECTOR_OP_THREADS_PER_BLOCK - 1) / NUM_VECTOR_OP_THREADS_PER_BLOCK);
-        break;
-    default:
-        return 1;
-}
-dim3 n_blocks(n_blocks1, n_blocks2);
-dim3 threads_per_block(threads_per_block1, threads_per_block2);
-// Allocate the output array
-Py_XDECREF(%(out)s);
-%(out)s = (CudaNdarray *) CudaNdarray_NewDims(ndim, CudaNdarray_HOST_DIMS(%(ift)s));
-if (!%(out)s) {
+  dim3 n_threads(32, 1, 1);
+
+  int A = CudaNdarray_HOST_DIMS(%(x)s)[1];
+  int B = CudaNdarray_HOST_DIMS(%(x)s)[0];
+  int C = CudaNdarray_HOST_DIMS(%(x)s)[2];
+  int D = C/32;
+  if (32*D < C) D+= 1;
+  assert ((C <= 32*D) && (32*D < C+32));
+
+  dim3 n_blocks(A,D);
+  if (n_blocks.x > NUM_VECTOR_OP_BLOCKS)
+    n_blocks.x = NUM_VECTOR_OP_BLOCKS;
+  if (n_blocks.x*n_blocks.y > NUM_VECTOR_OP_BLOCKS)
+    n_blocks.y = NUM_VECTOR_OP_BLOCKS/n_blocks.x;
+  int n_shared = 0;
+
+  cudaError_t sts;
+
+  int out_ndim = 2;
+  int out_shape[2] = {CudaNdarray_HOST_DIMS(%(x)s)[1], CudaNdarray_HOST_DIMS(%(x)s)[2]};
+  if (!%(out)s) {
+    %(out)s = (CudaNdarray*) CudaNdarray_ZEROS(out_ndim, out_shape);
+  }
+
+  k_masked_careduce<<<n_blocks, n_threads, n_shared>>>(
+    A,B,C,D,
+    CudaNdarray_DEV_DATA(%(x)s),
+    CudaNdarray_HOST_STRIDES(%(x)s)[1],
+    CudaNdarray_HOST_STRIDES(%(x)s)[0],
+    CudaNdarray_HOST_STRIDES(%(x)s)[2],
+    CudaNdarray_DEV_DATA(%(y)s),
+    CudaNdarray_DEV_DATA(%(mask)s),
+    CudaNdarray_HOST_STRIDES(%(mask)s)[0],
+    CudaNdarray_DEV_DATA(%(out)s),
+    CudaNdarray_HOST_STRIDES(%(out)s)[0],
+    CudaNdarray_HOST_STRIDES(%(out)s)[1]
+  );
+  CNDA_THREAD_SYNC;
+  sts = cudaGetLastError();
+  if (cudaSuccess != sts)
+  {
+    PyErr_Format(PyExc_RuntimeError,
+        "Cuda error: %%s: %%s."
+        " (grid: %%i x %%i; block: %%i x %%i x %%i)\\n",
+        "k_masked_careduce",
+        cudaGetErrorString(sts),
+        n_blocks.x,
+        n_blocks.y,
+        n_threads.x,
+        n_threads.y,
+        n_threads.z);
     %(fail)s;
-}
-dims = CudaNdarray_DIMS(%(ift)s);
-strides = CudaNdarray_STRIDES(%(ift)s);
-// Instantiate the kernel.
-//
-// TODO: Assumes stride of ift, iff are the same
-k_row_switch<<<n_blocks, threads_per_block>>>(
-    ndim,
-    dims[0], dims[1], dims[2],
-    strides[0], strides[1], strides[2],
-    CudaNdarray_DEV_DATA(%(cond)s),
-    CudaNdarray_DEV_DATA(%(ift)s),
-    CudaNdarray_DEV_DATA(%(iff)s),
-    CudaNdarray_DEV_DATA(%(out)s));
-// Force async kernel instances to sync at this thread barrier
-CNDA_THREAD_SYNC;
-sts = cudaGetLastError();
-if (cudaSuccess != sts) {
-    PyErr_Format(PyExc_RuntimeError, "Cuda error: k_row_switch: %%s.",
-                 cudaGetErrorString(sts));
-    %(fail)s;
-}
+  }
 """ % locals()
 
+
+from theano.sandbox.cuda.basic_ops import GpuCAReduce, GpuElemwise
+from theano.sandbox.cuda.opt import local_gpu_careduce
+@register_opt("fast_compile")
+@local_optimizer([GpuCAReduce, T.elemwise.CAReduce, T.elemwise.Sum])
+def local_gpu_masked_careduce(node):
+    """
+    Detects eligible CAReduce{add}(GpuElemwise{Switch}) instances and replaces
+    them with a masked CAReduce.
+    """
+
+    # TODO: Probably don't need this hack checking for both GpuCAReduce and its
+    # non-gpu counterpart anymore. Just the GPU should be fine.
+    if not isinstance(node.op, GpuCAReduce):
+        # Send this off to local_gpu_careduce first.
+        # HACK: This happens outside of the standard optimization sequence.
+        ret = local_gpu_careduce.transform(node)
+        if not ret:
+            return False
+        print "local_gpu_careduce returned with", ret
+        if isinstance(ret[0].owner.op, HostFromGpu):
+            ret = ret[0].owner.inputs[0].owner
+        else:
+            ret = ret[0].owner
+
+        node = ret
+
+    if node.op.scalar_op.__class__ != theano.scalar.Add:
+        return False
+    above = node.inputs[0].owner
+    if not isinstance(above.op, GpuElemwise):
+        return False
+
+    # The graph looks okay. Check the dims.
+    if node.op.reduce_mask != (1, 0, 0):
+        return False
+    print "\t", node.op.pre_scalar_op
+    if node.op.pre_scalar_op:
+        return False
+
+    # Check switch op.
+    mask, ift, iff = above.inputs
+    if not mask.broadcastable:
+        return False
+    if not (not mask.broadcastable[0] and all(mask.broadcastable[1:])):
+        return False
+    if any(ift.broadcastable) or any(iff.broadcastable):
+        return False
+
+    new_op = GpuMaskedCAReduce()
+    return [new_op(mask, ift, iff)]
