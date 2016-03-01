@@ -85,7 +85,9 @@ class HardStack(object):
                  use_attention=False,
                  premise_stack_tops=None,
                  attention_unit=None,
-                 is_hypothesis=False):
+                 is_hypothesis=False,
+                 initialize_hyp_tracking_state=False,
+                 premise_tracking_c_state_final=None):
         """
         Construct a HardStack.
 
@@ -142,6 +144,9 @@ class HardStack(object):
                 Takes in the current attention state, current hypothesis stack top, all premise stack tops
                 and returns the next attention state
             is_hypothesis: Whether we're processing the premise or the hypothesis (for SNLI)
+            initialize_hyp_tracking_state: Initialize the c state of the tracking unit of hypothesis
+                model with the final tracking unit c state of the premise model.
+            premise_tracking_c_state_final: The final c state of the tracking unit in premise model.
         """
 
         self.model_dim = model_dim
@@ -199,6 +204,11 @@ class HardStack(object):
             self._attention_unit = util.TreeWangJiangAttentionUnit
         else:
             self._attention_unit = None
+        self.initialize_hyp_tracking_state = initialize_hyp_tracking_state
+        self.premise_tracking_c_state_final = premise_tracking_c_state_final
+        if initialize_hyp_tracking_state:
+            assert not is_hypothesis or premise_tracking_c_state_final is not None, \
+                "Must supply initial c states in hypothesis model" 
 
         # Check whether we're processing the hypothesis or the premise
         self.is_hypothesis = is_hypothesis
@@ -385,7 +395,12 @@ class HardStack(object):
 
         # Initialize the hidden state for the tracking LSTM, if needed.
         if self.use_tracking_lstm:
-            hidden_init = T.zeros((batch_size, self.tracking_lstm_hidden_dim * 2))
+            if self.initialize_hyp_tracking_state and self.is_hypothesis:
+                # Initialize the c state of tracking unit from the c states of premise model.
+                h_state_init = T.zeros((batch_size, self.tracking_lstm_hidden_dim))
+                hidden_init = T.concatenate([h_state_init, self.premise_tracking_c_state_final], axis=1)
+            else:
+                hidden_init = T.zeros((batch_size, self.tracking_lstm_hidden_dim * 2))
         else:
             hidden_init = DUMMY
 
@@ -461,6 +476,10 @@ class HardStack(object):
                 self.final_weighed_representation = scan_ret[0][stack_ind+3][-1][:,:h_dim]
             elif self.use_attention == "TreeWangJiang":
                 self.final_weighed_representation = scan_ret[0][stack_ind][-1][:,0,2*h_dim:3*h_dim]
+
+        if self.initialize_hyp_tracking_state and not self.is_hypothesis:
+            # Store the final c states of the tracking unit.
+            self.tracking_c_state_final = scan_ret[0][stack_ind+2][-1][:, self.tracking_lstm_hidden_dim:]
 
 
 class Model0(HardStack):
