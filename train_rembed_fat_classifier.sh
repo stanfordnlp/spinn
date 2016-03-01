@@ -19,4 +19,4 @@ source /u/nlp/packages/anaconda/bin/activate conda-common
 export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
 export PYTHONPATH=/scr/jgauthie/tmp/theano-nshrdlu:$PYTHONPATH
 
-THEANO_FLAGS=allow_gc=False,cuda.root=/usr/bin/cuda,warn_float64=warn,device=$DEVICE,floatX=float32 python -m rembed.models.classifier $REMBED_FLAGS
+THEANO_FLAGS=allow_gc=False,cuda.root=/usr/bin/cuda,warn_float64=warn,device=$DEVICE,floatX=float32 python -m rembed.models.fat_classifier $REMBED_FLAGS
