@@ -1420,7 +1420,6 @@ def local_gpu_masked_careduce(node):
     # The graph looks okay. Check the dims.
     if node.op.reduce_mask != (1, 0, 0):
         return False
-    print "\t", node.op.pre_scalar_op
     if node.op.pre_scalar_op:
         return False
 
