@@ -26,7 +26,6 @@
 \newcommand\todo[1]{\textcolor{blue}{\textbf{TODO:} #1}}
 \newcommand\result[1]{\textcolor{red}{\textbf{RESULT NEEDED:} #1}}
 \newcommand\question[1]{\textcolor{orange}{\textbf{OPEN QUESTION:} #1}}
- 
 
 \newcount\colveccount
 \newcommand*\colvec[1]{
@@ -101,30 +100,30 @@
 \title{Tree-structured neural networks revisited}
 
 \author{
-Samuel R.\ Bowman$^{\ast\dag}$ \\
-\texttt{sbowman@stanford.edu} \\
+Samuel R.\ Bowman$^{1,2,5,}$\thanks{The first two authors contributed equally.} \\
+\texttt{\small sbowman@stanford.edu} \\
 \And
-Jon Gauthier$^{\dag\ddag}$ \\
-\texttt{jgauthie@stanford.edu} \\
+Jon Gauthier$^{2,3,5,*}$ \\
+\texttt{\small jgauthie@stanford.edu} \\
 \And
-Abhinav Rastogi$^{\S\mathparagraph}$ \\
-\texttt{arastogi@stanford.edu} \\
+Abhinav Rastogi$^{4,5}$ \\
+\texttt{\small arastogi@stanford.edu} \\
 \AND
-Raghav Gupta$^{\parallel}$ \\
-\texttt{rgupta93@stanford.edu} \\
+Raghav Gupta$^{6}$ \\
+\texttt{\small rgupta93@stanford.edu} \\
 \And
-Christopher D.\ Manning$^{\ast\dag\parallel}$\\
-\texttt{manning@stanford.edu}\\
+Christopher D.\ Manning$^{1,2,5,6}$\\
+\texttt{\small manning@stanford.edu}\\
 \And
-Christopher Potts$^{\ast}$\\
-\texttt{cgpotts@stanford.edu}
+Christopher Potts$^{1}$\\
+\texttt{\small cgpotts@stanford.edu}
 \AND\\[-3ex]
-{$^{\ast}$Stanford Linguistics\quad
-$^{\dag}$Stanford NLP Group\quad
-$^{\ddag}$Stanford Symbolic Systems}\\
-{$^{\S}$Stanford Electrical Engineering\quad
-$^{\mathparagraph}$Stanford AI Lab\quad
-$^{\parallel}$Stanford Computer Science}
+{$^{1}$Stanford Linguistics\quad
+$^{2}$Stanford NLP Group\quad
+$^{3}$Stanford Symbolic Systems}\\
+{$^{4}$Stanford Electrical Engineering\quad
+$^{5}$Stanford AI Lab\quad
+$^{6}$Stanford Computer Science}
 }
 
 \date{}
@@ -156,58 +155,158 @@ $^{\parallel}$Stanford Computer Science}
 
 \section{Introduction}
 
+\begin{figure}[t]
+\begin{subfigure}[t]{0.9\columnwidth}
+\vspace{14em}
+\todo{[SB] Figure showing why trees can't be batched.}
+
+\caption{\label{fig:batching:bad}Trees are hard to batch.}
+\end{subfigure}
+
+\vspace{2em}
+
+\begin{subfigure}[t]{0.9\columnwidth}
+\vspace{14em}
+\todo{[SB] Figure showing why trees can't be batched.}
+
+\caption{\label{fig:batching:good}Sequences are easy to batch.}
+\end{subfigure}
+\end{figure}
+
 \begin{itemize}
+
 \item Brief history of TreeRNNs
+\begin{itemize}
+\item Lx theory suggests should be better than comparable sequence models via compositionality \cite{Partee84,Janssen97}.
+\item In practice, results mixed but positive. \citealt{tai2015improved} shows dramatic gains on sentiment analysis using tree-structured models over sequence models. \citealt{li2015tree} shows mixed results. Both of these evaluations are limited to small datasets with only hundreds or thousands of training examples.
+\item Larger evaluations have been impossible due to issues of computational efficiency. One aim of this paper is to mitigate these issues to make larger-scale experiments possible.
+\item Note, though, that while tree structure can be seen as a bias, simply adding more data within reason may not be enough to get a sequence model to learn without that bias \citealt{bowman2015trees}.
+\end{itemize}
+
 \item Speed issues
+\begin{itemize}
+\item Efficient batched computation is a crucial enabling technology in allowing NNs to be used on large datasets. Since NNs require large datasets to be able to model complex problems like language understanding, this is crucial in NLP.
+\item Tree structured neural networks can't be batched. As the schematic in Figure~\ref{fig:batching:bad} indicates, different sentences are assigned different trees, and there is no straightforward way of aligning these trees to synchronize computation in the conventional style of implementation.
+\item Our proposed model builds on ideas from transition-based parsing to build a model which implements the same computations as a tree-structured model, but which can be efficiently batched. See Figure~\ref{fig:batching:good}.
+
+\end{itemize}
+
 \item Attention issues
+\begin{itemize}
+\item The technique of soft attention has proven to be exceptionally effective as a way of training neural network models for tasks like translation \cite{bahdanau2014neural,luong-pham-manning:2015:EMNLP} and natural language inference \cite{rocktaschel2015reasoning}.
+\item This paper proposes two complementary extensions of the idea of attention to tree-structured models:
+\begin{itemize}
+\item Constituent-by-constituent attention, in which each node in the tree of one sentence is given a soft alignment to some node or nodes in a second sentence.
+\item The mTreeLSTM, which uses a third tree structured model to accumulate information about the alignment between two sentences into a single feature vector. This builds on the notion of a matching LSTM or mLSTM from \citealt{DBLP:journals/corr/WangJ15b}.
+\end{itemize}
+\end{itemize}
 \end{itemize}
 
 \section{The transition-based sentence model}
 
 \subsection{Intuition: Transition-based parsing}
 
+Our model is based on a formalism adapted from transition-based parsing (\todo{What's a good classic citation for this?}).
+
+\todo{[SB, JG] Brief into to transition-based parsing.}
+
 \subsection{The model}
 
-\todo{[SB] Reframe in terms of Model 0 alone.}
+Our model, which is shown in Figure~\ref{fig:model:0}, takes the form of a transition-based parser, but it is designed to produce sentence representations given parse structures, rather than producing parse structures as its output, leading to the following differences:
+\begin{itemize}
+\item The model takes a sequence of transitions (\shift s or \reduce s) as input, rather than incorporating a decision function which chooses which transition to perform at each step.
+\item The intermediate representations in the parser, including the representations of the tree structures on the stack, are vectors of a fixed length.
+\item The \reduce~operation, which combines two trees or tree nodes on the stack into a single larger tree, is represented using a parametric neural network layer function (in particular, a TreeLSTM layer, after \citealt{tai2015improved}).
+\item The intermediate states of the stack and buffer during parsing are stored during training. This makes it possible to learn the parameters of the composition function and the input word representations that are fed into the buffer using backpropagation on an objective function that depends on the final sentence representation that emerges at the head of the stack.
+\item A novel tracking LSTM component is added to improve the model's ability to efficiently track the context in which each step is being performed. (\todo{Is this similar enough to anything from Dyer that we should add a citation here?})
+\end{itemize}
 
 
-\subsection{Model 0}
 
-Model 0, depicted in Figure~\ref{fig:model:0}, is the simplest instantiation of our design, using only a conventional stack and a learned composition function to incrementally build a sentence representation over a series of timesteps. For a sentence of $N$ words its input is a sequence of $2N-3$ inputs. These inputs can take two types. At some timesteps, the input will be a word embedding vector. This triggers the \shift~operation, in which the vector is pushed onto the top of a stack. At other timesteps, the input will be the special \reduce~token, which triggers the reduction operation. In that operation, the top two word vectors are popped from the stack, fed into a learned composition function that maps them to a single vector (in the simplest case, this is a single neural network layer), and then pushed back onto the stack.
+\input{../model0_fig.tex}
 
-If we add no additional features, this model computes the same function as a plain TreeRNN. However, we expect it to be substantially faster than conventional TreeRNN implementations. Unlike a TreeRNN, the Model 0 computation graph is essentially static across examples, so examples of varying structures and lengths can be batched together and run on the same graph in a single step. This simply requires ensuring that the graph is run for enough timesteps to finish all of the sentences. This involves some wasted computation, since the composition function will be run $2N-3$ times (with the output of composition at non-\reduce~steps discarded), rather than $N-1$ times in a TreeRNN. However, this loss can be dramatically offset by the gains of batching, which stem from the ability to exploit highly optimized CPU and GPU libraries for batched matrix multiiplication.
+\paragraph{Equivalence with existing models}
+If we add no additional features, this model computes the same function as a plain TreeRNN. However, we expect it to be substantially faster than conventional TreeRNN implementations. Unlike a TreeRNN, the Model 0 computation graph is essentially static across examples, so examples of varying structures and lengths can be batched together and run on the same graph in a single step. This simply requires ensuring that the graph is run for enough timesteps to finish all of the sentences. This involves some wasted computation, since the composition function will be run $2N-1$ times (with the output of composition at non-\reduce~steps discarded), rather than $N-1$ times in a TreeRNN. However, this loss can be dramatically offset by the gains of batching, which stem from the ability to exploit highly optimized CPU and GPU libraries for batched matrix multiiplication. \todo{Update.}
 
-\subsection{Model 1}
+\paragraph{The buffer and word representations}
 
-\input{../model1_fig.tex}
+We draw our word representations from the standard 300-dimensional vector package provided with GloVe \cite{pennington2014glove}. We do not update these vectors during training. Instead, we use a learned linear transformation to transform the representation of each input word $\vec{x}$ into a pair of vectors that can be used as inputs to a TreeLSTM composition function:
 
-Model 1, depicted in Figures~\ref{fig:model:1d} and \ref{fig:model:1b}, adapts Model 0 to use a stack and a buffer, making it more closely resemble a shift--reduce parser, and laying the groundwork for a model which can parse novel sentences at test time.
-
-The model runs for a fixed number of transition steps: $2N - 3$. In its starting configuration, it contains a stack that is prepopulated with the first two words of the sentence (since \shift~\shift~is the only legal operation sequence for the first two timesteps of a true shift-reduce parser), as well as a buffer (a queue) prepopulated with all of the remaining words in the sentence. Both the stack and buffer represent words using their embeddings. 
-
-At each timestep at test time, the model combines views of the stack and buffer (the top element of the buffer and the top two elements of the stack, highlighted in yellow) as the input to a tracking LSTM (red). This LSTM's output is fed into a sigmoid operation classifier (blue) which chooses between the \shift~and \reduce~operations. If \shift~is chosen, one word embedding is popped from the buffer and pushed onto the stack. If \reduce~is chosen, the buffer is left as is, and the top two elements of the stack are popped and composed using a learned composition function (green), with the result placed back on top of the stack.
-
-\paragraph{Supervision} The model is trained using two objective functions simultaneously. The semantic objective function is computed by feeding the value from the top of the stack at the final timestep---the full sentence encoding---into a downstream neural network model for some semantic task, like a sentiment classifier or an entailment classifier. The gradients from that classifier propagate to every part of the model except the operation classifier (blue). The syntactic objective function takes the form of direct supervision on the operation classifier (blue) which encourages that classifier to produce the same sequence of operations that an existing parser would produce for that sentence. The gradients from the syntactic objective function propagate to every part of the model but the downstream semantic model.
-
-At training time, following the strategy used in LSTM text decoders, the decisions made by the operation classifier (blue) is discarded, and the model instead uses the correct operation as specified in the (already parsed) training corpus. At test time, this signal is not available, and the model uses its own predicted operations.
-
-\subsection{Model 2}
-
-Model 2 makes a small change to Model 1 that is likely to substantially change the dynamics of learning: It uses the operation sequence predicted by the operation classifier (blue) at training time as well as at test time. It may be possible to accelerate Model 2 training by initializing it with parameters learned by Model 1.
-
-By exposing Model 2 to the results of its own decisions during training, we encourage it to become more robust to its own prediction errors. \citealt{bengio2015scheduled} applied a similar strategy\footnote{The authors experiment with several strategies which interpolate between oracle-driven training and oracle-free training (Models 1 and 2 in our presentation, respectively). It may be useful to adopt a similar interpolating approach.} to an image captioning model. They suggest that the resulting model can avoid propagating prediction errors through long sequences due to this training regime.
+\begin{equation}
+\colvec{2}
+    {\vec{h}}
+    {\vec{c}}
+= W_{\text{wd}} \vec{x}
+\end{equation}
 
 
-\subsection{Tracking left context with an auxiliary LSTM} Includes both the tracking LSTM and context-sensitive composition.
+\paragraph{The representations in the stack}
 
-\subsection{Building a model}
+In our model, each row of the stack contains a pair of vectors $(h, c)$, which together represent some node in the parse tree of the sentence. Since the \shift~operation simply copies entries from the buffer onto the stack, this means that the word representations in the buffer also have two parts, $h$ and $c$. 
+
+\paragraph{The composition function}
+
+From \citealt{tai2015improved}.
+
+The inputs to the composition function are the representations of the two words or phrases closest to the head of the, $(\vec{h}^1_s, \vec{c}^1_s)$ and $(\vec{h}^2_s, \vec{c}^2_s)$, which are treated as the two children of the tree node whose representation the composition function is constructing. Each vector is of the same dimension $D$.
+
+\begin{gather}
+\colvec{4}
+    {\vec{i}}
+    {\vec{f}_l}
+    {\vec{f}_r}
+    {\vec{o}}
+= \sigma(
+W_{\text{iffo}}
+\colvec{3}
+    {\vec{h}_s^1}
+    {\vec{h}_s^2}
+    {\vec{e}}
+)
+\\
+\vec{g}
+= \tanh(
+W_{g}
+\colvec{3}
+    {\vec{h}_s^1}
+    {\vec{h}_s^2}
+    {\vec{e}}
+)
+\\
+\vec{c} = \vec{f}_l * \vec{c}_s^2 + \vec{f}_r * \vec{c}_s^1 + \vec{i} * \vec{g}  
+\\
+\vec{h} = \vec{o} * \vec{c}
+\end{gather}
+
+$\vec{e}$ is an optional input argument which is either the empty vector $[]$ or a vector from an external source like the tracking LSTM (see below). $*$ denotes the elementwise product. Each vector-valued variable listed here is of dimension $D$. The values $(h, c)$ represent the local subtree, and both will be placed on the stack during a \reduce~operation.
+
+\paragraph{The classifier}
+
+This paper presents the transition-based sentence model within the context of \textit{natural language inference} (also known as \textit{recognizing textual entailment}), a sentence pair classification task. To classify a sentence pair, a feature vector is first constructed. This feature vector is based on the final representations of each of the two sentences---the representations that appear at the head of the stack for each sentence after the final transition. In particular, the $\vec{h}$ portions of these representations are used. The final feature vector consists of the concatenation of these two vectors, $\vec{x}_{\text{premise}}$ and $\vec{x}_{\text{hypothesis}}$, their difference, and their elementwise product:
+
+\begin{equation}
+\vec{x}_{classifier} = 
+\colvec{4}
+    {\vec{h}_{\text{premise}}}
+    {\vec{h}_{\text{hypothesis}}}
+    {\vec{h}_{\text{premise}} - \vec{h}_{\text{hypothesis}}}
+    {\vec{h}_{\text{premise}} * \vec{h}_{\text{hypothesis}}}
+\end{equation}
+
+This feature vector is then passed to a series of two (\todo{Update}) ReLU neural network layers, then passed into a linear transformation, and then finally passed to a softmax layer, which yields a distribution among the three labels.
+
+\subsection{Tracking left context with an auxiliary LSTM}
+
+The tracking LSTM captures left context. \todo{Why?}
+
+The tracking LSTM is a standard LSTM RNN. At each step it takes three vectors as inputs: the top element of the buffer $\vec{h}_b^1$, which would be moved in a \shift~operation, and the two two elements of the stack $\vec{h}_s^1$ and $\vec{h}_s^2$ which would be composed in a \reduce~operation. Its output hidden state at each step is used as the external input to the TreeLSTM composition function for that step.
+
+\subsection{Implementing the transition-based sentence model}
 
 \paragraph{The size of the stack}
 The size of the stack should be $N$ for sentences of $N$ words, in case the first reduce merges the final two words. The size of the buffer should be $N$.
 
-\paragraph{Handling overly long sentences}
-
-\subsection{Data preparation}
+\paragraph{Converting parses to transition sequences}
 
 For Models 0--3, all training data must be parsed in advance into an unlabeled binary constituency tree. In addition, Model 0 requires that  parses be available at test time as well. For both SST and SNLI we use the parses included with the corpus distributions whenever parses are needed. 
 
@@ -227,22 +326,30 @@ buffer: $\langle$sat, down$\rangle$\\
 ops: \reduce~\shift~\shift~\reduce~\reduce
 \end{quote}
 
+
+\paragraph{Handling overly long sentences}
+
+To efficiently implement batched computation, we must stipulate a fixed number of transitions (50) that the model can perform before producing an output. 
+
+\todo{[SB] Why cropping is sensible if done well.}\\
+
 \paragraph{Representing the stack in memory} Or, thin stack. 
 \todo{[JG] Explain.}
 
-
 \paragraph{Optimization and hyperparameters}
+
+We used random search to tune \todo{[SB] List tuned hyperparameters.}
+
+We trained each model for 250k steps, using a minibatch size of 64 for each step. We tracked each model's performance on the development set during training and saving parameters when this performance reached a new peak. We used early stopping, evaluating on the test set using the parameters that performed best on the development set.
 
 \paragraph{Software infrastructure} We will make Theano code available.
 
-\subsection{Step time}
+\subsection{Related work: Transition-based parsing and neural networks.}
 
-\todo{Does anyone know of a better baseline TreeRNN implementation that we can use on Jagupard? We can use the CoreNLP SST model, but using a Java model as a baseline seems worrying unless we're guaranteed that it's competitively fast.}
-
-Comparing model step time to the plain RNN of \citealt{li2015tree}. We use the small \citealt{pang2004sentimental} sentiment corpus that they use, and train with identical hyperparameters: ...
-
-Evaluation metrics: Time per minibatch on a jag machine, with and without GPU access.
-
+\begin{itemize}
+\item \cite{chen2014}
+\item \cite{dyer-EtAl:2015:ACL-IJCNLP}, \cite{dyer2016rnn}
+\end{itemize}
 
 \section{Attention over trees}
 
@@ -263,9 +370,81 @@ In our model, attention is performed at each step $t$ of the premise encoder. At
 
 \section{Experiments}
 
-\paragraph{The Stanford Natural Language Inference task} \cite{snli:emnlp2015}
+\paragraph{The Stanford Natural Language Inference task} 
+We evaluate our model on the Stanford Natural Language Inference task \cite{snli:emnlp2015}. 
+
+550k/10k/10k split
+
+We skip unlabeled examples.
+
+\todo{[SB] Pull out an example from SNLI.}
+
+We evaluate five models on the SNLI task. Each uses 150d hidden states: 
+\begin{itemize}
+\item A baseline LSTM model (similar to that of \citealt{snli:emnlp2015}) that uses the same classifier architecture as our models, but encodes sentences using a single layer LSTM RNN sequence model.
+\item The unaugmented transition-based sentence model.
+\item The transition-based sentence model with the tracking LSTM.
+\item The transition-based sentence model with the tracking LSTM and sequence-based attention over premise states.
+\item The transition-based sentence model with the tracking LSTM and tree-based attention over premise states.
+\end{itemize}
+
+\begin{table*}[t]
+  \centering\small
+  \begin{tabular}{lcccc} 
+    \toprule
+Model                   & Trained params.    &   Train  &   Test \\
+\midrule
+\multicolumn{4}{c}{\bf Non-NN results}\\
+\midrule
+Lexicalized classifier \cite{snli:emnlp2015}
+                        & --                 &   99.7   &   78.2      \\
+\midrule
+\multicolumn{4}{c}{\bf Previous NN results without attention}\\
+\midrule
+100d LSTM encoders \cite{snli:emnlp2015}
+                        & 221k               &   84.8   &   77.6      \\
+1024d pretrained GRU encoders \cite{DBLP:journals/corr/VendrovKFU15}
+                        & 15m                &   98.8   &   81.4       \\
+\todo{[SB] Import baselines from page}  
+                        & ?                  &   ?      &   81?       \\
+\todo{[SB] Import baselines from page}  
+                        & ?                  &   ?      &   81?       \\
+\midrule
+\multicolumn{4}{c}{\bf Previous NN results with attention}\\
+\midrule
+\todo{[SB] Import baselines from page}  
+                        & ?                  &   ?      &   81?       \\
+\todo{[SB] Import baselines from page}  
+                        & ?                  &   ?      &   81?       \\
+\todo{[SB] Import baselines from page}  
+                        & ?                  &   ?      &   81?       \\
+\midrule
+\multicolumn{4}{c}{\bf New results}\\
+\midrule150d LSTM RNN           & ?                  &   ?      &   81?       \\
+150d TB TreeLSTM    
+                        & ?                  &   ?      &   82?       \\
+150d TB TreeLSTM w/ tracking    
+                        & ?                  &   ?      &   82?       \\
+150d TB TreeLSTM w/ tracking, sequence-based attn.        
+                        & ?                  &   ?      &   82?       \\
+150d TB TreeLSTM w/ tracking, tree-based attn.            
+                        & ?                  &   ?      &   \textbf{82?}\\
+    \bottomrule
+  \end{tabular}
+  \protect\caption{\protect\label{tab:results}Results on SNLI 3-way inference classification. All reported figures are percent accuracy. \todo{Add seconds-per-step *if* we get a reasonably well-optimized model in time.}} 
+\end{table*}
 
 \paragraph{Results}
+
+Table~\ref{tab:results} shows our results.
+
+\subsection{Step time}
+
+\todo{[JG,SB] Does anyone know of a better baseline TreeRNN implementation that we can use on Jagupard? We can use the CoreNLP SST model, but using a Java model as a baseline seems worrying unless we're guaranteed that it's competitively fast.}
+
+Comparing model step time to the plain RNN of \citealt{li2015tree}. We use the small \citealt{pang2004sentimental} sentiment corpus that they use, and train with identical hyperparameters: ...
+
+Evaluation metrics: Time per minibatch on a jag machine, with and without GPU access.
 
 \section{Discussion}
 
@@ -273,9 +452,17 @@ In our model, attention is performed at each step $t$ of the premise encoder. At
 
 \paragraph{Induced alignments}
 
+\begin{figure}
+\vspace{14em}
+\caption{\label{fig:induced-alignment}The alignment induced between two sentences by \todo{some model.}. Compare with a similar alignment presented by \protect\citealt{DBLP:journals/corr/WangJ15b}.}
+\end{figure}
+
 \section{Conclusions and future work}
 
 \begin{itemize}
+\item It is possible to train a tree-structured model, without approximation, on large-scale language learning tasks.
+\item Tree structure helps in large-scale language learning tasks. Not massively, but measurably.
+\item The advantages of attention carry over to tree-structured models.
 \item Future work: Incorporate the parser
 \item Future work: Latent parses
 \end{itemize}

@@ -1,90 +1,8 @@
 %!TEX root = hard_stack_paper/paper.tex
 
+
 \begin{figure*}[t]
-\begin{subfigure}[t]{\textwidth}
-\centering
-\scalebox{0.6}{
- \begin{tikzpicture}
-    \def\dx{21pt}
-    \def\dy{11pt}
-    \def\sy{13*\dy}
-    \def\oxb{8*\dx}
-    \def\by{1*\dy}
-    \def\ox{0*\oxb}
 
-    \tikzstyle{label}=[text width=35mm,align=center,text height=2mm]    
-    \tikzstyle{word}=[text width=35mm,align=center,text height=2mm]    
-    \tikzstyle{comp}=[fill=green!40,text width=20mm,align=center,text height=2mm]
-    \tikzstyle{compoff}=[fill=green!10!black!10,text width=20mm,align=center,text height=2mm]
-    \tikzstyle{input}=[line width=1pt,text width=20mm,align=center,text height=2mm]    
-    \tikzstyle{sbox}=[line width=1pt,draw=black,text width=25mm,align=center,text height=13.3mm]
-    \tikzstyle{bbox}=[line width=1pt,draw=black,text width=25mm,align=center,text height=6.5mm]
-    \tikzstyle{focus1}=[fill=yellow!40,text width=25mm,align=center,text height=2mm]
-    \tikzstyle{focus2}=[fill=yellow!40,,text width=25mm,align=center,text height=5.5mm]
-    
-    \node[label]  (sl) at (\ox-0.35*\oxb+0*\dx,\sy+0.5*\dy) {stack};
-    
-    \node[label]  (1l) at (\ox+0*\dx,\sy+3*\dy) {$t=0$};
-    
-    \node[focus2] (0sb) at  (\ox+0*\dx,\sy-0.5*\dy) {};
-    \node[word]  (0s1) at (\ox+0*\dx,\sy-1*\dy) {cat};
-    \node[word]  (0s2) at (\ox+0*\dx,\sy+0*\dy) {the};
-    \node[word]  (0s3) at (\ox+0*\dx,\sy+1*\dy) {};
-    \node[sbox] (0sb) at  (\ox+0*\dx,\sy+0.5*\dy) {};
-    
-    \node[comp] (0c) at  (\ox+0.5*\oxb,\sy-1.5*\dy) {composition};
-    
-    \node[input] (0so) at  (\ox+0.75*\oxb,9*\dy) {\reduce};
-    
-    \def\ox{1*\oxb}
-    
-    \node[label]  (1l) at (\ox+0*\dx,\sy+3*\dy) {$t=1$};
-    
-    \node[focus2] (1sb) at  (\ox+0*\dx,\sy-0.5*\dy) {};
-    \node[word]  (1s1) at (\ox+0*\dx,\sy-1*\dy) {the cat};
-    \node[word]  (1s2) at (\ox+0*\dx,\sy+0*\dy) {};
-    \node[word]  (1s3) at (\ox+0*\dx,\sy+1*\dy) {};
-    \node[sbox] (1sb) at  (\ox+0*\dx,\sy+0.5*\dy) {};
-    
-    \node[compoff] (1c) at  (\ox+0.5*\oxb,\sy-1.5*\dy) {composition};
-    
-    \node[input] (1so) at  (\ox+0.75*\oxb,9*\dy) {\shift:~sat};
-     
-    \def\ox{2*\oxb}
-
-    \node[label]  (1l) at (\ox+0*\dx,\sy+3*\dy) {$t=2$};
-
-    \node[focus2] (2sb) at  (\ox+0*\dx,\sy-0.5*\dy) {};
-    \node[word]  (2s1) at (\ox+0*\dx,\sy-1*\dy) {sat};
-    \node[word]  (2s2) at (\ox+0*\dx,\sy+0*\dy) {the cat};
-    \node[word]  (2s3) at (\ox+0*\dx,\sy+1*\dy) {};
-    \node[sbox] (2sb) at  (\ox+0*\dx,\sy+0.5*\dy) {};
-  
-   
-    \pgfsetarrowsend{latex}
-    \tikzstyle{fwd} = [draw=black, line width=1pt]
-    \tikzstyle{gated} = [draw=black!50, line width=0.8pt]
-
-    \draw [fwd] (0sb) -- (0c);
-    
-    \draw [fwd] (0sb) -- (1sb);
-    \draw [fwd] (0so) -- (1sb);
-    \draw [fwd] (0c) -- (1sb);
-
-    \draw [fwd] (1sb) -- (1c);
-    
-    \draw [fwd] (1sb) -- (2sb);
-    \draw [fwd] (1so) -- (2sb);
-    \draw [gated] (1c) -- (2sb);
-
-
-
-
-  \end{tikzpicture}}
-  
- \caption{\label{fig:model:0}The Model 0 network unrolled for two transitions on the input \word{the cat sat down}. The operations at the bottom of the figure are given as inputs to the models, as is the start state of the stack at $t=0$.}
-  
-\end{subfigure}\\\\\\
 \begin{subfigure}[t]{\textwidth}
 \centering
 \scalebox{0.6}{
@@ -129,7 +47,7 @@
     \node[comp] (0c) at  (\ox+0.5*\oxb,\sy-1.5*\dy) {composition};
     
     \node[tracker] (0t) at  (\ox+0*\dx,5*\dy) {tracking};
-    \node[softmax] (0sm) at  (\ox+3*\dx,7*\dy) {$\sigma$};
+    % \node[softmax] (0sm) at  (\ox+3*\dx,7*\dy) {$\sigma$};
     \node[result] (0so) at  (\ox+3*\dx,9*\dy) {\reduce};
     
     \def\ox{1*\oxb}
@@ -151,7 +69,7 @@
     \node[compoff] (1c) at  (\ox+0.5*\oxb,\sy-1.5*\dy) {composition};
     
     \node[tracker] (1t) at  (\ox+0*\dx,5*\dy) {tracking};
-    \node[softmax] (1sm) at  (\ox+3*\dx,7*\dy) {$\sigma$};
+    % \node[softmax] (1sm) at  (\ox+3*\dx,7*\dy) {$\sigma$};
     \node[result] (1so) at  (\ox+3*\dx,9*\dy) {\shift};
      
     \def\ox{2*\oxb}
@@ -179,8 +97,6 @@
 
     \draw [fwd] (0sb) -- (0t);
     \draw [fwd] (0bb) -- (0t);
-    \draw [fwd] (0t) -- (0sm);
-    \draw [fwd] (0sm) -- (0so);
     \draw [fwd] (0sb) -- (0c);
     
     \draw [fwd] (0t) -- (1t);
@@ -194,8 +110,6 @@
 
     \draw [fwd] (1sb) -- (1t);
     \draw [fwd] (1bb) -- (1t);
-    \draw [fwd] (1t) -- (1sm);
-    \draw [fwd] (1sm) -- (1so);
     \draw [fwd] (1sb) -- (1c);
     
     \draw [fwd] (1t) -- (2t);
@@ -213,7 +127,7 @@
 
   \end{tikzpicture}}
   
- \caption{The Model 1/2 network unrolled for two transitions on the input \word{the cat sat down}. The start state of the stack and buffer at the initial step $t=0$ are the sole inputs to the model.}\label{fig:model:1d}
+ \caption{The model unrolled for two transitions on the input \word{the cat sat down}.}\label{fig:model:0}
   
 \end{subfigure}\\\\\\
 \begin{subfigure}[t]{\textwidth}
@@ -393,7 +307,7 @@
 
   \end{tikzpicture}}
   
- \caption{The fully unrolled Model 1/2 network for \word{the cat sat down} with some layers omitted for clarity.}\label{fig:model:1b}  
+ \caption{The fully unrolled model for \word{the cat sat down} with some layers omitted for clarity.}\label{fig:model:1b}  
 \end{subfigure}
-\caption{\label{m1-views}Two views of Models 1 and 2 (which use equivalent model graphs). In both views, the lower boxes represent the input buffer, and the upper boxes represent the stack. Yellow highlighting indicates which portions of these data structures are visible to the tracking LSTM and to the composition function. Thin gray arrows indicate connections which are blocked by a gating function, and so contribute no information.}
+\caption{\label{m1-views}Two views of the transition-based sentence model. In both views, the lower boxes represent the input buffer, and the upper boxes represent the stack. Yellow highlighting indicates which portions of these data structures are visible to the tracking LSTM and to the composition function. Thin gray arrows indicate connections which are blocked by a gating function, and so contribute no information. \todo{[SB] Clean up the arrangements of these figures now that we aren't reporting on Models 1/2.}}
 \end{figure*}
