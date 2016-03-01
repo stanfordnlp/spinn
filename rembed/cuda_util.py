@@ -1425,6 +1425,9 @@ def local_gpu_masked_careduce(node):
         return False
 
     # Check switch op.
+    # TODO: Check that it's actually a switch .. !
+    if len(above.inputs) != 3:
+        return False
     mask, ift, iff = above.inputs
     if not mask.broadcastable:
         return False
