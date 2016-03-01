@@ -1155,11 +1155,9 @@ def local_gpua_row_switch(node):
     row switch.
     """
 
-    print "-------------", node, node.op.scalar_op.__class__
     if (node.op.__class__ == T.Elemwise
         and node.op.scalar_op.__class__ != theano.scalar.Switch):
         return False
-    print "\tstill here!"
 
     cond, ift, iff = node.inputs
     out, = node.outputs
@@ -1167,7 +1165,6 @@ def local_gpua_row_switch(node):
     # Only applies to Switch instances where a vector mask broadcasts over
     # matrices.
     bcast = cond.broadcastable
-    print "\t", bcast
     if not bcast or not (not bcast[0] and all(bcast[1:])
                          and ift.ndim in [2, 3]):
         return False
