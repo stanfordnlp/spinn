@@ -1414,7 +1414,7 @@ def local_gpu_masked_careduce(node):
     if node.op.scalar_op.__class__ != theano.scalar.Add:
         return False
     above = node.inputs[0].owner
-    if not isinstance(above.op, GpuElemwise):
+    if above is None or not isinstance(above.op, GpuElemwise):
         return False
 
     # The graph looks okay. Check the dims.
