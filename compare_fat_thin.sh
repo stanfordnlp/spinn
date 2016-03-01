@@ -1,4 +1,4 @@
-for classifier in classifier fat_classifier; do
+for classifier in fat_classifier classifier; do
     export THEANO_FLAGS=compiledir=/tmp/theano.timing,device=gpu3,floatX=float32
     python -m rembed.models.${classifier} --eval_seq_length 50 --init_range 0.005 \
         --model_dim 300 --word_embedding_dim 300 \
