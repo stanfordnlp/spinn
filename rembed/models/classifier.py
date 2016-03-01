@@ -650,7 +650,10 @@ def run(only_forward=False):
             gradients = premise_model.gradients
             hypothesis_gradients = hypothesis_model.gradients
             for key in hypothesis_gradients:
-                gradients[key] += hypothesis_gradients[key]
+                if key in gradients:
+                    gradients[key] += hypothesis_gradients[key]
+                else:
+                    gradients[key] = hypothesis_gradients[key]
 
             new_values = util.merge_updates(
                 premise_model.scan_updates + premise_model.bscan_updates,
