@@ -190,7 +190,7 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
         initialize_hyp_tracking_state=FLAGS.initialize_hyp_tracking_state)
 
     premise_stack_tops = premise_model.stack_tops if FLAGS.use_attention != "None" else None
-    premise_tracking_c_state_final = premise_model.tracking_c_state_final
+    premise_tracking_state_final = premise_model.tracking_state_final
     hypothesis_model = cls(
         FLAGS.model_dim, FLAGS.word_embedding_dim, vocab_size, seq_length,
         compose_network, embedding_projection_network, training_mode, ground_truth_transitions_visible, vs,
@@ -209,7 +209,7 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
         premise_stack_tops=premise_stack_tops,
         is_hypothesis=True,
         initialize_hyp_tracking_state=FLAGS.initialize_hyp_tracking_state,
-        premise_tracking_c_state_final=premise_tracking_c_state_final)
+        premise_tracking_state_final=premise_tracking_state_final)
 
     # Extract top element of final stack timestep.
     if FLAGS.use_attention == "None" or FLAGS.use_difference_feature or FLAGS.use_product_feature:
@@ -744,8 +744,8 @@ if __name__ == '__main__':
     gflags.DEFINE_boolean("connect_tracking_comp", True,
         "Connect tracking unit and composition unit. Can only be true if using LSTM in both units.")
     gflags.DEFINE_boolean("initialize_hyp_tracking_state", False,
-        "Initialize the c state of the tracking unit of hypothesis model with the final"
-        "tracking unit c state of the premise model.")
+        "Initialize the h and c state of the tracking unit of hypothesis model with the final"
+        "tracking unit states of the premise model.")
 
     # Optimization settings.
     gflags.DEFINE_integer("training_steps", 500000, "Stop training after this point.")
