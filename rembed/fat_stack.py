@@ -150,7 +150,7 @@ class HardStack(object):
         """
 
         self.model_dim = model_dim
-        self.stack_dim = 2 * model_dim if use_attention == "TreeWangJiang" else model_dim
+        self.stack_dim = 2 * model_dim if use_attention in {"TreeWangJiang", "TreeThang"} else model_dim
         self.word_embedding_dim = word_embedding_dim
         self.use_tracking_lstm = use_tracking_lstm
         self.tracking_lstm_hidden_dim = tracking_lstm_hidden_dim
@@ -204,6 +204,8 @@ class HardStack(object):
             self._attention_unit = util.TreeWangJiangAttentionUnit
         elif use_attention == "Thang" and is_hypothesis:
             self._attention_unit = util.ThangAttentionUnit
+        elif use_attention == "TreeThang" and is_hypothesis:
+            self._attention_unit = util.TreeThangAttentionUnit
         else:
             self._attention_unit = None
         self.initialize_hyp_tracking_state = initialize_hyp_tracking_state
@@ -326,8 +328,7 @@ class HardStack(object):
         # we're processing the hypothesis) calculate the attention weighed representation.
         if self.use_attention != "None" and self.is_hypothesis:
             h_dim = self.model_dim / 2
-            if self.use_attention == "TreeWangJiang":
-                # Move these lines (with appropriate conditional) to before update_hard_stack
+            if self.use_attention in {"TreeWangJiang", "TreeThang"}:
                 attention_hidden_l = stack_t[:, 0, self.model_dim:] * mask
                 attention_hidden_r = stack_t[:, 1, self.model_dim:] * mask
 
@@ -408,7 +409,7 @@ class HardStack(object):
             hidden_init = DUMMY
 
         # Initialize the attention representation if needed
-        if self.use_attention not in {"TreeWangJiang", "None"} and self.is_hypothesis:
+        if self.use_attention not in {"TreeWangJiang", "TreeThang", "None"} and self.is_hypothesis:
             h_dim = self.model_dim / 2
             if self.use_attention == "WangJiang" or self.use_attention == "Thang":
                  attention_init = T.zeros((batch_size, 2 * h_dim))
@@ -475,9 +476,9 @@ class HardStack(object):
             if self.use_attention == "Rocktaschel":
                 self.final_weighed_representation = util.AttentionUnitFinalRepresentation(scan_ret[0][stack_ind + 3][-1],
                     self.embeddings[:,:h_dim], h_dim, self._vs)
-            elif self.use_attention == "WangJiang" or self.use_attention == "Thang":
+            elif self.use_attention in {"WangJiang", "Thang"}:
                 self.final_weighed_representation = scan_ret[0][stack_ind+3][-1][:,:h_dim]
-            elif self.use_attention == "TreeWangJiang":
+            elif self.use_attention in {"TreeWangJiang", "TreeThang"}:
                 self.final_weighed_representation = scan_ret[0][stack_ind][-1][:,0,2*h_dim:3*h_dim]
 
         if self.initialize_hyp_tracking_state and not self.is_hypothesis:
