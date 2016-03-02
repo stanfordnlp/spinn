@@ -475,8 +475,8 @@ class ThinStack(object):
         input_ndim += [len(extra_output_shape) + 1
                        for extra_output_shape in self.recurrence.extra_outputs]
 
-        wrt = [self._vs.vars[key] for key in self._vars
-               if self._vs.vars[key] != self.embeddings]
+        wrt = wrt = [self._vs.vars[key] for key in self._vars
+               if key in self._vs.trainable_vars]
 
         # TODO handle gradient of action prediction
         # TODO would it pay off to force these to have the same concrete
