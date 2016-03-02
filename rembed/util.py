@@ -38,23 +38,28 @@ NUM_TRANSITION_TYPES = 2
 
 
 def UniformInitializer(range):
-    return lambda shape: np.random.uniform(-range, range, shape)
+    return lambda shape, **kwargs: np.random.uniform(-range, range, shape)
 
 
 def HeKaimingInitializer():
-    return lambda shape: np.random.normal(scale=math.sqrt(4.0/(shape[0] + shape[1])), size=shape)
+    def init(shape, real_shape=None):
+        # Calculate fan-in / fan-out using real shape if given as override
+        fan = real_shape or shape
+
+        return np.random.normal(scale=math.sqrt(4.0/(fan[0] + fan[1])),
+                                size=shape)
 
 
 def NormalInitializer(std):
-    return lambda shape: np.random.normal(0.0, std, shape)
+    return lambda shape, **kwargs: np.random.normal(0.0, std, shape)
 
 
 def ZeroInitializer():
-    return lambda shape: np.zeros(shape)
+    return lambda shape, **kwargs: np.zeros(shape)
 
 
 def OneInitializer():
-    return lambda shape: np.ones(shape)
+    return lambda shape, **kwargs: np.ones(shape)
 
 
 def TreeLSTMBiasInitializer():
@@ -204,9 +209,21 @@ def ReLULayer(inp, inp_dim, outp_dim, vs, name="relu_layer", use_bias=True, init
 def Linear(inp, inp_dim, outp_dim, vs, name="linear_layer", use_bias=True, initializer=None):
     if isinstance(inp, tuple):
         assert isinstance(inp_dim, tuple)
-        Ws = [vs.add_param("%s_W%i" % (name, i), (dim_i, outp_dim),
-                           initializer=initializer)
-              for i, dim_i in enumerate(inp_dim)]
+        # Build initializers which are aware of the real shape of the overall
+        # (unsplit) matrix.
+        real_inp_dim = sum(inp_dim)
+        initializer = partial(initializer or vs.default_initializer,
+                              real_shape=(real_inp_dim, outp_dim))
+
+        try:
+            Ws = [vs.add_param("%s_W%i" % (name, i), (dim_i, outp_dim),
+                               initializer=initializer)
+                  for i, dim_i in enumerate(inp_dim)]
+        except TypeError, e:
+            raise RuntimeError(
+                "TypeError in vs initialization for split Gemm. Does the "
+                "initializer you provided (%s) support real_shape?"
+                % initializer, e)
 
         outp = T.dot(inp[0], Ws[0])
         for inp_i, W_i in zip(inp[1:], Ws[1:]):
@@ -258,13 +275,16 @@ def TreeLSTMLayer(lstm_prev, external_state, full_memory_dim, vs, name="tree_lst
     assert isinstance(lstm_prev, tuple)
     l_prev, r_prev = lstm_prev
 
+    real_shape = (hidden_dim * 2 + external_state_dim, hidden_dim * 5)
+    initializer_children = partial(initializer or vs.default_initializer,
+                                   real_shape=real_shape)
     W_l = vs.add_param("%s/W_l" % name, (hidden_dim, hidden_dim * 5),
-                       initializer=initializer)
+                       initializer=initializer_children)
     W_r = vs.add_param("%s/W_r" % name, (hidden_dim, hidden_dim * 5),
-                       initializer=initializer)
+                       initializer=initializer_children)
     if external_state_dim > 0:
         W_ext = vs.add_param("%s/W_ext" % name, (external_state_dim, hidden_dim * 5),
-                             initializer=initializer)
+                             initializer=initializer_children)
     b = vs.add_param("%s/b" % name, (hidden_dim * 5,),
                      initializer=TreeLSTMBiasInitializer())
 
@@ -398,7 +418,7 @@ def TreeWangJiangAttentionUnit(attention_state_prev_l, attention_state_prev_r, c
 
     mlstm_input = T.concatenate([Y__alpha_t, current_stack_top], axis=1)
     lstm_prev = (attention_state_prev_l, attention_state_prev_r)
-    r_t = TreeLSTMLayer(lstm_prev, mlstm_input, 2 * attention_dim, vs, 
+    r_t = TreeLSTMLayer(lstm_prev, mlstm_input, 2 * attention_dim, vs,
             name="%s/lstm" % name, external_state_dim=2 * attention_dim)
 
     return r_t
@@ -905,7 +925,7 @@ def MakeEvalIterator(sources, batch_size):
     start = -batch_size
     while True:
         start += batch_size
-        
+
         if start >= dataset_size:
             break
 
@@ -915,7 +935,7 @@ def MakeEvalIterator(sources, batch_size):
         if len(candidate_batch[0]) == batch_size:
             data_iter.append(candidate_batch)
         else:
-            print "Skipping " + str(len(candidate_batch[0])) + " examples."  
+            print "Skipping " + str(len(candidate_batch[0])) + " examples."
     return data_iter
 
 
