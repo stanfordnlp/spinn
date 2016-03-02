@@ -445,6 +445,37 @@ def WangJiangAttentionUnit(attention_state_prev, current_stack_top, premise_stac
 
     return r_t
 
+def ThangAttentionUnit(attention_state_prev, current_stack_top, premise_stack_tops, projected_stack_tops, attention_dim,
+                    vs, name="attention_unit", initializer=None):
+    """
+    Args:
+      attention_state_prev: The output of this unit at the previous time step.
+      current_stack_top: The current stack top (h state only, if applicable).
+      premise_stack_tops: The values to do attention over.
+      projected_stack_tops: Projected vectors to use to produce an attentive
+          weighting alpha_t.
+      attention_dim: The dimension of the vectors over which to do attention.
+      vs: A variable store for the learned parameters.
+      name: An identifier for the learned parameters in this unit.
+      initializer: Used to initialize the learned parameters.
+
+    Dimension notation:
+      B : Batch size
+      k : Model dim
+      L : num_transitions
+    """
+    # Shape: B x L
+    score = T.sum(projected_stack_tops * current_stack_top, axis=2).T
+    alpha_t = T.nnet.softmax(score)
+
+    # Shape B x k
+    Y__alpha_t = T.sum(premise_stack_tops * alpha_t.T[:, :, np.newaxis], axis=0)
+
+    mlstm_input = T.concatenate([Y__alpha_t, current_stack_top], axis=1)
+
+    r_t = LSTMLayer(attention_state_prev, mlstm_input, 2 * attention_dim, 2 * attention_dim, vs, name="%s/lstm" % name)
+
+    return r_t
 
 def RocktaschelAttentionUnit(attention_state_prev, current_stack_top, premise_stack_tops, projected_stack_tops, attention_dim,
                     vs, name="attention_unit", initializer=None):
