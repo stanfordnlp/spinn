@@ -42,12 +42,13 @@ def UniformInitializer(range):
 
 
 def HeKaimingInitializer():
-    def init(shape, real_shape=None):
+    def HeKaimingInit(shape, real_shape=None):
         # Calculate fan-in / fan-out using real shape if given as override
         fan = real_shape or shape
 
         return np.random.normal(scale=math.sqrt(4.0/(fan[0] + fan[1])),
                                 size=shape)
+    return HeKaimingInit
 
 
 def NormalInitializer(std):
