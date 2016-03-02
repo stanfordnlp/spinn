@@ -218,7 +218,7 @@ Our model, which is shown in Figure~\ref{fig:model:0}, takes the form of a trans
 \item The intermediate representations in the parser, including the representations of the tree structures on the stack, are vectors of a fixed length.
 \item The \reduce~operation, which combines two trees or tree nodes on the stack into a single larger tree, is represented using a parametric neural network layer function (in particular, a TreeLSTM layer, after \citealt{tai2015improved}).
 \item The intermediate states of the stack and buffer during parsing are stored during training. This makes it possible to learn the parameters of the composition function and the input word representations that are fed into the buffer using backpropagation on an objective function that depends on the final sentence representation that emerges at the head of the stack.
-\item A novel tracking LSTM component is added to improve the model's ability to efficiently track the context in which each step is being performed. (\todo{Is this similar enough to anything from Dyer that we should add a citation here?})
+\item A novel tracking LSTM component is added to improve the model's ability to efficiently track the context in which each step is being performed.
 \end{itemize}
 
 
@@ -327,11 +327,14 @@ ops: \reduce~\shift~\shift~\reduce~\reduce
 \end{quote}
 
 
-\paragraph{Handling overly long sentences}
+\paragraph{Handling variable sentence lengths}
 
-To efficiently implement batched computation, we must stipulate a fixed number of transitions (50) that the model can perform before producing an output. 
+To efficiently implement batched computation, we must stipulate a fixed number of transitions (50) that the model can perform before producing an output. Sentences whose transition sequences are shorter than this length are padded, and sentences whose transition sequences are longer than this length are cropped. 
 
-\todo{[SB] Why cropping is sensible if done well.}\\
+Padding, if done properly, should not impact the output of the model significantly:\footnote{The tracking LSTM can cause a slight dependence of the final representation on unrolling length. Because of this, we always train and test the model with a fixed unrolling length.} a model with the fixed parameters should produce the same representation for a 10-word sentence whether it is unrolled for 19 transitions (the minimum to avoid cropping) or 100.
+
+Cropping necessarily discards information, but if done properly, it is nonetheless possible to learn good representations for cropped sentences. When a transition sequence is cropped, the number of removed \shift~transitions is tracked, and an equal number of word tokens is removed from the tail (left) end of the buffer. This makes it possible for a transition sequence to begin with a \reduce~transition, or to otherwise use a \reduce~transition on a stack that does not have two elements to reduce. In this instance, we simply feed the composition function one or more zero vectors, which represent nonexistent stack elements. If the composition learns to interpret these zero vectors properly, they can be taken to be unknown or incomplete nodes in an otherwise complete tree that is constructed according to the intended parse structure. \todo{[SB] Make a figure showing the results of cropping if there's room.}
+
 
 \paragraph{Representing the stack in memory} Or, thin stack. 
 \todo{[JG] Explain.}
@@ -346,10 +349,7 @@ We trained each model for 250k steps, using a minibatch size of 64 for each step
 
 \subsection{Related work: Transition-based parsing and neural networks.}
 
-\begin{itemize}
-\item \cite{chen2014}
-\item \cite{dyer-EtAl:2015:ACL-IJCNLP}, \cite{dyer2016rnn}
-\end{itemize}
+There has been a fairly long history of work on building neural-network based parsers that use the core operations and data structures from transition-based parsing \cite{henderson2004discriminative,emami2005neural,titov2010latent,buys2generative,chen2014,dyer-EtAl:2015:ACL-IJCNLP}. In addition, there has been recent work \cite{zhang2016top,dyer2016rnn} proposing models designed primarily for generative language modeling tasks that use these structures as well. To our knowledge, our model is the first to use these structures for the purpose of sentence interpretation, rather than parsing or generation.
 
 \section{Attention over trees}
 
@@ -464,6 +464,7 @@ Evaluation metrics: Time per minibatch on a jag machine, with and without GPU ac
 \item It is possible to train a tree-structured model, without approximation, on large-scale language learning tasks.
 \item Tree structure helps in large-scale language learning tasks. Not massively, but measurably.
 \item The advantages of attention carry over to tree-structured models.
+\item Future work: Encode the stack, after \citealt{dyer-EtAl:2015:ACL-IJCNLP}
 \item Future work: Incorporate the parser
 \item Future work: Latent parses
 \end{itemize}
