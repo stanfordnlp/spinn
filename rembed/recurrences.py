@@ -98,16 +98,32 @@ class SharedRecurrenceMixin(object):
     def _tracking_lstm_predict(self, inputs, network):
         # TODO(SB): Offer more buffer content than just the top as input.
         c1, c2, buffer_top, tracking_hidden = inputs[:4]
+
+        h_dim = self._spec.model_dim
+        if self._spec.model_visible_dim != self._spec.model_dim:
+            h_dim = self._spec.model_visible_dim
+            c1 = c1[:, :h_dim]
+            c2 = c2[:, :h_dim]
+            buffer_top = buffer_top[:, :h_dim]
+
         inp = (c1, c2, buffer_top)
-        return network(tracking_hidden, inp, (self._spec.model_dim,) * 3,
+        return network(tracking_hidden, inp, (h_dim,) * 3
                        self.tracking_lstm_hidden_dim, self._vs,
                        name="prediction_and_tracking")
 
     def _predict(self, inputs, network):
         # TODO(SB): Offer more buffer content than just the top as input.
-        inp = tuple(inputs[:3])
-        return network(inp, (self._spec.model_dim,) * 3,
-                       util.NUM_TRANSITION_TYPES, self._vs,
+        c1, c2, buffer_top = tuple(inputs[:3])
+
+        h_dim = self._spec.model_dim
+        if self._spec.model_visible_dim != self._spec.model_dim:
+            h_dim = self._spec.model_visible_dim
+            c1 = c1[:, :h_dim]
+            c2 = c2[:, :h_dim]
+            buffer_top = buffer_top[:, :h_dim]
+
+        inp = (c1, c2, buffer_top)
+        return network(inp, (h_dim,) * 3, util.NUM_TRANSITION_TYPES, self._vs,
                        name="prediction_and_tracking")
 
     def _merge(self, inputs, network):

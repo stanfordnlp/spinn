@@ -84,8 +84,10 @@ def build_sentence_model(cls, vocab_size, seq_length, tokens, transitions,
                 "word_embedding_dim must equal model_dim unless a projection layer is used."
             embedding_projection_network = util.IdentityLayer
 
+    model_visible_dim = FLAGS.model_dim / 2 if FLAGS.lstm_composition else FLAGS.model_dim
     spec = util.ModelSpec(FLAGS.model_dim, FLAGS.word_embedding_dim,
-                          FLAGS.batch_size, vocab_size, seq_length)
+                          FLAGS.batch_size, vocab_size, seq_length,
+                          model_visible_dim=model_visible_dim)
 
     # TODO: Check non-Model0 support.
     recurrence = cls(spec, vs, compose_network,
@@ -167,8 +169,10 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
                 "word_embedding_dim must equal model_dim unless a projection layer is used."
             embedding_projection_network = util.IdentityLayer
 
+    model_visible_dim = FLAGS.model_dim / 2 if FLAGS.lstm_composition else FLAGS.model_dim
     spec = util.ModelSpec(FLAGS.model_dim, FLAGS.word_embedding_dim,
-                          FLAGS.batch_size, vocab_size, seq_length)
+                          FLAGS.batch_size, vocab_size, seq_length,
+                          model_visible_dim=model_visible_dim)
 
     # Split the two sentences
     premise_tokens = tokens[:, :, 0]
