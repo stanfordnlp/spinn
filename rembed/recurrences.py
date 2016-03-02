@@ -107,7 +107,7 @@ class SharedRecurrenceMixin(object):
             buffer_top = buffer_top[:, :h_dim]
 
         inp = (c1, c2, buffer_top)
-        return network(tracking_hidden, inp, (h_dim,) * 3
+        return network(tracking_hidden, inp, (h_dim,) * 3,
                        self.tracking_lstm_hidden_dim, self._vs,
                        name="prediction_and_tracking")
 
