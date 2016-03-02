@@ -327,8 +327,10 @@ class HardStack(object):
         if self.use_attention != "None" and self.is_hypothesis:
             h_dim = self.model_dim / 2
             if self.use_attention == "TreeWangJiang":
-                attention_hidden_l = stack_t[:, 0, self.model_dim:]
-                attention_hidden_r = stack_t[:, 1, self.model_dim:]
+                # Move these lines (with appropriate conditional) to before update_hard_stack
+                attention_hidden_l = stack_t[:, 0, self.model_dim:] * mask
+                attention_hidden_r = stack_t[:, 1, self.model_dim:] * mask
+
                 tree_attention_hidden = self._attention_unit(attention_hidden_l, attention_hidden_r,
                     stack_next[:, 0, :h_dim], premise_stack_tops, projected_stack_tops, h_dim,
                     self._vs, name="attention_unit")
