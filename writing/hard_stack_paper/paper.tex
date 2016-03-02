@@ -158,7 +158,7 @@ $^{6}$Stanford Computer Science}
 \begin{figure}[t]
 \begin{subfigure}[t]{0.9\columnwidth}
 \vspace{14em}
-\todo{[SB] Figure showing why trees can't be batched.}
+\todo{[SB] Figure showing why trees can't be batched (modeled after slides).}
 
 \caption{\label{fig:batching:bad}Trees are hard to batch.}
 \end{subfigure}
@@ -167,7 +167,7 @@ $^{6}$Stanford Computer Science}
 
 \begin{subfigure}[t]{0.9\columnwidth}
 \vspace{14em}
-\todo{[SB] Figure showing why trees can't be batched.}
+\todo{[SB] Figure showing a batch of sequences (modeled after slides).}
 
 \caption{\label{fig:batching:good}Sequences are easy to batch.}
 \end{subfigure}
@@ -210,6 +210,8 @@ Our model is based on a formalism adapted from transition-based parsing (\todo{W
 
 \todo{[SB, JG] Brief into to transition-based parsing.}
 
+\vspace{10em}
+
 \subsection{The model}
 
 Our model, which is shown in Figure~\ref{fig:model:0}, takes the form of a transition-based parser, but it is designed to produce sentence representations given parse structures, rather than producing parse structures as its output, leading to the following differences:
@@ -220,8 +222,6 @@ Our model, which is shown in Figure~\ref{fig:model:0}, takes the form of a trans
 \item The intermediate states of the stack and buffer during parsing are stored during training. This makes it possible to learn the parameters of the composition function and the input word representations that are fed into the buffer using backpropagation on an objective function that depends on the final sentence representation that emerges at the head of the stack.
 \item A novel tracking LSTM component is added to improve the model's ability to efficiently track the context in which each step is being performed.
 \end{itemize}
-
-
 
 \input{../model0_fig.tex}
 
@@ -326,7 +326,6 @@ buffer: $\langle$sat, down$\rangle$\\
 ops: \reduce~\shift~\shift~\reduce~\reduce
 \end{quote}
 
-
 \paragraph{Handling variable sentence lengths}
 
 To efficiently implement batched computation, we must stipulate a fixed number of transitions (50) that the model can perform before producing an output. Sentences whose transition sequences are shorter than this length are padded, and sentences whose transition sequences are longer than this length are cropped. 
@@ -335,15 +334,18 @@ Padding, if done properly, should not impact the output of the model significant
 
 Cropping necessarily discards information, but if done properly, it is nonetheless possible to learn good representations for cropped sentences. When a transition sequence is cropped, the number of removed \shift~transitions is tracked, and an equal number of word tokens is removed from the tail (left) end of the buffer. This makes it possible for a transition sequence to begin with a \reduce~transition, or to otherwise use a \reduce~transition on a stack that does not have two elements to reduce. In this instance, we simply feed the composition function one or more zero vectors, which represent nonexistent stack elements. If the composition learns to interpret these zero vectors properly, they can be taken to be unknown or incomplete nodes in an otherwise complete tree that is constructed according to the intended parse structure. \todo{[SB] Make a figure showing the results of cropping if there's room.}
 
-
 \paragraph{Representing the stack in memory} Or, thin stack. 
 \todo{[JG] Explain.}
 
+\vspace{8em}
+
 \paragraph{Optimization and hyperparameters}
 
-We used random search to tune \todo{[SB] List tuned hyperparameters.}
+We use the RMSProp optimizer (\todo{Cite.}) with a tuned starting learning rate that decays by a factor of 0.75 every 10k steps. We apply both dropout \cite{srivastava2014dropout} and batch normalization \cite{2015SIoffeCSzegedy} to the word embeddings in the buffer (after the linear projection is applied) and to the feature vectors that serve as the inputs and outputs to the MLP that precedes the final entailment classifier. In addition, we apply an L2 regularization penalty to all parameters.
 
-We trained each model for 250k steps, using a minibatch size of 64 for each step. We tracked each model's performance on the development set during training and saving parameters when this performance reached a new peak. We used early stopping, evaluating on the test set using the parameters that performed best on the development set.
+We used random search to tune many of the hyperparameters, including the learning rate, the dropout rate, the L2 regularization weight, the hidden dimension of the tracking LSTM and the number of layers in the MLP \todo{[SB] Report the ranges searched for each parameter and the number of runs for each results.}
+
+We trained each model for 250k steps in each run, using a minibatch size of 64 for each step. We tracked each model's performance on the development set during training and saving parameters when this performance reached a new peak. We used early stopping, evaluating on the test set using the parameters that performed best on the development set.
 
 \paragraph{Software infrastructure} We will make Theano code available.
 
@@ -407,8 +409,6 @@ Lexicalized classifier \cite{snli:emnlp2015}
                         & 15m                &   98.8   &   81.4       \\
 300d Tree-based CNN encoders \cite{mou2015recognizing}
                         & 3.5m               &   83.4   &   82.1       \\
-\todo{[SB] Import baselines from page}  
-                        & ?                  &   ?      &   81?       \\
 \midrule
 \multicolumn{4}{c}{Previous NN results with attention}\\
 \midrule
