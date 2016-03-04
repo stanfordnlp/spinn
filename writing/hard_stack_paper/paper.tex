@@ -217,7 +217,7 @@ $^{6}$Stanford Computer Science}
 
 \subsection{Intuition: Transition-based parsing}
 
-Our model is based on a formalism adapted from transition-based parsing (\todo{What's a good classic citation for this?}).
+Our model is based on a formalism adapted from transition-based parsing (\question{What's a good classic citation for this?}).
 
 \todo{[SB, JG] Brief into to transition-based parsing.}
 
@@ -235,9 +235,6 @@ Our model, which is shown in Figure~\ref{fig:model:0}, takes the form of a trans
 \end{itemize}
 
 \input{../model0_fig.tex}
-
-\paragraph{Equivalence with existing models}
-If we add no additional features, this model computes the same function as a plain TreeRNN. However, we expect it to be substantially faster than conventional TreeRNN implementations. Unlike a TreeRNN, the Model 0 computation graph is essentially static across examples, so examples of varying structures and lengths can be batched together and run on the same graph in a single step. This simply requires ensuring that the graph is run for enough timesteps to finish all of the sentences. This involves some wasted computation, since the composition function will be run $2N-1$ times (with the output of composition at non-\reduce~steps discarded), rather than $N-1$ times in a TreeRNN. However, this loss can be dramatically offset by the gains of batching, which stem from the ability to exploit highly optimized CPU and GPU libraries for batched matrix multiiplication. \todo{Update.}
 
 \paragraph{The buffer and word representations}
 
@@ -305,11 +302,13 @@ This paper presents the transition-based sentence model within the context of \t
     {\vec{h}_{\text{premise}} * \vec{h}_{\text{hypothesis}}}
 \end{equation}
 
-This feature vector is then passed to a series of two (\todo{Update}) ReLU neural network layers, then passed into a linear transformation, and then finally passed to a softmax layer, which yields a distribution among the three labels.
+This feature vector is then passed to a series of two (\todo{Update w/ final number}) ReLU neural network layers, then passed into a linear transformation, and then finally passed to a softmax layer, which yields a distribution among the three labels.
 
 \subsection{Tracking left context with an auxiliary LSTM}
 
-The tracking LSTM captures left context. \todo{Why?}
+Lexical ambiguity is omnipresent in natural language. Most words have multiple senses or meanings, and it is generally necessary to use the context in which a word occurs to determine which of its senses or meanings is meant in a given sentence. Simpler sequence-based sentence encoding models like the standard LSTM RNN have an advantage here: when a sequence-based model first processes a word (first incorporates it into a partial sentence representation), the model has access to a state vector that summarizes all of the words to the left of the current word, and that state vector can serve as a crude but effective form of context to help with disambiguation. In contrast, when standard tree-structured models first process a word, they only have access to the constituent that the word is merging with, which is strictly less than the sequence model has access to, and is often just a single additional word. 
+
+In addition to our basic model, we additionally propose an extension that adds to the model (and exploits its sequential structure) by building in a parallel sequence-based model to track left context. This auxiliary model, called the tracking LSTM, maintains a low dimensional representation that is updated after every transition, thereby maintaining a representation of the left context at each time point. That representation is fed into the composition function as an additional input to allow for more efficient disambiguation. As long as the representations produced by the tracking LSTM are substantially smaller than those produced by the main composition function, the model is heavily biased towards computing sentence meaning compositionally according to the assigned tree structure, and is simply given the ability to do so with a better awareness of context.
 
 The tracking LSTM is a standard LSTM RNN. At each step it takes three vectors as inputs: the top element of the buffer $\vec{h}_b^1$, which would be moved in a \shift~operation, and the two two elements of the stack $\vec{h}_s^1$ and $\vec{h}_s^2$ which would be composed in a \reduce~operation. Its output hidden state at each step is used as the external input to the TreeLSTM composition function for that step.
 
@@ -398,7 +397,7 @@ In our model, attention is performed at each step $t$ of the premise encoder. At
 
 \subsection{Natural language inference and SNLI}
 
-We evaluate our model on the task of natural language inference (NLI), also known as recognizing textual entailment (RTE). NLI is a sentence pair classification task, in which a model reads two sentences (a premise and a hypothesis), and outputs a judgment of {\it entailment}, {\it contradiction}, or {\it neutral}, reflecting the relationship between the meanings of the two sentences, as here: 
+We evaluate our model on the task of natural language inference (NLI), also known as recognizing textual entailment (RTE). NLI is a sentence pair classification task, in which a model reads two sentences (a premise and a hypothesis), and outputs a judgment of {\it entailment}, {\it contradiction}, or {\it neutral}, reflecting the relationship between the meanings of the two sentences, as in this example from the Stanford NLI corpus (SNLI, \citealt{snli:emnlp2015}), which we use for training and evaluation: 
 
 \begin{quote}
 Premise: {\it Girl in a red coat, blue head wrap and jeans is making a snow angel.}
@@ -410,7 +409,7 @@ Correct label: {\it entailment}
 
 Even though NLI is framed as a relatively simple three-way classification task, it is nonetheless an effective way of evaluating the ability of some model to extract broadly informative representations of sentence meaning. In order for a model to reliably perform well on NLI across a range of sentence types and text genres, it must be able to represent and reason with all of the core phenomena of natural language semantics, including quantification, coreference, scope, and several types of ambiguity.
 
-In particular, we use the Stanford NLI corpus (SNLI, \citealt{snli:emnlp2015}). SNLI is a corpus of 570k human-labeled pairs of scene descriptions like the one above. We use the standard train--test split and ignore unlabeled examples, which leaves about 549k examples for training, 9,842 for development, and 9,824 for testing. SNLI labels are roughly balanced, with the most frequent label, {\it entailment}, making up 34.2\% of the test set.
+SNLI is a corpus of 570k human-labeled pairs of scene descriptions like the one above. We use the standard train--test split and ignore unlabeled examples, which leaves about 549k examples for training, 9,842 for development, and 9,824 for testing. SNLI labels are roughly balanced, with the most frequent label, {\it entailment}, making up 34.2\% of the test set.
 
 \subsection{Models evaluated}
 
@@ -487,7 +486,7 @@ Comparing model step time to the plain RNN of \citealt{li2015tree}. We use the s
 
 \begin{figure}
 \vspace{14em}
-\caption{\label{fig:induced-alignment}The alignment induced between two sentences by \todo{some model.}. Compare with a similar alignment presented by \protect\citealt{DBLP:journals/corr/WangJ15b}.}
+\caption{\label{fig:induced-alignment}The alignment induced between two sentences by \result{one of our models.}. Compare with a similar alignment presented by \protect\citealt{DBLP:journals/corr/WangJ15b}.}
 \end{figure}
 
 \section{Conclusions and future work}
