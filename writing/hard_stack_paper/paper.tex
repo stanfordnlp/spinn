@@ -152,6 +152,7 @@ $^{6}$Stanford Computer Science}
 \end{abstract}
 
 \todo{Anonymize.}
+\todo{Name the damn model!}
 
 \section{Introduction}
 
@@ -171,6 +172,7 @@ $^{6}$Stanford Computer Science}
 
 \caption{\label{fig:batching:good}Sequences are easy to batch.}
 \end{subfigure}
+\caption{An illustration of a conventionally-implemented TreeRNN model (a) and our equivalent model (b).}
 \end{figure}
 
 \begin{itemize}
@@ -210,8 +212,6 @@ $^{6}$Stanford Computer Science}
 \end{itemize}
 
 \end{itemize}
-
-
 
 \section{The transition-based sentence model}
 
@@ -256,14 +256,11 @@ We draw our word representations from the standard 300-dimensional vector packag
 In our model, each row of the stack contains a pair of vectors $(h, c)$, which together represent some node in the parse tree of the sentence. Since the \shift~operation simply copies entries from the buffer onto the stack, this means that the word representations in the buffer also have two parts, $h$ and $c$. 
 
 \paragraph{The composition function}
+When a \reduce~operation is performed, vector representations of two tree nodes are popped off of the head of the stack and fed into a {\ii composition function}, which is a neural network function that produces a representation for a new tree node that is the parent of the two popped nodes. This new node is then pushed on to the stack.
 
-\todo{[SB] Finish this subsection.}
+Our composition function is based closely on the TreeLSTM of \citealt{tai2015improved}. The TreeLSTM generalizes the LSTM neural network layer \cite{hochreiter1997long} to tree- rather than sequence-based inputs, and it shares with that older design the idea of representing intermediate states in a computation using a two-part vector representation containing an $\vec{h}$ vector and a $\vec{c}$ vector, where the latter is meant to serve as a slower-changing long-term memory. 
 
-From \citealt{tai2015improved}.
-
-When a \reduce~operation is performed, vector representations of two tree nodes are popped off of the head of the stack and fed into a {\ii composition function}, which is a neural network function that produces 
-
-The inputs to the composition function are the representations of the two words or phrases closest to the head of the, $(\vec{h}^1_s, \vec{c}^1_s)$ and $(\vec{h}^2_s, \vec{c}^2_s)$, which are treated as the two children of the tree node whose representation the composition function is constructing. Each vector is of the same dimension $D$.
+The precise formulation that we use is as follows.
 
 \begin{gather}
 \colvec{4}
@@ -293,7 +290,7 @@ W_{g}
 \vec{h} = \vec{o} * \vec{c}
 \end{gather}
 
-$\vec{e}$ is an optional input argument which is either the empty vector $[]$ or a vector from an external source like the tracking LSTM (see below). $*$ denotes the elementwise product. Each vector-valued variable listed here is of dimension $D$. The values $(h, c)$ represent the local subtree, and both will be placed on the stack during a \reduce~operation.
+The results of this function are the pair $(\vec{h}, \vec{c})$, which are placed back on the stack. The two input tree nodes popped off the stack are represented as the pairs $(\vec{h}^1_s, \vec{c}^1_s)$ and $(\vec{h}^2_s, \vec{c}^2_s)$. In addition, $\vec{e}$ is an optional input argument which is either the empty vector $[]$ or a vector from an external source like the tracking LSTM (see below). $*$ denotes the elementwise product. Each vector-valued variable listed here is of dimension $D$, except $\vec{e}$, which is of dimensions $D_t$, which can be chosen independently.
 
 \paragraph{Creating a sentence pair classifier}
 
@@ -363,6 +360,18 @@ We used random search to tune many of the hyperparameters, including the learnin
 We trained each model for 250k steps in each run, using a minibatch size of 64 for each step. We tracked each model's performance on the development set during training and saving parameters when this performance reached a new peak. We used early stopping, evaluating on the test set using the parameters that performed best on the development set.
 
 \paragraph{Software infrastructure} We will make Theano code available.
+
+\subsection{TreeRNN-equivalence and efficiency}
+
+In its bare form, without the addition of the tracking LSTM, our model computes the precisely the same functions as a conventional tree-structured neural network model, and has the same learning dynamics: the representation of each sentence consists of the representation of the words, combined recursively using a TreeRNN composition function (in our case, the TreeLSTM function). While it adds no expressive power on its own, our model design improves upon the standard TreeRNN implementation in three ways:
+
+\begin{itemize}
+\item It provides a straightforward strategy for implementing tree-structured composition which allows for batched computation, and provides near-optimal run times on typical computer systems. While our design includes some wasted computation induced by the full application of the composition function at every step, this is made up for by avoiding most of the (potentially expensive) scattered memory access that would be needed for batched computation strategies that more closely mimic the standard tree-based architecture.
+
+\item It provides a simple mechanism for integrating the use of left-context into tree-structured models through the tracking LSTM, providing a fast mechanism to help these models handle lexical ambiguity.
+
+\item By designing the model around the standard transition set used in neural network syntactic parsers, it opens the door to tight integration between parsing and sentence interpretation, including the possibility of joint learning, or even of learning a parser trained entirely on a sentence classification or interpretation objective.
+\end{itemize}
 
 \subsection{Related work: Transition-based parsing and neural networks.}
 
