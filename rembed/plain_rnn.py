@@ -99,3 +99,5 @@ class RNN(object):
 
         self.final_representations = self.states[-1]
         self.transitions_pred = None
+        self.tracking_state_final = None
+        
