@@ -19,6 +19,7 @@ Note: If you get an error starting with "TypeError: ('Wrong number of dimensions
     Move or delete it as appropriate.
 """
 
+import cPickle
 from functools import partial
 import os
 import pprint
@@ -444,6 +445,7 @@ def evaluate_expanded(eval_fn, eval_set, eval_path, logger, step, sentence_pair_
 
 
 def run(only_forward=False):
+    np.random.seed(123)
     logger = afs_safe_logger.Logger(os.path.join(FLAGS.log_path, FLAGS.experiment_name) + ".log")
 
     if FLAGS.data_type == "bl":
@@ -558,6 +560,9 @@ def run(only_forward=False):
             ss_prob=ss_prob)
         stack_top = model.sentence_embeddings
         predicted_transitions = model.transitions_pred
+
+    results = {}
+    results.update({"param/%s" % k: v.get_value() for k, v in vs.vars.iteritems()})
 
     xent_cost, acc = build_cost(logits, y)
 
@@ -701,7 +706,7 @@ def run(only_forward=False):
         logger.Log("Building update function.")
         update_fn = theano.function(
             [X, transitions, y, num_transitions, lr, training_mode, ground_truth_transitions_visible, ss_prob],
-            [total_cost, xent_cost, transition_cost, action_acc, l2_cost, acc],
+            [logits, total_cost, xent_cost, transition_cost, action_acc, l2_cost, acc],
             updates=new_values,
             on_unused_input='warn',
             allow_input_downcast=True)
@@ -730,7 +735,9 @@ def run(only_forward=False):
             learning_rate = FLAGS.learning_rate * (FLAGS.learning_rate_decay_per_10k_steps ** (step / 10000.0))
             ret = update_fn(X_batch, transitions_batch, y_batch, num_transitions_batch,
                             learning_rate, 1.0, 1.0, np.exp(step*np.log(FLAGS.scheduled_sampling_exponent_base)))
-            total_cost_val, xent_cost_val, transition_cost_val, action_acc_val, l2_cost_val, acc_val = ret
+            logits, total_cost_val, xent_cost_val, transition_cost_val, action_acc_val, l2_cost_val, acc_val = ret
+
+            results["logits/%i" % step] = logits
 
             if step % FLAGS.statistics_interval_steps == 0:
                 logger.Log(
@@ -743,6 +750,9 @@ def run(only_forward=False):
 
             # Zero out all auxiliary variables.
             zero_fn()
+
+    with open("classifier_check.pkl", "wb") as out_f:
+        cPickle.dump(results, out_f, protocol=cPickle.HIGHEST_PROTOCOL)
 
 
 if __name__ == '__main__':
