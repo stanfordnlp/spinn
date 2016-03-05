@@ -156,24 +156,7 @@ $^{6}$Stanford Computer Science}
 
 \section{Introduction}
 
-\begin{figure}[t]
-\begin{subfigure}[t]{0.9\columnwidth}
-\vspace{14em}
-\todo{[SB] Figure showing why trees can't be batched (modeled after slides).}
-
-\caption{\label{fig:batching:bad}Trees are hard to batch.}
-\end{subfigure}
-
-\vspace{2em}
-
-\begin{subfigure}[t]{0.9\columnwidth}
-\vspace{14em}
-\todo{[SB] Figure showing a batch of sequences (modeled after slides).}
-
-\caption{\label{fig:batching:good}Sequences are easy to batch.}
-\end{subfigure}
-\caption{An illustration of a conventionally-implemented TreeRNN model (a) and our equivalent model (b).}
-\end{figure}
+\input{batching_fig.tex}
 
 \begin{itemize}
 
@@ -389,9 +372,9 @@ In our model, attention is performed at each step $t$ of the premise encoder. At
 
 \subsection{Accumulating the results of attention}
 
-\paragraph{Accumulating results sequentially} (After Rocktäschel, Wang and Jiang)
+\todo{[RG,AR] Accumulating results sequentially  (After Rocktäschel, Wang and Jiang)}
 
-\paragraph{Accumulating results using a second tree layer}
+\todo{[RG,SB] Accumulating results using a second tree layer}
 
 \section{Experiments}
 
@@ -454,13 +437,13 @@ Lexicalized classifier \cite{snli:emnlp2015}
 \midrule
 \multicolumn{4}{c}{New results}\\
 \midrule
-\result{150d LSTM RNN      }     & ?                  &   ?      &   ?       \\
+\result{150d LSTM RNN      }     & ?                  &   ?      &   81?       \\
 \result{150d TB TreeLSTM}   
-                        & ?                  &   ?      &   ?       \\
+                        & ?                  &   ?      &   81?       \\
 \result{150d TB TreeLSTM w/ tracking    }
-                        & ?                  &   ?      &   ?       \\
+                        & ?                  &   ?      &   83?       \\
 \result{150d TB TreeLSTM w/ tracking, sequence-based attn.   }     
-                        & ?                  &   ?      &   ?       \\
+                        & ?                  &   ?      &   85+?       \\
 \result{150d TB TreeLSTM w/ tracking, tree-based attn. }           
                         & ?                  &   ?      &   \textbf{?}\\
     \bottomrule
@@ -480,9 +463,9 @@ Comparing model step time to the plain RNN of \citealt{li2015tree}. We use the s
 
 \section{Discussion}
 
-\paragraph{Patterns in the examples that the tree model got right that the LSTM didn't}
+\result{Patterns in the examples that the tree model got right that the LSTM didn't}
 
-\paragraph{Induced alignments}
+\result{Induced alignments}
 
 \begin{figure}
 \vspace{14em}
@@ -501,7 +484,7 @@ Comparing model step time to the plain RNN of \citealt{li2015tree}. We use the s
 \paragraph{Future work} The tracking LSTM that we incorporated into our model uses only simple, quick to compute features drawn from the head of the buffer and the head of the stack. It is plausible that giving the tracking LSTM access to more information from the buffer and stack at each step would allow it to better represent the context of each tree node, including information about that nodes neighbors in the sentence string and its likely position in the final tree, and that that context information could support better sentence encoding. One promising way to pursue this goal would be to encode the full contents of the stack and buffer at each time step following the method used by \citealt{dyer-EtAl:2015:ACL-IJCNLP} for parsing.
 The model presented here is only capable of operating over sentences which have already been assigned a binary constituency tree by a parser. This is not necessarily a practical limitation, since modern parsers can assign reasonably high quality parses in so little time as to not dramatically impact the performance characteristics of our model \todo{[SB,JG,CM] How fast are fast constit parsers?}. However, depending upon an external parser can be a missed opportunity.
 
-In future work, we aim to incorporate a parser into our model, allowing it to simultaneously learn to parse sentences (using a conventional parsing objective function) and to use those parses to learn semantic representations for those sentences (using a classification objective function, as in this work). Implementing such a model on top of our proposed stack-based design would learn a model that could productively share representations between the two tasks. Implementing such a model on top of a differentiable version of our stack-based design (possibly following \citealt{grefenstette2015learning} \todo{[SB] Cite FAIR stack paper.}) would further make it possible for the model to learn to parse using guidance from the semantic representation objective, essentially allowing  learn to produce parses that are, in aggregate, better suited to supporting semantic interpretation than those supplied in the training data. 
+In future work, we aim to incorporate a parser into our model, allowing it to simultaneously learn to parse sentences (using a conventional parsing objective function) and to use those parses to learn semantic representations for those sentences (using a classification objective function, as in this work). Implementing such a model on top of our proposed stack-based design would learn a model that could productively share representations between the two tasks. Implementing such a model on top of a differentiable version of our stack-based design (possibly following \citealt{grefenstette2015learning,joulin2015inferring}) would further make it possible for the model to learn to parse using guidance from the semantic representation objective, essentially allowing  learn to produce parses that are, in aggregate, better suited to supporting semantic interpretation than those supplied in the training data. 
 
 \subsubsection*{Acknowledgments}
 

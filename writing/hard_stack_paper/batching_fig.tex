@@ -1,0 +1,67 @@
+%!TEX root = paper.tex
+
+\begin{figure}[t]
+\begin{subfigure}[t]{0.9\columnwidth}
+\begin{center}
+ \begin{tikzpicture}
+    \tikzstyle{word}=[fill=yellow!40,text height=2mm,line width=1pt,draw=black]    
+    \tikzstyle{nonleaf}=[fill=yellow!40,text height=2mm,line width=1pt,draw=black]    
+
+   
+    \begin{scope}[shift={(0.9in,-0.8in)}, frontier/.style={distance from root=60pt}]
+
+    \Tree [.\node[nonleaf](1thecatsatdown){the cat sat down}; [.\node[nonleaf](1thecat){the cat}; \node[word](1the){the}; \node[word](1cat){cat}; ] [.\node[nonleaf](1satdown){sat down}; \node[word](1sat){sat}; \node[word](1down){down}; ] ]
+
+    \end{scope}
+
+
+    \begin{scope}[shift={(0in,0in)}]
+
+    \Tree [.\node[nonleaf](2thekittenmeowed){the old cat meowed}; [.\node[nonleaf](2thekitten){the old cat}; \node[word](2the){the}; [.\node[nonleaf](2bigkitten){old cat}; \node[word](2kitten){old}; \node[word](2kitten){cat}; ] ] \node[word](2meowed){meowed}; ]
+
+    \end{scope}
+
+\end{tikzpicture}
+\end{center}
+
+\caption{\label{fig:batching:bad}Trees are hard to batch.}
+\end{subfigure}
+
+\vspace{2em}
+
+\begin{subfigure}[t]{0.9\columnwidth}
+ \begin{tikzpicture}
+    \tikzstyle{word}=[fill=yellow!40,text height=2mm,line width=1pt,draw=black]    
+    \tikzstyle{nonleaf}=[fill=yellow!40,text height=2mm,line width=1pt,draw=black]    
+    \def\dx{21pt}
+    \def\dy{11pt}
+    \def\sy{7*\dy}
+    \def\oxb{5.5*\dx}
+    \def\by{1*\dy}
+    \def\ox{0*\oxb}
+    
+    \node[word]  (w1) at (\ox+0*\dx,\by-1.5*\dy) {the};
+    \node[word]  (w2) at (\ox+0*\dx,\by+0*\dy) {cat};
+    \node[word]  (w3) at (\ox+0*\dx,\by+1*\dy) {sat};
+
+
+    \begin{scope}[shift={(0.9in,-0.8in)}, frontier/.style={distance from root=60pt}]
+
+    \Tree [.\node[nonleaf](1thecatsatdown){the cat sat down}; [.\node[nonleaf](1thecat){the cat}; \node[word](1the){the}; \node[word](1cat){cat}; ] [.\node[nonleaf](1satdown){sat down}; \node[word](1sat){sat}; \node[word](1down){down}; ] ]
+
+    \end{scope}
+
+
+    \begin{scope}[shift={(0in,0in)}]
+
+    \Tree [.\node[nonleaf](2thekittenmeowed){the old cat meowed}; [.\node[nonleaf](2thekitten){the old cat}; \node[word](2the){the}; [.\node[nonleaf](2bigkitten){old cat}; \node[word](2kitten){old}; \node[word](2kitten){cat}; ] ] \node[word](2meowed){meowed}; ]
+
+    \end{scope}
+
+\end{tikzpicture}
+
+
+\caption{\label{fig:batching:good}Sequences are easy to batch.}
+\end{subfigure}
+\caption{An illustration of a conventionally-implemented TreeRNN model (a) and our equivalent model (b). \todo{[SB] Finish.}}
+\end{figure}
