@@ -389,7 +389,7 @@ class ThinStack(object):
         # Collapse buffer to (batch_size * buffer_size) * emb_dim for fast indexing.
         self.buffer_t = buffer_t = buffer_t.reshape((-1, buffer_emb_dim))
 
-        buffer_cur_init = T.zeros((batch_size,), theano.config.floatX)
+        buffer_cur_init = util.zeros_nobroadcast((batch_size,))
 
         DUMMY = T.zeros((2, 2)) # a dummy tensor used as a place-holder.
 
@@ -399,7 +399,7 @@ class ThinStack(object):
 
         # Initialize the attention representation if needed.
         if self.use_attention:
-            attention_init = T.zeros((batch_size, self.model_dim))
+            attention_init = util.zeros_nobroadcast((batch_size, self.model_dim))
         else:
             # If we're not using a sequential attention accumulator (i.e., no attention or
             # tree attention), use a size-zero value here.
