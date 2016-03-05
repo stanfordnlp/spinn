@@ -684,6 +684,12 @@ def tensorx(name, ndim, dtype=theano.config.floatX):
     return T.TensorType(dtype, (False,) * ndim)(name)
 
 
+def zeros_nobroadcast(shape, dtype=theano.config.floatX):
+    zeros = T.zeros(shape, dtype=dtype)
+    zeros = T.unbroadcast(zeros, *range(len(shape)))
+    return zeros
+
+
 def batch_subgraph_gradients(g_in, wrt, f_g_out, batch_size=None,
                              extra_scan_inputs=None,
                              name="batch_subgraph_grad"):
