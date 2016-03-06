@@ -329,8 +329,10 @@ class HardStack(object):
         if self.use_attention != "None" and self.is_hypothesis:
             h_dim = self.model_dim / 2
             if self.use_attention in {"TreeWangJiang", "TreeThang"}:
-                attention_hidden_l = stack_t[:, 0, self.model_dim:] * mask
-                attention_hidden_r = stack_t[:, 1, self.model_dim:] * mask
+                mask_ = mask.dimshuffle(0, "x")
+                mask_ = T.cast(mask_, dtype=theano.config.floatX)
+                attention_hidden_l = stack_t[:, 0, self.model_dim:] * mask_
+                attention_hidden_r = stack_t[:, 1, self.model_dim:] * mask_
 
                 tree_attention_hidden = self._attention_unit(attention_hidden_l, attention_hidden_r,
                     stack_next[:, 0, :h_dim], premise_stack_tops, projected_stack_tops, h_dim,
