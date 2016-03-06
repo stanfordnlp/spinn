@@ -321,25 +321,28 @@ class ThinStackTrackingBackpropTestCase(unittest.TestCase, BackpropTestMixin):
         all_grads = [T.grad(sim_cost, var) for _, var in rel_vars]
         f_sim = theano.function(
             [self.X, self.y],
-            [sim_top, sim_cost, T.grad(sim_cost, stack.embeddings)] + all_grads)
+            [sim_top, sim_cost] + all_grads + [T.grad(sim_cost, stack.embeddings)])
 
         top = stack.final_stack[-self.batch_size:]
         cost = self._make_cost(top)
         error_signal = T.grad(cost, top)
 
-        stack.make_backprop_scan(error_signal, [self.y])
+        stack.make_backprop_scan(error_signal, [self.y],
+                                 compute_embedding_gradients=not self.skip_embeddings)
+        outputs = [top, cost] + [stack.gradients[var] for _, var in rel_vars]
+        if not self.skip_embeddings:
+            outputs.append(stack.embedding_gradients)
         f = theano.function(
-            [self.X, self.transitions, self.y],
-            [top, cost, stack.embedding_gradients] + [stack.gradients[var] for _, var in rel_vars],
+            [self.X, self.transitions, self.y], outputs,
             updates=stack.scan_updates + stack.bscan_updates)
 
-        checks = ["top", "cost", "d/embeddings"] + ["d/%s" % name for name, _ in rel_vars]
+        checks = ["top", "cost"] + ["d/%s" % name for name, _ in rel_vars]
+        if not self.skip_embeddings:
+            checks.append("d/embeddings")
         sim = f_sim(X, y)
         real = f(X, transitions, y)
 
         for check, sim_i, real_i in zip(checks, sim, real):
-            if check == "d/embeddings" and self.skip_embedding_check:
-                continue
             np.testing.assert_almost_equal(sim_i, real_i, err_msg=check,
                                            decimal=4, verbose=True)
 
@@ -457,7 +460,7 @@ class ThinStackEmbeddingProjectionBackpropTestCase(ThinStackTreeLSTMTrackingLSTM
         self.vs = VariableStore()
         self.compose_network = util.TreeLSTMLayer
         self.embedding_proj = util.Linear
-        self.skip_embedding_check = True
+        self.skip_embeddings = True
 
         self.X = T.imatrix("X")
         self.transitions = T.imatrix("transitions")
@@ -477,6 +480,22 @@ class ThinStackEmbeddingProjectionBackpropTestCase(ThinStackTreeLSTMTrackingLSTM
 
         self._test_backprop(simulated_top, stack, X, transitions, y)
 
+    def test_backprop_5(self):
+        # Simulate a batch of two token sequences, each with the same
+        # transition sequence
+        X = np.array([[0, 1, 2, 3, 1], [2, 1, 3, 0, 1]], dtype=np.int32)
+        y = np.array([1, 0], dtype=np.int32)
+        transitions = np.tile([0, 0, 1, 0, 1], (2, 1)).astype(np.int32)
+
+        stack = self._build(5)
+        sim = self._fake_stack_ff(stack)
+        simulated_top = sim["c5"]
+
+        cost = self._make_cost(simulated_top)
+        f_sim = theano.function([self.X, self.y], (T.grad(cost, sim["c5"]), T.grad(cost, sim["c3"])))
+        print f_sim(X, y)
+
+        self._test_backprop(simulated_top, stack, X, transitions, y)
 
 
 @attr("slow")

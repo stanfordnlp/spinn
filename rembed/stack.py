@@ -657,6 +657,7 @@ class ThinStack(object):
                 lookup(t_f, stack_final, stack_2_ptrs_t, buffer_cur_t,
                        stack_bwd_next, extra_bwd)
             main_grad = grads[0]
+            main_grad = theano.printing.Print("main_grad")(main_grad)
 
             # Calculate deltas for this timestep.
             m_delta_inp, m_delta_wrt = f_merge_delta(inputs, grads)
@@ -692,6 +693,7 @@ class ThinStack(object):
 
                 _, m_proj_delta_wrt = f_proj_delta(proj_inputs,
                                                    (m_delta_inp[2],))
+                p_delta_inp[2] = theano.printing.Print("p_delta_inp[2]")(p_delta_inp[2])
                 _, p_proj_delta_wrt = f_proj_delta(proj_inputs,
                                                    (p_delta_inp[2] + main_grad,))
 
