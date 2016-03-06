@@ -253,7 +253,8 @@ def Linear(inp, inp_dim, outp_dim, vs, name="linear_layer", use_bias=True, initi
     return outp
 
 
-def Dropout(inp, keep_rate, apply_dropout):
+def Dropout(inp, keep_rate, apply_dropout, dropout_mask=None,
+            return_mask=False):
     """Apply dropout to a set of activations.
 
     Args:
@@ -264,12 +265,16 @@ def Dropout(inp, keep_rate, apply_dropout):
     """
     # TODO(SB): Investigate whether a Theano conditional would be faster than the linear combination below.
 
-    dropout_mask = theano_random.binomial(n=1, p=keep_rate, size=inp.shape, dtype=theano.config.floatX)
+    dropout_mask = (dropout_mask or
+                    theano_random.binomial(n=1, p=keep_rate, size=inp.shape,
+                                           dtype=theano.config.floatX))
 
     dropout_candidate = dropout_mask * inp
     rescaling_candidate = keep_rate * inp
     result = apply_dropout * dropout_candidate + (1 - apply_dropout) * rescaling_candidate
 
+    if return_mask:
+        return result, dropout_mask
     return result
 
 
@@ -690,8 +695,33 @@ def zeros_nobroadcast(shape, dtype=theano.config.floatX):
     return zeros
 
 
+def merge_update_lists(xs, ys):
+    """
+    Merge two update lists:
+
+    - adding where `xs[i] is not None and ys[i] is not None`
+    - copying `xs[i]` if `xs[i] is not None`
+    - copying `ys[i]` otherwise
+    """
+
+    assert len(xs) == len(ys), "%i %i" % (len(xs), len(ys))
+    ret = []
+
+    for x, y in zip(xs, ys):
+        if y is None:
+            ret.append(x)
+        elif x is None:
+            ret.append(y)
+        else:
+            # Merge.
+            ret.append(x + y)
+
+    return ret
+
+
 def batch_subgraph_gradients(g_in, wrt, f_g_out, batch_size=None,
                              extra_scan_inputs=None,
+                             wrt_jacobian=True,
                              name="batch_subgraph_grad"):
     """
     Build gradients w.r.t. some cost on a subgraph of a larger graph.
@@ -764,6 +794,11 @@ def batch_subgraph_gradients(g_in, wrt, f_g_out, batch_size=None,
 
             return xgrad, ygrad
 
+        # Overrides which turn our "grad" call into a "jacobian" call!
+        overrides = None
+        if wrt_jacobian:
+            overrides = {T.Dot: dot_grad_override}
+
         # Compute gradients of subgraph beginning at `g_in` and ending at `g_out`,
         # where the cost gradient w.r.t. each `g_out` is given by the corresponding
         # entry in `grads_above`.
@@ -774,7 +809,7 @@ def batch_subgraph_gradients(g_in, wrt, f_g_out, batch_size=None,
                        disconnected_inputs="ignore",
                        return_disconnected="None",
                        use_overrides=set(wrt),
-                       grad_overrides={T.Dot: dot_grad_override})
+                       grad_overrides=overrides)
         d_in, d_wrt = d_all[:len(b_inps)], d_all[len(b_inps):]
 
         # Strip any GPU<->host transfers that might have crept into this

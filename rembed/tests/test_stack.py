@@ -247,21 +247,24 @@ class ThinStackTrackingBackpropTestCase(unittest.TestCase, BackpropTestMixin):
             return T.dot(conc, W) + b
 
         self.compose_network = compose_network
+        self.embedding_proj = IdentityLayer
+        self.skip_embedding_check = False
 
         self.X = T.imatrix("X")
         self.transitions = T.imatrix("transitions")
         self.y = T.ivector("y")
 
-    def _build(self, length):
+    def _build(self, length, use_input_batch_norm=False,
+               use_input_dropout=False):
         spec = util.ModelSpec(self.model_dim, self.embedding_dim,
                               self.batch_size, self.vocab_size,
                               length)
         recurrence = Model0(spec, self.vs, self.compose_network,
                             use_tracking_lstm=True, tracking_lstm_hidden_dim=1)
-        stack = ThinStack(spec, recurrence, IdentityLayer, 0.0, 1.0, self.vs,
+        stack = ThinStack(spec, recurrence, self.embedding_proj, 0.0, 1.0, self.vs,
                           X=self.X, transitions=self.transitions,
-                          use_input_batch_norm=False,
-                          use_input_dropout=False)
+                          use_input_batch_norm=use_input_batch_norm,
+                          use_input_dropout=use_input_dropout)
 
         return stack
 
@@ -272,7 +275,7 @@ class ThinStackTrackingBackpropTestCase(unittest.TestCase, BackpropTestMixin):
         f_merge = lambda *inputs: stack.recurrence(inputs)[1]
 
         # seq_length * batch_size * emb_dim
-        X_emb = stack.embeddings[self.X].dimshuffle(1, 0, 2)
+        X_emb = stack._project_embeddings(stack.embeddings[self.X])[0].dimshuffle(1, 0, 2)
         zero = T.zeros((self.batch_size, self.model_dim))
         t0 = T.zeros((self.batch_size, self.model_dim))
 
@@ -335,6 +338,8 @@ class ThinStackTrackingBackpropTestCase(unittest.TestCase, BackpropTestMixin):
         real = f(X, transitions, y)
 
         for check, sim_i, real_i in zip(checks, sim, real):
+            if check == "d/embeddings" and self.skip_embedding_check:
+                continue
             np.testing.assert_almost_equal(sim_i, real_i, err_msg=check,
                                            decimal=4, verbose=True)
 
@@ -399,7 +404,7 @@ class ThinStackTreeLSTMTrackingLSTMBackpropTestCase(ThinStackTrackingBackpropTes
         f_merge = lambda *inputs: stack.recurrence(inputs)[1]
 
         # seq_length * batch_size * emb_dim
-        X_emb = stack.embeddings[self.X].dimshuffle(1, 0, 2)
+        X_emb = stack._project_embeddings(stack.embeddings[self.X])[0].dimshuffle(1, 0, 2)
         zero = T.zeros((self.batch_size, self.model_dim))
         t0 = T.zeros((self.batch_size, self.model_dim))
 
@@ -436,6 +441,42 @@ class ThinStackTreeLSTMTrackingLSTMBackpropTestCase(ThinStackTrackingBackpropTes
         c11, t11 = f_merge(c10, c5, X_emb[6], t10)
 
         return locals()
+
+
+class ThinStackEmbeddingProjectionBackpropTestCase(ThinStackTreeLSTMTrackingLSTMBackpropTestCase):
+
+    def setUp(self):
+        if 'gpu' not in theano.config.device:
+            raise RuntimeError("Thin stack only defined for GPU usage")
+
+        self.embedding_dim = self.model_dim = 2
+        self.vocab_size = 5
+        self.batch_size = 2
+        self.num_classes = 2
+
+        self.vs = VariableStore()
+        self.compose_network = util.TreeLSTMLayer
+        self.embedding_proj = util.Linear
+        self.skip_embedding_check = True
+
+        self.X = T.imatrix("X")
+        self.transitions = T.imatrix("transitions")
+        self.y = T.ivector("y")
+
+    def test_backprop_3_input_dropout(self):
+        """
+        Check a valid 3-transition S S M sequence with
+        embedding dropout.
+        """
+        X = np.array([[0, 1, 2], [2, 1, 0]], dtype=np.int32)
+        y = np.array([1, 0], dtype=np.int32)
+        transitions = np.tile([0, 0, 1], (2, 1)).astype(np.int32)
+
+        stack = self._build(3, use_input_dropout=True)
+        simulated_top = self._fake_stack_ff(stack)["c3"]
+
+        self._test_backprop(simulated_top, stack, X, transitions, y)
+
 
 
 @attr("slow")
