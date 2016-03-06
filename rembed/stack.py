@@ -550,6 +550,12 @@ class ThinStack(object):
             ("Can only install backprop on a fresh ThinStack. Don't call "
              "ThinStack.zero before setting up backprop.")
 
+        if (compute_embedding_gradients
+            and self._embedding_projection_network not in [None, util.IdentityLayer]):
+            raise ValueError(
+                "Do not support backprop for both an embedding projection "
+                "layer and individual embeddings.")
+
         if extra_cost_inputs is None:
             extra_cost_inputs = []
 
