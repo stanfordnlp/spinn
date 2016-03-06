@@ -358,6 +358,27 @@ class ThinStack(object):
 
         return ret_val, updates
 
+    def _project_embeddings(self, raw_embeddings, dropout_mask=None):
+        projected = self._embedding_projection_network(
+            raw_embeddings, self.word_embedding_dim, self.model_dim, self._vs,
+            name=self._prefix + "project")
+
+        if self.use_input_batch_norm:
+            projected = util.BatchNorm(
+                projected, self.model_dim, self._vs, self._prefix + "buffer",
+                self.training_mode, axes=[0, 1])
+
+        # Dropout.
+        # If we use dropout, we need to retain the mask for backprop purposes.
+        dropout_mask = None
+        if self.use_input_dropout:
+            projected, droput_mask = util.Dropout(
+                projected, self.embedding_dropout_keep_rate,
+                self.training_mode, dropout_mask=dropout_mask,
+                return_mask=True)
+
+        return projected, dropout_mask
+
     def _make_scan(self):
         """Build the sequential composition / scan graph."""
 
@@ -373,21 +394,19 @@ class ThinStack(object):
 
         # Look up all of the embeddings that will be used.
         raw_embeddings = self.embeddings[self.X]  # batch_size * seq_length * emb_dim
+        # Shuffle to (seq_length, batch_size, emb_dim) for easy indexing in
+        # backprop.
+        self._raw_embeddings = raw_embeddings.dimshuffle(1, 0, 2)
 
         # Allocate a "buffer" stack initialized with projected embeddings,
         # and maintain a cursor in this buffer.
-        buffer_t = self._embedding_projection_network(
-            raw_embeddings, self.word_embedding_dim, self.model_dim, self._vs,
-            name=self._prefix + "project")
-        if self.use_input_batch_norm:
-            buffer_t = util.BatchNorm(buffer_t, self.model_dim, self._vs,
-                self._prefix + "buffer", self.training_mode, axes=[0, 1])
-        if self.use_input_dropout:
-            buffer_t = util.Dropout(buffer_t, self.embedding_dropout_keep_rate, self.training_mode)
-        buffer_emb_dim = self.model_dim
+        buffer_t, dropout_mask = self._project_embeddings(raw_embeddings)
+        self._embedding_dropout_mask = \
+            dropout_mask and dropout_mask.dimshuffle(1, 0, 2)
 
-        # Collapse buffer to (batch_size * buffer_size) * emb_dim for fast indexing.
-        self.buffer_t = buffer_t = buffer_t.reshape((-1, buffer_emb_dim))
+        # Collapse buffer to (batch_size * buffer_size) * model_dim for fast
+        # indexing.
+        self.buffer_t = buffer_t = buffer_t.reshape((-1, self.model_dim))
 
         buffer_cur_init = util.zeros_nobroadcast((batch_size,))
 
@@ -499,7 +518,18 @@ class ThinStack(object):
                                                   extra_scan_inputs=extra_graph_inputs,
                                                   name=self._prefix + "bwd_graph_merge")
 
-        return wrt, f_p_delta, f_m_delta
+        # Also create a backprop graph for the embedding projection network.
+        f_proj_delta = None
+        if self._embedding_projection_network not in [None, util.IdentityLayer]:
+            projection_ndim = [2]
+            if self.use_input_dropout:
+                projection_ndim += [2]
+            f_proj_delta = util.batch_subgraph_gradients(projection_ndim, wrt,
+                                                         self._project_embeddings,
+                                                         extra_scan_inputs=extra_graph_inputs,
+                                                         name=self._prefix + "bwd_graph_proj")
+
+        return wrt, f_proj_delta, f_p_delta, f_m_delta
 
     def make_backprop_scan(self, error_signal,
                            extra_cost_inputs=None,
@@ -523,8 +553,8 @@ class ThinStack(object):
         if extra_cost_inputs is None:
             extra_cost_inputs = []
 
-        wrt, f_push_delta, f_merge_delta = self._make_backward_graphs(
-            extra_cost_inputs)
+        wrt, f_proj_delta, f_push_delta, f_merge_delta = \
+            self._make_backward_graphs(extra_cost_inputs)
         wrt_shapes = [wrt_i.get_value().shape for wrt_i in wrt]
 
         # Build shared variables for accumulating wrt deltas.
@@ -594,6 +624,8 @@ class ThinStack(object):
 
         def step_b(# sequences
                    t_f, transitions_t_f, stack_2_ptrs_t, buffer_cur_t,
+                   raw_embeddings_t, embedding_dropout_mask_t,
+                   # accumulators
                    dE,
                    # rest (incl. outputs_info, non_sequences)
                    *rest):
@@ -645,6 +677,20 @@ class ThinStack(object):
             mask = transitions_t_f
             masks = [mask, mask.dimshuffle(0, "x"),
                      mask.dimshuffle(0, "x", "x")]
+
+            # Accumulate gradients for the embedding projection network as well.
+            if f_proj_delta is not None:
+                proj_inputs = (raw_embeddings_t,)
+                if self.use_input_dropout:
+                    proj_inputs = proj_inputs + (embedding_dropout_mask_t,)
+
+                _, m_proj_delta_wrt = f_proj_delta(proj_inputs,
+                                                   (m_delta_inp[2],))
+                _, p_proj_delta_wrt = f_proj_delta(proj_inputs,
+                                                   (p_delta_inp[2] + main_grad,))
+
+                m_delta_wrt = util.merge_update_lists(m_delta_wrt, m_proj_delta_wrt)
+                p_delta_wrt = util.merge_update_lists(p_delta_wrt, p_proj_delta_wrt)
 
             # Accumulate inp deltas, switching over push/merge decision.
             stacks = (stack_bwd_next, stack_bwd_next,
@@ -706,7 +752,7 @@ class ThinStack(object):
                 new_wrt_deltas[accum_delta] = accum_delta + delta
 
             # On push ops, backprop the stack_bwd error onto the embedding
-            # parameters.
+            # projection network / embedding parameters.
             # TODO make sparse?
             if compute_embedding_gradients:
                 new_stacks[dE] = cuda_util.AdvancedIncSubtensor1Floats(inplace=True)(
@@ -732,7 +778,8 @@ class ThinStack(object):
         buf_ptrs = T.concatenate([T.zeros((1, batch_size,)),
                                   self.buf_ptrs[:-1]], axis=0)
 
-        sequences = [ts_f, transitions_f, self.stack_2_ptrs, buf_ptrs]
+        sequences = [ts_f, transitions_f, self.stack_2_ptrs, buf_ptrs,
+                     self._raw_embeddings, self._embedding_dropout_mask or ts_f,]
         outputs_info = []
 
         # Shared variables: Accumulated wrt deltas and bwd stacks.
