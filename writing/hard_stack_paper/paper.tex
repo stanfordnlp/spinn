@@ -172,7 +172,7 @@ $^{6}$Stanford Computer Science}
 \begin{itemize}
 \item Efficient batched computation is a crucial enabling technology in allowing NNs to be used on large datasets. Since NNs require large datasets to be able to model complex problems like language understanding, this is crucial in NLP.
 \item Tree structured neural networks can't be batched. As the schematic in Figure~\ref{fig:batching:bad} indicates, different sentences are assigned different trees, and there is no straightforward way of aligning these trees to synchronize computation in the conventional style of implementation.
-\item Our proposed model builds on ideas from transition-based parsing to build a model which implements the same computations as a tree-structured model, but which can be efficiently batched. See Figure~\ref{fig:batching:good}.
+\item Our proposed model builds on ideas from transition-based parsing to build a model which implements the same computations as a tree-structured model, but which can be efficiently batched.
 
 \end{itemize}
 
