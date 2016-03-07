@@ -66,11 +66,11 @@ def NormalInitializer(std):
 
 
 def ZeroInitializer():
-    return lambda shape, **kwargs: np.zeros(shape)
+    return lambda shape, **kwargs: np.zeros(shape, dtype=theano.config.floatX)
 
 
 def OneInitializer():
-    return lambda shape, **kwargs: np.ones(shape)
+    return lambda shape, **kwargs: np.ones(shape, dtype=theano.config.floatX)
 
 
 def TreeLSTMBiasInitializer():
