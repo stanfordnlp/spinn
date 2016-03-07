@@ -359,6 +359,10 @@ class ThinStack(object):
         return ret_val, updates
 
     def _project_embeddings(self, raw_embeddings, dropout_mask=None):
+        """
+        Run a forward pass of the embedding projection network, retaining
+        intermediate values in order to support backpropagation.
+        """
         projected = self._embedding_projection_network(
             raw_embeddings, self.word_embedding_dim, self.model_dim, self._vs,
             name=self._prefix + "project")
@@ -394,19 +398,15 @@ class ThinStack(object):
 
         # Look up all of the embeddings that will be used.
         raw_embeddings = self.embeddings[self.X]  # batch_size * seq_length * emb_dim
-        # Shuffle to (seq_length, batch_size, emb_dim) for easy indexing in
-        # backprop.
+        # Flatten for easy indexing.
         self._raw_buffer_t = raw_embeddings.reshape((-1, self.model_dim))
 
         # Allocate a "buffer" stack initialized with projected embeddings,
         # and maintain a cursor in this buffer.
-        buffer_t, dropout_mask = self._project_embeddings(raw_embeddings)
-        self._embedding_dropout_masks = \
-            dropout_mask and dropout_mask.reshape((-1, self.model_dim))
+        buffer_t, dropout_mask = self._project_embeddings(self._raw_buffer_t)
+        self._embedding_dropout_masks = dropout_mask
 
-        # Collapse buffer to (batch_size * seq_length) * model_dim for fast
-        # indexing.
-        self.buffer_t = buffer_t = buffer_t.reshape((-1, self.model_dim))
+        self.buffer_t = buffer_t
 
         buffer_cur_init = util.zeros_nobroadcast((batch_size,))
 
@@ -556,6 +556,12 @@ class ThinStack(object):
                 "Do not support backprop for both an embedding projection "
                 "layer and individual embeddings.")
 
+        if self.use_input_batch_norm:
+            raise ValueError(
+                "Thin-stack backprop not supported with input batch-norm. Jon "
+                "worked on BN gradients for 3 days without success, and then "
+                "dropped it.")
+
         if extra_cost_inputs is None:
             extra_cost_inputs = []
 
@@ -588,6 +594,8 @@ class ThinStack(object):
         # be used.
         zero_jac_wrts = [T.zeros((self.batch_size,) + wrt_shape)
                          for wrt_shape in wrt_shapes]
+
+        DUMMY = util.zeros_nobroadcast((1,))
 
         batch_size = self.batch_size
         batch_range = T.arange(batch_size)
@@ -810,15 +818,17 @@ class ThinStack(object):
         non_sequences += [self.stack_bwd] + self.aux_bwd_stacks
         # More auxiliary data
         non_sequences += [id_buffer, self.final_stack]
+
         # More helpers (not referenced directly in code, but we need to include
         # them as non-sequences to satisfy scan strict mode)
-        non_sequences += [self.stack, self.buffer_t] + self.aux_stacks + self.final_aux_stacks
-        non_sequences += [self.X, self.transitions, self._raw_buffer_t]
+        aux_data = [self.stack, self.buffer_t] + self.aux_stacks + self.final_aux_stacks
+        aux_data += [self.X, self.transitions, self._raw_buffer_t]
         if self.use_input_dropout:
-            non_sequences.append(self._embedding_dropout_masks)
-        non_sequences += self._vs.vars.values() + extra_cost_inputs
+            aux_data.append(self._embedding_dropout_masks)
+        aux_data += self._vs.vars.values() + extra_cost_inputs
         if self.premise_stack_tops:
-            non_sequences.append(self.premise_stack_tops)
+            aux_data.append(self.premise_stack_tops)
+        non_sequences += list(set(aux_data))
 
         bscan_ret, self.bscan_updates = theano.scan(
                 step_b, sequences, outputs_info, non_sequences,
