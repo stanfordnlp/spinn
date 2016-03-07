@@ -494,8 +494,8 @@ class ThinStack(object):
         input_ndim += [len(extra_output_shape) + 1
                        for extra_output_shape in self.recurrence.extra_outputs]
 
-        wrt = wrt = [self._vs.vars[key] for key in self._vars
-               if key in self._vs.trainable_vars]
+        wrt = [self._vs.vars[key] for key in self._vars
+               if key != "embeddings" and key in self._vs.trainable_vars]
 
         # TODO handle gradient of action prediction
         # TODO would it pay off to force these to have the same concrete
@@ -711,16 +711,20 @@ class ThinStack(object):
                 # parameters, but we don't have any reason to support this in
                 # practice. (Either we backprop to embeddings or project them
                 # and learn the projection -- not both.)
-                _, m_proj_delta_wrt = f_proj_delta(proj_inputs,
-                                                   (m_delta_inp[2],))
+                if m_delta_inp[2] is not None:
+                    _, m_proj_delta_wrt = f_proj_delta(proj_inputs,
+                                                       (m_delta_inp[2],))
+                    m_delta_wrt = util.merge_update_lists(m_delta_wrt, m_proj_delta_wrt)
+
                 # If we pushed (moved the buffer top onto the stack), the
                 # gradient from above is a combination of the accumulated stack
                 # gradient (main_grad) and any buffer top deltas from the push
                 # function (e.g. tracking LSTM gradient).
+                embedding_grad = main_grad
+                if p_delta_inp[2] is not None:
+                    embedding_grad += p_delta_inp[2]
                 _, p_proj_delta_wrt = f_proj_delta(proj_inputs,
-                                                   (main_grad + p_delta_inp[2],))
-
-                m_delta_wrt = util.merge_update_lists(m_delta_wrt, m_proj_delta_wrt)
+                                                   (embedding_grad,))
                 p_delta_wrt = util.merge_update_lists(p_delta_wrt, p_proj_delta_wrt)
 
             # Accumulate inp deltas, switching over push/merge decision.
