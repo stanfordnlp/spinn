@@ -516,22 +516,6 @@ class ThinStackEmbeddingProjectionBackpropTestCase(ThinStackTreeLSTMTrackingLSTM
 
         self._test_backprop(simulated_top, stack, X, transitions, y)
 
-    def test_backprop_5_input_dropout_bn(self):
-        """
-        Check a valid 5-transition S S M S M sequence with embedding dropout
-        and batch-norm.
-        """
-        X = np.array([[0, 1, 2, 3, 1], [2, 1, 3, 0, 1]], dtype=np.int32)
-        y = np.array([1, 0], dtype=np.int32)
-        transitions = np.tile([0, 0, 1, 0, 1], (2, 1)).astype(np.int32)
-
-        stack = self._build(5, use_input_dropout=True,
-                            use_input_batch_norm=True)
-        sim = self._fake_stack_ff(stack)
-        simulated_top = sim["c5"]
-
-        self._test_backprop(simulated_top, stack, X, transitions, y)
-
 
 @attr("slow")
 class ThinStackSpeedTestCase(unittest.TestCase, BackpropTestMixin):
