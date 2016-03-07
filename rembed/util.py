@@ -770,6 +770,7 @@ def batch_subgraph_gradients(g_in, wrt, f_g_out, batch_size=None,
 
     def deltas(b_inps, b_grads):
         b_inps = tuple(b_inps)
+        assert len(g_in) == len(b_inps), "%i %i" % (len(g_in), len(b_inps))
 
         # Build feedforward graph.
         b_out = f_g_out(*b_inps)
