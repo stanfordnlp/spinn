@@ -550,7 +550,7 @@ class ThinStackSpeedTestCase(unittest.TestCase, BackpropTestMixin):
         self.transitions = T.imatrix("transitions")
         self.y = T.ivector("y")
 
-        self.stack = ThinStack(spec, recurrence, IdentityLayer, 0.0, 1.0, vs,
+        self.stack = ThinStack(spec, recurrence, util.Linear, 1.0, 1.0, vs,
                                X=self.X, transitions=self.transitions,
                                use_input_batch_norm=False,
                                use_input_dropout=False)
