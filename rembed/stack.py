@@ -370,14 +370,14 @@ class ThinStack(object):
 
         # Dropout.
         # If we use dropout, we need to retain the mask for backprop purposes.
-        dropout_mask = None
+        ret_dropout_mask = None
         if self.use_input_dropout:
-            projected, droput_mask = util.Dropout(
+            projected, ret_dropout_mask = util.Dropout(
                 projected, self.embedding_dropout_keep_rate,
                 self.training_mode, dropout_mask=dropout_mask,
                 return_mask=True)
 
-        return projected, dropout_mask
+        return projected, ret_dropout_mask
 
     def _make_scan(self):
         """Build the sequential composition / scan graph."""
@@ -396,15 +396,15 @@ class ThinStack(object):
         raw_embeddings = self.embeddings[self.X]  # batch_size * seq_length * emb_dim
         # Shuffle to (seq_length, batch_size, emb_dim) for easy indexing in
         # backprop.
-        self._raw_embeddings = raw_embeddings.dimshuffle(1, 0, 2)
+        self._raw_buffer_t = raw_embeddings.reshape((-1, self.model_dim))
 
         # Allocate a "buffer" stack initialized with projected embeddings,
         # and maintain a cursor in this buffer.
         buffer_t, dropout_mask = self._project_embeddings(raw_embeddings)
-        self._embedding_dropout_mask = \
-            dropout_mask and dropout_mask.dimshuffle(1, 0, 2)
+        self._embedding_dropout_masks = \
+            dropout_mask and dropout_mask.reshape((-1, self.model_dim))
 
-        # Collapse buffer to (batch_size * buffer_size) * model_dim for fast
+        # Collapse buffer to (batch_size * seq_length) * model_dim for fast
         # indexing.
         self.buffer_t = buffer_t = buffer_t.reshape((-1, self.model_dim))
 
@@ -630,7 +630,6 @@ class ThinStack(object):
 
         def step_b(# sequences
                    t_f, transitions_t_f, stack_2_ptrs_t, buffer_cur_t,
-                   raw_embeddings_t, embedding_dropout_mask_t,
                    # accumulators
                    dE,
                    # rest (incl. outputs_info, non_sequences)
@@ -657,7 +656,6 @@ class ThinStack(object):
                 lookup(t_f, stack_final, stack_2_ptrs_t, buffer_cur_t,
                        stack_bwd_next, extra_bwd)
             main_grad = grads[0]
-            main_grad = theano.printing.Print("main_grad")(main_grad)
 
             # Calculate deltas for this timestep.
             m_delta_inp, m_delta_wrt = f_merge_delta(inputs, grads)
@@ -685,17 +683,34 @@ class ThinStack(object):
             masks = [mask, mask.dimshuffle(0, "x"),
                      mask.dimshuffle(0, "x", "x")]
 
-            # Accumulate gradients for the embedding projection network as well.
+            # Insert gradients for the embedding projection network as well.
             if f_proj_delta is not None:
-                proj_inputs = (raw_embeddings_t,)
-                if self.use_input_dropout:
-                    proj_inputs = proj_inputs + (embedding_dropout_mask_t,)
+                # Look up raw buffer top for this timestep -- i.e., buffer top
+                # *before* the op at this timestep was performed. This was the
+                # input to the projection network at this timestep.
+                proj_input = cuda_util.AdvancedSubtensor1Floats("B_raw_buffer_top")(
+                    self._raw_buffer_t, buffer_cur_t + buffer_shift)
 
+                proj_inputs = (proj_input,)
+                if self.use_input_dropout:
+                    embedding_dropout_mask = cuda_util.AdvancedSubtensor1Floats("B_buffer_dropout")(
+                        self._embedding_dropout_masks, buffer_cur_t + buffer_shift)
+                    proj_inputs = (proj_input, embedding_dropout_mask)
+
+                # Compute separate graphs based on gradient from above.
+                # NB: We discard the delta_inp return here. The delta_inp
+                # should actually be passed back to the raw embedding
+                # parameters, but we don't have any reason to support this in
+                # practice. (Either we backprop to embeddings or project them
+                # and learn the projection -- not both.)
                 _, m_proj_delta_wrt = f_proj_delta(proj_inputs,
                                                    (m_delta_inp[2],))
-                p_delta_inp[2] = theano.printing.Print("p_delta_inp[2]")(p_delta_inp[2])
+                # If we pushed (moved the buffer top onto the stack), the
+                # gradient from above is a combination of the accumulated stack
+                # gradient (main_grad) and any buffer top deltas from the push
+                # function (e.g. tracking LSTM gradient).
                 _, p_proj_delta_wrt = f_proj_delta(proj_inputs,
-                                                   (p_delta_inp[2] + main_grad,))
+                                                   (main_grad + p_delta_inp[2],))
 
                 m_delta_wrt = util.merge_update_lists(m_delta_wrt, m_proj_delta_wrt)
                 p_delta_wrt = util.merge_update_lists(p_delta_wrt, p_proj_delta_wrt)
@@ -768,6 +783,7 @@ class ThinStack(object):
 
             updates = dict(new_wrt_deltas.items() + new_stacks.items())
             updates = util.prepare_updates_dict(updates)
+
             return updates
 
         # TODO: These should come from forward pass -- not fixed -- in model
@@ -786,8 +802,7 @@ class ThinStack(object):
         buf_ptrs = T.concatenate([T.zeros((1, batch_size,)),
                                   self.buf_ptrs[:-1]], axis=0)
 
-        sequences = [ts_f, transitions_f, self.stack_2_ptrs, buf_ptrs,
-                     self._raw_embeddings, self._embedding_dropout_mask or ts_f,]
+        sequences = [ts_f, transitions_f, self.stack_2_ptrs, buf_ptrs]
         outputs_info = []
 
         # Shared variables: Accumulated wrt deltas and bwd stacks.
@@ -798,7 +813,10 @@ class ThinStack(object):
         # More helpers (not referenced directly in code, but we need to include
         # them as non-sequences to satisfy scan strict mode)
         non_sequences += [self.stack, self.buffer_t] + self.aux_stacks + self.final_aux_stacks
-        non_sequences += [self.X, self.transitions] + self._vs.vars.values() + extra_cost_inputs
+        non_sequences += [self.X, self.transitions, self._raw_buffer_t]
+        if self.use_input_dropout:
+            non_sequences.append(self._embedding_dropout_masks)
+        non_sequences += self._vs.vars.values() + extra_cost_inputs
         if self.premise_stack_tops:
             non_sequences.append(self.premise_stack_tops)
 
