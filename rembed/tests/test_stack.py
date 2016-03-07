@@ -271,8 +271,11 @@ class ThinStackTrackingBackpropTestCase(unittest.TestCase, BackpropTestMixin):
         return stack
 
     def _embeddings(self, stack):
-        dropout_mask = stack._embedding_dropout_masks.reshape(
-            (self.batch_size, stack.seq_length, self.model_dim))
+        dropout_mask = None
+        if stack._embedding_dropout_masks is not None:
+            dropout_mask = stack._embedding_dropout_masks.reshape(
+                (self.batch_size, stack.seq_length, self.model_dim))
+
         projected, _ = stack._project_embeddings(stack.embeddings[self.X],
                                                  dropout_mask=dropout_mask)
         return projected.dimshuffle(1, 0, 2)
@@ -408,6 +411,7 @@ class ThinStackTreeLSTMTrackingLSTMBackpropTestCase(ThinStackTrackingBackpropTes
 
         self.vs = VariableStore()
         self.compose_network = util.TreeLSTMLayer
+        self.embedding_proj = IdentityLayer
 
         self.X = T.imatrix("X")
         self.transitions = T.imatrix("transitions")
