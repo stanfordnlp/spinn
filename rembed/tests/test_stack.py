@@ -348,7 +348,11 @@ class ThinStackTrackingBackpropTestCase(unittest.TestCase, BackpropTestMixin):
         checks = ["top", "cost"] + ["d/%s" % name for name, _ in rel_vars]
         if not self.skip_embeddings:
             checks.append("d/embeddings")
+
+        util.theano_random.seed(1234)
         sim = f_sim(X, y)
+
+        util.theano_random.seed(1234)
         real = f(X, transitions, y)
 
         for check, sim_i, real_i in zip(checks, sim, real):
