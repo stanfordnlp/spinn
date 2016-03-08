@@ -225,9 +225,6 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
             hypothesis_vector = hypothesis_vector.reshape((-1, FLAGS.model_dim))
             sentence_vector_dim = FLAGS.model_dim
 
-        premise_vector = T.printing.Print("P")(premise_vector)
-        hypothesis_vector = T.printing.Print("H")(hypothesis_vector)
-
     if FLAGS.use_attention != "None":
         # Use the attention weighted representation
         h_dim = FLAGS.model_dim / 2
