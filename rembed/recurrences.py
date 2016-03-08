@@ -32,6 +32,8 @@ class Recurrence(object):
         # each timestep, we would include `(50,)` here.
         self.extra_outputs = []
 
+        self.post_graph_outputs = []
+
         self.predicts_transitions = False
         self.uses_predictions = False
 
@@ -68,6 +70,10 @@ class Recurrence(object):
                 `batch_size * num_actions`).
         """
         raise NotImplementedError("abstract method")
+
+    def post_graph(self, inputs, outputs, **constants):
+        # TODO(jon): document
+        return []
 
 
 class SharedRecurrenceMixin(object):
@@ -148,7 +154,8 @@ class Model0(Recurrence, SharedRecurrenceMixin):
                  use_tracking_lstm=False,
                  tracking_lstm_hidden_dim=8,
                  use_context_sensitive_shift=False,
-                 context_sensitive_use_relu=False):
+                 context_sensitive_use_relu=False,
+                 attention_unit=None):
         super(Model0, self).__init__(spec, vs)
         self.extra_outputs = []
         if use_tracking_lstm:
@@ -160,6 +167,10 @@ class Model0(Recurrence, SharedRecurrenceMixin):
         self.tracking_lstm_hidden_dim = tracking_lstm_hidden_dim
         self.use_context_sensitive_shift = use_context_sensitive_shift
         self.context_sensitive_use_relu = context_sensitive_use_relu
+
+        self.attention_unit = attention_unit
+        if attention_unit is not None:
+            self.extra_outputs.append((self.model_dim,))
 
         if use_tracking_lstm:
             self._prediction_and_tracking_network = partial(util.TrackingUnit,
@@ -186,6 +197,10 @@ class Model0(Recurrence, SharedRecurrenceMixin):
             return [tracking_hidden], [merge_value, tracking_hidden]
         else:
             return [], [merge_value]
+
+    def post_graph(self, inputs, outputs, **constants):
+        # TODO attention
+        pass
 
 
 class Model1(Recurrence, SharedRecurrenceMixin):

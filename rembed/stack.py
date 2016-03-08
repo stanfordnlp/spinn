@@ -38,7 +38,7 @@ def update_hard_stack(t, t_f, stack_t, push_value, merge_value, merge_queue_t,
     queue_next = cuda_util.AdvancedIncSubtensor1Floats(set_instead_of_inc=True, inplace=True)(
             merge_queue_t, t_f, cursors_shift + cursors_next)
 
-    return stack_next, queue_next, cursors_next
+    return top_next, stack_next, queue_next, cursors_next
 
 
 class ThinStack(object):
@@ -257,7 +257,8 @@ class ThinStack(object):
 
     def _step(self, t, t_f, transitions_t, transitions_t_f, ss_mask_gen_matrix_t,
               buffer_cur_t, attention_hidden, buffer,
-              ground_truth_transitions_visible, premise_stack_tops, *rest):
+              ground_truth_transitions_visible, premise_stack_tops,
+              projected_stack_tops, *rest):
         batch_size = self.batch_size
 
         # Extract top buffer values.
@@ -283,6 +284,8 @@ class ThinStack(object):
 
         recurrence_inputs = (stack_1, stack_2, buffer_top_t)
         recurrence_inputs += extra_inputs
+        if self.recurrence.attention_unit is not None:
+            recurrence_inputs += (premise_stack_tops, projected_stack_tops)
         recurrence_ret = self.recurrence(recurrence_inputs)
 
         push_ret, merge_ret = recurrence_ret[:2]
@@ -313,9 +316,18 @@ class ThinStack(object):
             mask = transitions_t_f
 
         # Compute new stack value.
-        stack_next, merge_queue_next, merge_cursors_next = update_hard_stack(
+        top_next, stack_next, merge_queue_next, merge_cursors_next = update_hard_stack(
             t, t_f, self.stack, buffer_top_t, merge_ret[0], self.queue, self.cursors,
             mask, self.batch_size, self._stack_shift, self._cursors_shift)
+
+        # Calculate extra outputs from recurrence.
+        aux_outputs = [mask2 * m_output + (1. - mask2) * p_output
+                       for p_output, m_output in zip(push_ret, merge_ret[1:])]
+
+        # Compute any post-unification graph outputs.
+        recurrence_outputs = [top_next] + aux_outputs
+        post_outputs = self.recurrence.post_graph(recurrence_inputs,
+                                                  recurrence_outputs)
 
         # If attention is to be used and premise_stack_tops is not None (i.e.
         # we're processing the hypothesis) calculate the attention weighed representation.
@@ -332,10 +344,6 @@ class ThinStack(object):
         # TODO clean this up..
         mask2 = mask.dimshuffle(0, "x")
         ptr_next = t_f * self.batch_size + self._stack_shift
-        # TODO: Allow recurrence to state that output i is the same for push +
-        # merge -- then we don't have to mask it
-        aux_outputs = [mask2 * m_output + (1. - mask2) * p_output
-                       for p_output, m_output in zip(push_ret, merge_ret[1:])]
         aux_stack_updates = {aux_stack: cuda_util.AdvancedIncSubtensor1Floats(set_instead_of_inc=True, inplace=True)(
             aux_stack, aux_output, ptr_next)
             for aux_stack, aux_output in zip(self.aux_stacks, aux_outputs)}
@@ -348,6 +356,8 @@ class ThinStack(object):
         if not self.interpolate:
             # Use ss_mask as a redundant return value.
             ret_val = (ss_mask_gen_matrix_t,) + ret_val
+
+        ret_val += tuple(post_outputs)
 
         updates = {
             self.stack: stack_next,
@@ -417,18 +427,31 @@ class ThinStack(object):
         transitions_f = T.cast(transitions, dtype=theano.config.floatX)
 
         # Initialize the attention representation if needed.
-        if self.use_attention:
+        if self.recurrence.attention_unit is not None:
             attention_init = util.zeros_nobroadcast((batch_size, self.model_dim))
         else:
-            # If we're not using a sequential attention accumulator (i.e., no attention or
-            # tree attention), use a size-zero value here.
+            # If we're not using a sequential attention accumulator (i.e., no
+            # attention or tree attention), use a size-zero value here.
             attention_init = DUMMY
+
+        if self.recurrence.attention_unit is not None and self.is_hypothesis:
+            attention_init = util.zeros_nobroadcast((batch_size, self.model_dim))
+
+            self.projected_stack_tops = util.AttentionUnitInit(
+                self.premise_stack_tops, self.model_dim / 2, self._vs)
+
+            attn_non_sequences = [self.premise_stack_tops,
+                                  self.projected_stack_tops]
+        else:
+            attn_non_sequences = [util.zeros_nobroadcast((1,)),
+                                  util.zeros_nobroadcast((1,))]
 
         # Set up the output list for scanning over _step().
         # Final `None` entry is for accumulating `stack_2_ptr` values.
         outputs_info = [buffer_cur_init, attention_init, None]
         if self.recurrence.predicts_transitions:
             outputs_info.append(None)
+        outputs_info.extend([None for _ in self.recurrence.post_graph_outputs])
 
         # Prepare data to scan over.
         sequences = [T.arange(1, self.seq_length + 1),
@@ -447,11 +470,7 @@ class ThinStack(object):
             outputs_info = [DUMMY] + outputs_info
 
         non_sequences = [buffer_t, self.ground_truth_transitions_visible]
-        if self.use_attention and self.is_hypothesis:
-            non_sequences = non_sequences + [self.premise_stack_tops]
-        else:
-            DUMMY2 = T.zeros((2,)) # another dummy tensor
-            non_sequences = non_sequences + [DUMMY, DUMMY2]
+        non_sequences += attn_non_sequences
 
         # Tack on all relevant params, structures to satisfy strict mode.
         non_sequences += self.aux_stacks + self._vs.vars.values()
@@ -474,6 +493,7 @@ class ThinStack(object):
         self.final_aux_stacks = [self.scan_updates[aux_stack]
                                  for aux_stack in self.aux_stacks]
         self.sentence_embeddings = self.final_stack[-self.batch_size:]
+        self.stack_tops = self.final_stack
 
         self.transitions_pred = None
         if self.recurrence.predicts_transitions:
@@ -493,6 +513,9 @@ class ThinStack(object):
         input_ndim = [2] * 3
         input_ndim += [len(extra_output_shape) + 1
                        for extra_output_shape in self.recurrence.extra_outputs]
+        if self.recurrence.attention_unit is not None:
+            # Non-recurrent inputs: premise_stack_tops, projected_stack_tops
+            input_ndim += [2, 2]
 
         wrt = [self._vs.vars[key] for key in self._vars
                if key != "embeddings" and key in self._vs.trainable_vars]
@@ -632,7 +655,12 @@ class ThinStack(object):
                     extra_inp_i, t_c1)
                 for extra_inp_i in self.final_aux_stacks])
 
-            inputs = (c1, c2, buffer_top_t) + extra_inps_t
+            attn_inputs = []
+            if self.recurrence.attention_unit is not None:
+                attn_inputs = [self.premise_stack_tops,
+                               self.projected_stack_tops]
+
+            inputs = (c1, c2, buffer_top_t) + extra_inps_t + attn_inputs
             grads = (main_grad,) + extra_grads
             return t_c1, t_c2, inputs, grads
 

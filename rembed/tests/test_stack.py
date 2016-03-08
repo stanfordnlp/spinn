@@ -127,6 +127,70 @@ class BackpropTestMixin(object):
         costs = T.nnet.categorical_crossentropy(T.nnet.softmax(logits), self.y)
         return costs.mean()
 
+    def _build(self, length, use_input_batch_norm=False,
+               use_input_dropout=False, premise_stack_tops=None,
+               is_hypothesis=False, **recurrence_args):
+        spec = util.ModelSpec(self.model_dim, self.embedding_dim,
+                              self.batch_size, self.vocab_size,
+                              length)
+        recurrence = Model0(spec, self.vs, self.compose_network,
+                            use_tracking_lstm=self.use_tracking_lstm,
+                            tracking_lstm_hidden_dim=self.tracking_lstm_hidden_dim,
+                            attention_unit=self.attention_unit,
+                            **recurrence_args)
+        stack = ThinStack(spec, recurrence, self.embedding_proj, 1.0, 1.0, self.vs,
+                          X=self.X, transitions=self.transitions,
+                          use_input_batch_norm=use_input_batch_norm,
+                          use_input_dropout=use_input_dropout,
+                          embedding_dropout_keep_rate=0.7,
+                          premise_stack_tops=premise_stack_tops,
+                          is_hypothesis=is_hypothesis)
+
+        return stack
+
+    def _embeddings(self, stack):
+        ret = stack.buffer_t.reshape((self.batch_size, -1, self.model_dim))
+        ret = ret.dimshuffle(1, 0, 2)
+        return ret
+
+    def _test_backprop(self, sim_top, stack, X, transitions, y):
+        rel_vars = [(name, var) for name, var in self.vs.trainable_vars.iteritems()
+                    if name != "embeddings"]
+
+        sim_cost = self._make_cost(sim_top)
+        all_grads = [T.grad(sim_cost, var) for _, var in rel_vars]
+        f_sim = theano.function(
+            [self.X, self.y],
+            [sim_top, sim_cost] + all_grads + [T.grad(sim_cost, stack.embeddings)])
+
+        top = stack.final_stack[-self.batch_size:]
+        cost = self._make_cost(top)
+        error_signal = T.grad(cost, top)
+
+        stack.make_backprop_scan(error_signal, [self.y],
+                                 compute_embedding_gradients=not self.skip_embeddings)
+        outputs = [top, cost] + [stack.gradients[var] for _, var in rel_vars]
+        if not self.skip_embeddings:
+            outputs.append(stack.embedding_gradients)
+        f = theano.function(
+            [self.X, self.transitions, self.y], outputs,
+            updates=stack.scan_updates + stack.bscan_updates)
+
+        checks = ["top", "cost"] + ["d/%s" % name for name, _ in rel_vars]
+        if not self.skip_embeddings:
+            checks.append("d/embeddings")
+
+        util.theano_random.seed(1234)
+        sim = f_sim(X, y)
+
+        util.theano_random.seed(1234)
+        real = f(X, transitions, y)
+
+        for check, sim_i, real_i in zip(checks, sim, real):
+            np.testing.assert_almost_equal(sim_i, real_i, err_msg=check,
+                                           decimal=4, verbose=True)
+
+
 
 class ThinStackBackpropTestCase(unittest.TestCase, BackpropTestMixin):
 
@@ -236,6 +300,11 @@ class ThinStackTrackingBackpropTestCase(unittest.TestCase, BackpropTestMixin):
         self.batch_size = 2
         self.num_classes = 2
 
+        self.use_tracking_lstm = True
+        self.tracking_lstm_hidden_dim = self.model_dim / 2
+
+        self.attention_unit = None
+
         self.vs = VariableStore()
 
         def compose_network((c1, c2), hidden, *args, **kwargs):
@@ -253,27 +322,6 @@ class ThinStackTrackingBackpropTestCase(unittest.TestCase, BackpropTestMixin):
         self.X = T.imatrix("X")
         self.transitions = T.imatrix("transitions")
         self.y = T.ivector("y")
-
-    def _build(self, length, use_input_batch_norm=False,
-               use_input_dropout=False):
-        spec = util.ModelSpec(self.model_dim, self.embedding_dim,
-                              self.batch_size, self.vocab_size,
-                              length)
-        recurrence = Model0(spec, self.vs, self.compose_network,
-                            use_tracking_lstm=True,
-                            tracking_lstm_hidden_dim=self.model_dim / 2)
-        stack = ThinStack(spec, recurrence, self.embedding_proj, 1.0, 1.0, self.vs,
-                          X=self.X, transitions=self.transitions,
-                          use_input_batch_norm=use_input_batch_norm,
-                          use_input_dropout=use_input_dropout,
-                          embedding_dropout_keep_rate=0.7)
-
-        return stack
-
-    def _embeddings(self, stack):
-        ret = stack.buffer_t.reshape((self.batch_size, -1, self.model_dim))
-        ret = ret.dimshuffle(1, 0, 2)
-        return ret
 
     def _fake_stack_ff(self, stack):
         """Fake a stack feedforward S S M S M S S S M M M with the given data."""
@@ -319,43 +367,6 @@ class ThinStackTrackingBackpropTestCase(unittest.TestCase, BackpropTestMixin):
         c11, t11 = f_merge(c10, c5, X_emb[6], t10)
 
         return locals()
-
-    def _test_backprop(self, sim_top, stack, X, transitions, y):
-        rel_vars = [(name, var) for name, var in self.vs.trainable_vars.iteritems()
-                    if name != "embeddings"]
-
-        sim_cost = self._make_cost(sim_top)
-        all_grads = [T.grad(sim_cost, var) for _, var in rel_vars]
-        f_sim = theano.function(
-            [self.X, self.y],
-            [sim_top, sim_cost] + all_grads + [T.grad(sim_cost, stack.embeddings)])
-
-        top = stack.final_stack[-self.batch_size:]
-        cost = self._make_cost(top)
-        error_signal = T.grad(cost, top)
-
-        stack.make_backprop_scan(error_signal, [self.y],
-                                 compute_embedding_gradients=not self.skip_embeddings)
-        outputs = [top, cost] + [stack.gradients[var] for _, var in rel_vars]
-        if not self.skip_embeddings:
-            outputs.append(stack.embedding_gradients)
-        f = theano.function(
-            [self.X, self.transitions, self.y], outputs,
-            updates=stack.scan_updates + stack.bscan_updates)
-
-        checks = ["top", "cost"] + ["d/%s" % name for name, _ in rel_vars]
-        if not self.skip_embeddings:
-            checks.append("d/embeddings")
-
-        util.theano_random.seed(1234)
-        sim = f_sim(X, y)
-
-        util.theano_random.seed(1234)
-        real = f(X, transitions, y)
-
-        for check, sim_i, real_i in zip(checks, sim, real):
-            np.testing.assert_almost_equal(sim_i, real_i, err_msg=check,
-                                           decimal=4, verbose=True)
 
     def test_backprop_3(self):
         """Check a valid 3-transition S S M sequence."""
@@ -403,6 +414,8 @@ class ThinStackTreeLSTMTrackingLSTMBackpropTestCase(ThinStackTrackingBackpropTes
         self.vocab_size = 5
         self.batch_size = 2
         self.num_classes = 2
+
+        self.attention_unit = None
 
         self.vs = VariableStore()
         self.compose_network = util.TreeLSTMLayer
@@ -469,6 +482,8 @@ class ThinStackEmbeddingProjectionBackpropTestCase(ThinStackTreeLSTMTrackingLSTM
         self.batch_size = 2
         self.num_classes = 2
 
+        self.attention_unit = None
+
         self.vs = VariableStore()
 
         def compose_network((c1, c2), hidden, *args, **kwargs):
@@ -517,6 +532,102 @@ class ThinStackEmbeddingProjectionBackpropTestCase(ThinStackTreeLSTMTrackingLSTM
         self._test_backprop(simulated_top, stack, X, transitions, y)
 
 
+class ThinStackWangJiangAttentionBackpropTestCase(unittest.TestCase, BackpropTestMixin):
+
+    def setUp(self):
+        if 'gpu' not in theano.config.device:
+            raise RuntimeError("Thin stack only defined for GPU usage")
+
+        self.embedding_dim = self.model_dim = 20
+        self.vocab_size = 5
+        self.batch_size = 2
+        self.num_classes = 2
+
+        self.use_tracking_lstm = True
+        self.tracking_lstm_hidden_dim = self.model_dim / 2
+
+        self.attention_unit = "WangJiang"
+
+        self.vs = VariableStore()
+
+        def compose_network((c1, c2), hidden, *args, **kwargs):
+            conc = T.concatenate([hidden, c1, c2], axis=1)
+
+            W = self.vs.add_param("W", (self.model_dim / 2 + self.model_dim * 2, self.model_dim))
+            b = self.vs.add_param("b", (self.model_dim,),
+                                  initializer=util.ZeroInitializer())
+            return T.dot(conc, W) + b
+
+        self.compose_network = compose_network
+
+        self.embedding_proj = util.Linear
+        self.skip_embeddings = True
+
+        self.X = T.imatrix("X")
+        self.transitions = T.imatrix("transitions")
+        self.y = T.ivector("y")
+
+    def _fake_stack_ff(self, stack):
+        """Fake a stack feedforward S S M S M S S S M M M with the given data."""
+
+        f_push = lambda *inputs: stack.recurrence(inputs)[0]
+        f_merge = lambda *inputs: stack.recurrence(inputs)[1]
+
+        # seq_length * batch_size * emb_dim
+        X_emb = self._embeddings(stack)
+        zero = T.zeros((self.batch_size, self.model_dim))
+        t0 = T.zeros((self.batch_size, self.model_dim))
+
+        # Shift.
+        t1, = f_push(zero, zero, X_emb[0], t0)
+
+        # Shift.
+        t2, = f_push(X_emb[0], zero, X_emb[1], t1)
+
+        # Merge.
+        c3, t3 = f_merge(X_emb[1], X_emb[0], X_emb[2], t2)
+        self.c3 = c3
+        if stack.seq_length <= 3:
+            return locals()
+
+        # Shift.
+        t4, = f_push(c3, zero, X_emb[2], t3)
+
+        # Merge.
+        c5, t5 = f_merge(X_emb[2], c3, X_emb[3], t4)
+        if stack.seq_length <= 5:
+            return locals()
+
+        t6, = f_push(c5, zero, X_emb[3], t5)
+
+        t7, = f_push(X_emb[3], c5, X_emb[4], t6)
+
+        t8, = f_push(X_emb[4], X_emb[3], X_emb[5], t7)
+
+        c9, t9 = f_merge(X_emb[5], X_emb[4], X_emb[6], t8)
+
+        c10, t10 = f_merge(c9, X_emb[3], X_emb[6], t9)
+
+        c11, t11 = f_merge(c10, c5, X_emb[6], t10)
+
+        return locals()
+
+    def test_backprop_3(self):
+        X = np.array([[0, 1, 2, 3, 1], [2, 1, 3, 0, 1]], dtype=np.int32)
+        y = np.array([1, 0], dtype=np.int32)
+        transitions = np.tile([0, 0, 1, 0, 1], (2, 1)).astype(np.int32)
+
+        first_model = self._build(5)
+        first_sim = self._fake_stack_ff(first_model)
+
+        second_model = self._build(5, is_hypothesis=True,
+                                   premise_stack_tops=first_model.stack_tops)
+        second_sim = self._fake_stack_ff(second_model)
+
+        self._test_backprop(second_sim["c5"], second_model, X, transitions, y)
+        self._test_backprop(first_sim["c5"], first_model, X, transitions, y)
+
+
 @attr("slow")
 class ThinStackSpeedTestCase(unittest.TestCase, BackpropTestMixin):
 
@@ -529,6 +640,9 @@ class ThinStackSpeedTestCase(unittest.TestCase, BackpropTestMixin):
         self.seq_length = 50
         self.batch_size = 256
         self.num_classes = 2
+
+        self.use_attention = False
+        self.attention_unit = None
 
         spec = util.ModelSpec(self.model_dim, self.embedding_dim,
                               self.batch_size, self.vocab_size,
