@@ -107,6 +107,7 @@ def build_sentence_model(cls, vocab_size, seq_length, tokens, transitions,
     else:
         sentence_vector = sentence_model.final_representations.reshape((-1, FLAGS.model_dim))
         sentence_vector_dim = FLAGS.model_dim
+    # TODO(SB): Make sure something sensible happens with the plain RNN.
 
     sentence_vector = util.BatchNorm(sentence_vector, sentence_vector_dim, vs, "sentence_vector", training_mode)
     sentence_vector = util.Dropout(sentence_vector, FLAGS.semantic_classifier_keep_rate, training_mode)
@@ -215,7 +216,7 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
         premise_vector = premise_model.final_representations
         hypothesis_vector = hypothesis_model.final_representations
 
-        if FLAGS.lstm_composition:
+        if FLAGS.lstm_composition or cls is rembed.plain_rnn.RNN:
             premise_vector = premise_vector[:,:FLAGS.model_dim / 2].reshape((-1, FLAGS.model_dim / 2))
             hypothesis_vector = hypothesis_vector[:,:FLAGS.model_dim / 2].reshape((-1, FLAGS.model_dim / 2))
             sentence_vector_dim = FLAGS.model_dim / 2
@@ -223,6 +224,9 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
             premise_vector = premise_vector.reshape((-1, FLAGS.model_dim))
             hypothesis_vector = hypothesis_vector.reshape((-1, FLAGS.model_dim))
             sentence_vector_dim = FLAGS.model_dim
+
+        premise_vector = T.printing.Print("P")(premise_vector)
+        hypothesis_vector = T.printing.Print("H")(hypothesis_vector)
 
     if FLAGS.use_attention != "None":
         # Use the attention weighted representation
@@ -484,7 +488,8 @@ def run(only_forward=False):
     logger.Log("Preprocessing training data.")
     training_data = util.PreprocessDataset(
         raw_training_data, vocabulary, FLAGS.seq_length, data_manager, eval_mode=False, logger=logger,
-        sentence_pair_data=data_manager.SENTENCE_PAIR_DATA)
+        sentence_pair_data=data_manager.SENTENCE_PAIR_DATA,
+        for_rnn=FLAGS.model_type == "RNN")
     training_data_iter = util.MakeTrainingIterator(
         training_data, FLAGS.batch_size)
 
@@ -493,7 +498,8 @@ def run(only_forward=False):
         logger.Log("Preprocessing eval data: " + filename)
         e_X, e_transitions, e_y, e_num_transitions = util.PreprocessDataset(
             raw_eval_set, vocabulary, FLAGS.seq_length, data_manager, eval_mode=True, logger=logger,
-            sentence_pair_data=data_manager.SENTENCE_PAIR_DATA)
+            sentence_pair_data=data_manager.SENTENCE_PAIR_DATA,
+            for_rnn=FLAGS.model_type == "RNN")
         eval_iterators.append((filename,
             util.MakeEvalIterator((e_X, e_transitions, e_y, e_num_transitions), FLAGS.batch_size)))
 

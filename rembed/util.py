@@ -981,6 +981,24 @@ def CropAndPad(dataset, length, logger=None, sentence_pair_data=False):
                 example, tokens_left_padding, length, tokens_key, logger=logger)
     return dataset
 
+def CropAndPadForRNN(dataset, length, logger=None, sentence_pair_data=False):
+    # NOTE: This can probably be done faster in NumPy if it winds up making a
+    # difference.
+    if sentence_pair_data:
+        keys = ["premise_tokens",
+                "hypothesis_tokens"]
+    else:
+        keys = ["tokens"]
+
+    for example in dataset:
+        print example
+        for tokens_key in keys:
+            num_tokens = len(example[tokens_key])
+            tokens_left_padding = length - num_tokens
+            CropAndPadExample(
+                example, tokens_left_padding, length, tokens_key, logger=logger)
+    return dataset
+
 
 def MakeTrainingIterator(sources, batch_size):
     # Make an iterator that exposes a dataset as random minibatches.
@@ -1029,22 +1047,31 @@ def MakeEvalIterator(sources, batch_size):
 
 
 def PreprocessDataset(dataset, vocabulary, seq_length, data_manager, eval_mode=False, logger=None,
-                      sentence_pair_data=False):
+                      sentence_pair_data=False, for_rnn=False):
+    # TODO(SB): Simpler version for plain RNN.
     dataset = TrimDataset(dataset, seq_length, eval_mode=eval_mode, sentence_pair_data=sentence_pair_data)
     dataset = TokensToIDs(vocabulary, dataset, sentence_pair_data=sentence_pair_data)
-    dataset = CropAndPad(dataset, seq_length, logger=logger, sentence_pair_data=sentence_pair_data)
+    if for_rnn:
+        dataset = CropAndPadForRNN(dataset, seq_length, logger=logger, sentence_pair_data=sentence_pair_data)
+    else:
+        dataset = CropAndPad(dataset, seq_length, logger=logger, sentence_pair_data=sentence_pair_data)
 
     if sentence_pair_data:
         X = np.transpose(np.array([[example["premise_tokens"] for example in dataset],
                       [example["hypothesis_tokens"] for example in dataset]],
                      dtype=np.int32), (1, 2, 0))
-        transitions = np.transpose(np.array([[example["premise_transitions"] for example in dataset],
-                                [example["hypothesis_transitions"] for example in dataset]],
-                               dtype=np.int32), (1, 2, 0))
-        num_transitions = np.transpose(np.array(
-            [[example["num_premise_transitions"] for example in dataset],
-             [example["num_hypothesis_transitions"] for example in dataset]],
-            dtype=np.int32), (1, 0))
+        if for_rnn: 
+            # TODO(SB): Extend this clause to the non-pair case.
+            transitions = np.zeros((len(dataset), 2, 0))
+            num_transitions = np.zeros((len(dataset), 2))
+        else:
+            transitions = np.transpose(np.array([[example["premise_transitions"] for example in dataset],
+                                    [example["hypothesis_transitions"] for example in dataset]],
+                                   dtype=np.int32), (1, 2, 0))
+            num_transitions = np.transpose(np.array(
+                [[example["num_premise_transitions"] for example in dataset],
+                 [example["num_hypothesis_transitions"] for example in dataset]],
+                dtype=np.int32), (1, 0))
     else:
         X = np.array([example["tokens"] for example in dataset],
                      dtype=np.int32)
