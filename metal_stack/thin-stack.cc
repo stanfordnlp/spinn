@@ -61,6 +61,8 @@ ThinStack::forward() {
 
 ThinStack::step(int t) {
 
+  // TODO sync after kernel calls.
+
   // Extract top buffer values.
   // TODO subtensor with idxs buffer_cur_t + 0 * 1 + buffer_shift
   // == buffer_cur_t * 1 + (batch_range * seq_length)
