@@ -457,6 +457,7 @@ class HardStack(object):
                 sequences=sequences,
                 non_sequences=non_sequences,
                 outputs_info=outputs_info,
+                n_steps=self.seq_length,
                 name="stack_fwd")
 
         stack_ind = 0 if self.interpolate else 1
