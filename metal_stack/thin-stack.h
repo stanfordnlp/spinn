@@ -25,16 +25,21 @@ class ThinStack {
      */
     ThinStack(ModelSpec spec, ThinStackParameters params);
 
+    ~ThinStack();
+
     void forward();
 
     // Model inputs
     float *X;
+    int *transitions;
     float *y;
 
     float *stack;
 
   private:
 
+    void step(int t);
+    void recurrence();
     void zero();
 
     ModelSpec spec;
@@ -46,6 +51,18 @@ class ThinStack {
     size_t queue_total_size;
     size_t cursors_total_size;
 
+    // Containers for temporary (per-step) data
+    int *buffer_top_idxs_t;
+    float *buffer_top_t;
+    int *stack_1_ptrs;
+    int *stack_2_ptrs;
+    float *push_output;
+    float *merge_output;
+
+    // Per-step accumulators
+    int *buffer_cur_t;
+
+    float *buffer;
     float *queue;
     float *cursors;
 
