@@ -145,13 +145,16 @@ $^{6}$Stanford Computer Science}
 \maketitle
 \begin{abstract}
 
-Tree-structured neural networks are linguistically principled models for sentence encoding that have proven effective on several natural language understanding tasks. However, these models can only operate on parsed sentences, and do not support batched computation, making them prohibitively slow for large-scale tasks. We present the parser--interpreter neural network, or PINN, which implements the sentence encoding computations of a tree-structured neural network within the structure of a transition-based neural constituency parser. This model addresses both of the weaknesses of existing tree-structured models: the transition-based architecture of the parser makes it possible to perform tree-structured sentence interpretation in an efficient, batched, setting, and the deep integration with the parser allows the model to handle interpret unparsed data at test time with nearly no loss in accuracy. Finally, we show that this architecture supports a novel and effective method for handling local context in sentence interpretation, and integrates will with soft attention methods for sentence pair tasks.
+Tree-structured neural networks are highly as effective sentence models, but they can only operate on parsed sentences, and do not support batched computation, making them prohibitively slow for large-scale tasks. This paper presents the parser-interpreter neural network, which reimplements a tree-structured network within a transition-based neural constituency parser. This allows us to address both weaknesses: the transition-based architecture of the parser makes it possible to perform tree-structured interpretation in an efficient batched setting, and the integrated parser allows the model to interpret unparsed data with nearly no loss in accuracy. In addition, our model supports a novel and effective method for handling local context in sentence interpretation and integrates will with soft attention methods for sentence pair tasks.
 
 \end{abstract}
 
 \todo{Anonymize.}
+
 \todo{Fill in name where needed.}
+
 \todo{SST!}
+
 \todo{Model 1!}
 
 \section{Introduction}
