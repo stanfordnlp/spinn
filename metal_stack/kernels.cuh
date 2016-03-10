@@ -6,15 +6,24 @@
 #include <cuda_runtime.h>
 
 
+// Grid dimension constraints for jagupard machines.
+#define MAX_BLOCKS 65535
+#define MAX_THREADS_PER_BLOCK 1024
+
+
 namespace kernels {
+
+  // v *= s
+  void muli_vs(float *v, int s, int N);
+  __global__ void k_muli_vs(float *v, int s, int N);
 
   /**
    * Add two vectors inplace (writing to the first).
    *
    *     v1 = v1 * v1_coeff + v2 * v2_coeff
    */
-  __global__ void addi_vv(float *v1, const float *v2,
-          float v1_coeff, float v2_coeff);
+  void addi_vv(float *v1, const float *v2, float v1_coeff, float v2_coeff,
+      int N);
 
   /**
    * Retrieve a subset of `N` rows from the contiguous `M * D` matrix `src`
@@ -27,16 +36,15 @@ namespace kernels {
    *     idxs_ += idx_vec_shift_coeff * idx_vec_shift
    *     dst = src[idxs_]
    */
-  __global__ void subtensor1(float *dst, const float *src, const int *idxs,
-          int N, int D, int idx_scal_shift, int idx_vec_shift_coeff,
-          int *idx_vec_shift)
+  void subtensor1(float *dst, const float *src, const int *idxs, int N, int D,
+      int idx_scal_shift, int idx_vec_shift_coeff, int *idx_vec_shift)
 
   /**
    * Write an int scalar into a subtensor range.
    *
    *     dst[idxs + idx_scal_shift + idx_vec_shift_coeff * idx_vec_shift] = src
    */
-  __global__ void set_subtensor1i_s(int *dst, int src, const int *idxs, int N,
+  void set_subtensor1i_s(int *dst, int src, const int *idxs, int N,
           int idx_scal_shift, int idx_vec_shift_coeff, int *idx_vec_shift);
 
   /**
@@ -47,8 +55,8 @@ namespace kernels {
    * where `ift`, `iff` are `N * D` matrices, and `mask` is an `N`-dimensional
    * vector.
    */
-  __global__ void switch_m(float *dst, const int *mask, const float *ift,
-          const float *iff, int N, int D);
+  void switch_m(float *dst, const int *mask, const float *ift,
+      const float *iff, int N, int D);
 
 }
 
