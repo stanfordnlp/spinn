@@ -38,6 +38,9 @@ namespace kernels {
    */
   void subtensor1(float *dst, const float *src, const int *idxs, int N, int D,
       int idx_scal_shift, int idx_vec_shift_coeff, int *idx_vec_shift)
+  __global__ void k_subtensor1(float *dst, const float *src, const int *idxs,
+      int N, int D, int idx_scal_shift, int idx_vec_shift_coeff,
+      int *idx_vec_shift);
 
   /**
    * Write an int scalar into a subtensor range.
