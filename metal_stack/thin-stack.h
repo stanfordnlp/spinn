@@ -48,12 +48,14 @@ class ThinStack {
     void zero();
 
     void recurrence();
-    void mask_and_update_stack(const int *stack_top_ptrs,
-            const float *push_value, const float *merge_value,
-            const int *transitions, int t);
+    void mask_and_update_stack(int stack_top_idx, const float *push_value,
+            const float *merge_value, const int *transitions, int t);
     void mask_and_update_cursors(float *cursors, const int *transitions,
                                  int t);
     void update_buffer_cur(int *buffer_cur_t, int *transitions, int t);
+
+    void init_helpers();
+    void free_helpers();
 
     ModelSpec spec;
     ThinStackParameters params;
@@ -76,6 +78,9 @@ class ThinStack {
 
     // Per-step accumulators
     int *buffer_cur_t;
+
+    // Dumb helpers
+    int *batch_ones;
 
     float *buffer;
     float *queue;

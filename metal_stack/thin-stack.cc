@@ -33,6 +33,14 @@ ThinStack::ThinStack(ModelSpec spec, ThinStackParameters params,
 }
 
 
+ThinStack::init_helpers() {
+
+  cudaMalloc(&batch_ones, spec.batch_size * sizeof(int));
+  cudaMemset(batch_ones, 1, spec.batch_size * sizeof(int));
+
+}
+
+
 ThinStack::~ThinStack() {
 
   cudaFree(stack);
@@ -88,9 +96,7 @@ ThinStack::step(int t) {
   recurrence(stack_1_t, stack_2_t, buffer_top_t);
 
   // Write in the next stack top.
-  // NB: destroying stack_1_ptrs
-  k::add_sv(stack_1_ptrs, t * spec.batch_size, 1, batch_range);
-  mask_and_update_stack(stack_1_ptrs, buffer_top_t, merge_output,
+  mask_and_update_stack(t * spec.batch_size, buffer_top_t, merge_output,
                         transitions, t);
 
   // cursors += 1 - 2*mask
