@@ -98,16 +98,16 @@ def build_sentence_model(cls, vocab_size, seq_length, tokens, transitions,
         ss_prob=ss_prob,
         connect_tracking_comp=FLAGS.connect_tracking_comp,
         context_sensitive_shift=FLAGS.context_sensitive_shift,
-        context_sensitive_use_relu=FLAGS.context_sensitive_use_relu)
+        context_sensitive_use_relu=FLAGS.context_sensitive_use_relu,
+        use_input_batch_norm=False)
 
     # Extract top element of final stack timestep.
-    if FLAGS.lstm_composition:
+    if FLAGS.lstm_composition or cls is rembed.plain_rnn.RNN:
         sentence_vector = sentence_model.final_representations[:,:FLAGS.model_dim / 2].reshape((-1, FLAGS.model_dim / 2))
         sentence_vector_dim = FLAGS.model_dim / 2
     else:
         sentence_vector = sentence_model.final_representations.reshape((-1, FLAGS.model_dim))
         sentence_vector_dim = FLAGS.model_dim
-    # TODO(SB): Make sure something sensible happens with the plain RNN.
 
     sentence_vector = util.BatchNorm(sentence_vector, sentence_vector_dim, vs, "sentence_vector", training_mode)
     sentence_vector = util.Dropout(sentence_vector, FLAGS.semantic_classifier_keep_rate, training_mode)
