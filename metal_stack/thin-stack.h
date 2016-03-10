@@ -45,8 +45,15 @@ class ThinStack {
   private:
 
     void step(int t);
-    void recurrence();
     void zero();
+
+    void recurrence();
+    void mask_and_update_stack(const int *stack_top_ptrs,
+            const float *push_value, const float *merge_value,
+            const int *transitions, int t);
+    void mask_and_update_cursors(float *cursors, const int *transitions,
+                                 int t);
+    void update_buffer_cur(int *buffer_cur_t, int *transitions, int t);
 
     ModelSpec spec;
     ThinStackParameters params;

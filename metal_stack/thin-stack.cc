@@ -93,13 +93,14 @@ ThinStack::step(int t) {
   mask_and_update_stack(stack_1_ptrs, buffer_top_t, merge_output,
                         transitions, t);
 
-  // cursors += cursors + 1 - 2*mask
+  // cursors += 1 - 2*mask
   mask_and_update_cursors(cursors, transitions, t);
 
   // queue[cursors + 0 + batch_range * spec.seq_length] = t
   k::set_subtensor1i_s(queue, t, cursors, spec.batch_size, 0, spec.spec_length,
                        batch_range);
 
+  // buffer_cur += (1 - transitions)
   update_buffer_cur(buffer_cur_t, transitions, t);
 
 }
@@ -117,8 +118,27 @@ ThinStack::recurrence(const float *stack_1_t, const float *stack_2_t,
       spec.model_dim, 1.0, params.W_r, spec.model_dim, stack_1_t,
       spec.model_dim, 1.0, merge_output, spec.model_dim);
 
+  // TODO bias (broadcast-add)
   // TODO relu
 
+}
+
+
+ThinStack::mask_and_update_stack(const int *stack_top_ptrs,
+    const float *push_value, const float *merge_value, const int *transitions,
+    int t) {
+  // TODO
+}
+
+
+ThinStack::mask_and_update_cursors(float *cursors, const int *transitions,
+    int t) {
+  // TODO
+}
+
+
+ThinStack::update_buffer_cur(int *buffer_cur_t, int *transitions, int t) {
+  // TODO
 }
 
 
