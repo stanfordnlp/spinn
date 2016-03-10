@@ -78,7 +78,7 @@ def build_sentence_model(cls, vocab_size, seq_length, tokens, transitions,
             compose_network = partial(util.ReLULayer,
                                       initializer=util.HeKaimingInitializer())
 
-        if project_embeddings:
+        if False: #project_embeddings:
             embedding_projection_network = util.Linear
         else:
             assert FLAGS.word_embedding_dim == FLAGS.model_dim, \
@@ -112,8 +112,8 @@ def build_sentence_model(cls, vocab_size, seq_length, tokens, transitions,
         sentence_vector = model.sentence_embeddings
         sentence_vector_dim = FLAGS.model_dim
 
-    sentence_vector = util.BatchNorm(sentence_vector, sentence_vector_dim, vs, "sentence_vector", training_mode)
-    sentence_vector = util.Dropout(sentence_vector, FLAGS.semantic_classifier_keep_rate, training_mode)
+    #sentence_vector = util.BatchNorm(sentence_vector, sentence_vector_dim, vs, "sentence_vector", training_mode)
+    #sentence_vector = util.Dropout(sentence_vector, FLAGS.semantic_classifier_keep_rate, training_mode)
 
     # Feed forward through a single output layer
     logits = util.Linear(
@@ -629,68 +629,68 @@ def run(only_forward=False):
             evaluate_expanded(eval_fn, eval_set, eval_out_path, logger, step,
                               data_manager.SENTENCE_PAIR_DATA, ind_to_word, zero_fn)
     else:
-        # Train
-        extra_cost_inputs = [y, training_mode, ground_truth_transitions_visible]
-        if data_manager.SENTENCE_PAIR_DATA:
-            # The two models use slices of the original data.
-            # Pass the original data as a non-sequence input as well.
-            extra_cost_inputs += [X, transitions]
+        # # Train
+        # extra_cost_inputs = [y, training_mode, ground_truth_transitions_visible]
+        # if data_manager.SENTENCE_PAIR_DATA:
+        #     # The two models use slices of the original data.
+        #     # Pass the original data as a non-sequence input as well.
+        #     extra_cost_inputs += [X, transitions]
 
-            premise_error_signal = T.grad(total_cost, premise_stack_top)
-            premise_model.make_backprop_scan(premise_error_signal,
-                                             extra_cost_inputs=extra_cost_inputs,
-                                             compute_embedding_gradients=False)
+        #     premise_error_signal = T.grad(total_cost, premise_stack_top)
+        #     premise_model.make_backprop_scan(premise_error_signal,
+        #                                      extra_cost_inputs=extra_cost_inputs,
+        #                                      compute_embedding_gradients=False)
 
-            extra_cost_inputs += [premise_model.stack] + premise_model.aux_stacks
-            hypothesis_error_signal = T.grad(total_cost, hypothesis_stack_top)
-            hypothesis_model.make_backprop_scan(hypothesis_error_signal,
-                                                extra_cost_inputs=extra_cost_inputs,
-                                                compute_embedding_gradients=False)
+        #     extra_cost_inputs += [premise_model.stack] + premise_model.aux_stacks
+        #     hypothesis_error_signal = T.grad(total_cost, hypothesis_stack_top)
+        #     hypothesis_model.make_backprop_scan(hypothesis_error_signal,
+        #                                         extra_cost_inputs=extra_cost_inputs,
+        #                                         compute_embedding_gradients=False)
 
-            gradients = premise_model.gradients
-            hypothesis_gradients = hypothesis_model.gradients
-            for key in hypothesis_gradients:
-                if key in gradients:
-                    gradients[key] += hypothesis_gradients[key]
-                else:
-                    gradients[key] = hypothesis_gradients[key]
+        #     gradients = premise_model.gradients
+        #     hypothesis_gradients = hypothesis_model.gradients
+        #     for key in hypothesis_gradients:
+        #         if key in gradients:
+        #             gradients[key] += hypothesis_gradients[key]
+        #         else:
+        #             gradients[key] = hypothesis_gradients[key]
 
-            new_values = util.merge_updates(
-                premise_model.scan_updates + premise_model.bscan_updates,
-                hypothesis_model.scan_updates + hypothesis_model.bscan_updates).items()
-            other_params = set(vs.trainable_vars.keys()) - premise_model._vars
-            other_params -= hypothesis_model._vars
-        else:
-            error_signal = T.grad(total_cost, stack_top)
-            model.make_backprop_scan(error_signal,
-                                     extra_cost_inputs=extra_cost_inputs,
-                                     compute_embedding_gradients=train_embeddings)
-            if train_embeddings:
-                model.gradients[model.embeddings] = model.embedding_gradients
-            gradients = model.gradients
+        #     new_values = util.merge_updates(
+        #         premise_model.scan_updates + premise_model.bscan_updates,
+        #         hypothesis_model.scan_updates + hypothesis_model.bscan_updates).items()
+        #     other_params = set(vs.trainable_vars.keys()) - premise_model._vars
+        #     other_params -= hypothesis_model._vars
+        # else:
+        #     error_signal = T.grad(total_cost, stack_top)
+        #     model.make_backprop_scan(error_signal,
+        #                              extra_cost_inputs=extra_cost_inputs,
+        #                              compute_embedding_gradients=train_embeddings)
+        #     if train_embeddings:
+        #         model.gradients[model.embeddings] = model.embedding_gradients
+        #     gradients = model.gradients
 
-            new_values = model.scan_updates.items() + model.bscan_updates.items()
-            other_params = set(vs.trainable_vars.keys()) - model._vars
+        #     new_values = model.scan_updates.items() + model.bscan_updates.items()
+        #     other_params = set(vs.trainable_vars.keys()) - model._vars
 
-        # Remove null stack parameter gradients.
-        null_gradients = set()
-        for key, val in gradients.iteritems():
-            if val is None:
-                null_gradients.add(key)
-        logger.Log("The following parameters have null (disconnected) cost "
-                   "gradients and will not be trained: %s"
-                   % ", ".join(str(k) for k in null_gradients), logger.WARNING)
-        for key in null_gradients:
-            del gradients[key]
+        # # Remove null stack parameter gradients.
+        # null_gradients = set()
+        # for key, val in gradients.iteritems():
+        #     if val is None:
+        #         null_gradients.add(key)
+        # logger.Log("The following parameters have null (disconnected) cost "
+        #            "gradients and will not be trained: %s"
+        #            % ", ".join(str(k) for k in null_gradients), logger.WARNING)
+        # for key in null_gradients:
+        #     del gradients[key]
 
-        # Calculate gradients for items before/after stack fprop.
-        other_params = [vs.vars[param] for param in other_params]
-        other_grads = T.grad(total_cost, wrt=other_params)
-        gradients.update(zip(other_params, other_grads))
+        # # Calculate gradients for items before/after stack fprop.
+        # other_params = [vs.vars[param] for param in other_params]
+        # other_grads = T.grad(total_cost, wrt=other_params)
+        # gradients.update(zip(other_params, other_grads))
 
-        new_values += util.RMSprop(total_cost, gradients.keys(), lr,
-                                   grads=gradients.values())
-        new_values += [(key, vs.nongradient_updates[key]) for key in vs.nongradient_updates]
+        # new_values += util.RMSprop(total_cost, gradients.keys(), lr,
+        #                            grads=gradients.values())
+        # new_values += [(key, vs.nongradient_updates[key]) for key in vs.nongradient_updates]
 
         # Create training and eval functions.
         # Unused variable warnings are supressed so that num_transitions can be passed in when training Model 0,
@@ -699,7 +699,7 @@ def run(only_forward=False):
         update_fn = theano.function(
             [X, transitions, y, num_transitions, lr, training_mode, ground_truth_transitions_visible, ss_prob],
             [total_cost, xent_cost, transition_cost, action_acc, l2_cost, acc],
-            updates=new_values,
+            updates=model.scan_updates.items(),
             on_unused_input='warn',
             allow_input_downcast=True)
         logger.Log("Building eval function.")
