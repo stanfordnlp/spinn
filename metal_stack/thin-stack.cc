@@ -30,18 +30,25 @@ ThinStack::ThinStack(ModelSpec spec, ThinStackParameters params,
   // Pre-allocate accumulators.
   cudaMalloc(&buffer_cur_t, spec.batch_size * sizeof(float));
 
+  init_helpers();
+
 }
 
 
 ThinStack::init_helpers() {
-
   cudaMalloc(&batch_ones, spec.batch_size * sizeof(int));
   cudaMemset(batch_ones, 1, spec.batch_size * sizeof(int));
+}
 
+
+ThinStack::free_helpers() {
+  cudaFree(batch_ones);
 }
 
 
 ThinStack::~ThinStack() {
+
+  free_helpers();
 
   cudaFree(stack);
   cudaFree(queue);
@@ -145,7 +152,13 @@ ThinStack::mask_and_update_stack(const float *push_value,
 
 ThinStack::mask_and_update_cursors(float *cursors, const int *transitions,
     int t) {
-  // TODO
+
+  // cursors += 1
+  cublasSaxpy(handle, spec.batch_size, 1.0, batch_ones, 1, cursors, 1);
+
+  // cursors -= 2*transitions
+  cublasSaxpy(handle, spec.batch_size, -2.0, transitions, 1, cursors, 1);
+
 }
 
 
