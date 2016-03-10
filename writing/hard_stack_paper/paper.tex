@@ -97,7 +97,7 @@
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-\title{Tree-structured neural networks revisited}
+\title{Combining parsing with sentence understanding} 
 
 \author{
 Samuel R.\ Bowman$^{1,2,5,}$\thanks{The first two authors contributed equally.} \\
@@ -144,15 +144,15 @@ $^{6}$Stanford Computer Science}
 \begin{document}
 \maketitle
 \begin{abstract}
-\begin{itemize}
-\item TreeRNNs are great, don't work for big data.
-\item We present the transition-based TreeRNN implementation -- makes efficient training possible, show that it helps relative to seq models.
-\item Further, attention has proven powerful for extending sequence models. We introduce constituent-by-constituent attention, and find it to be effective here, too.
-\end{itemize}
+
+Tree-structured neural networks are linguistically principled models for sentence encoding that have proven effective on several natural language understanding tasks. However, these models can only operate on parsed sentences, and do not support batched computation, making them prohibitively slow for large-scale tasks. We present the parser--interpreter neural network, or PINN, which implements the sentence encoding computations of a tree-structured neural network within the structure of a transition-based neural constituency parser. This model addresses both of the weaknesses of existing tree-structured models: the transition-based architecture of the parser makes it possible to perform tree-structured sentence interpretation in an efficient, batched, setting, and the deep integration with the parser allows the model to handle interpret unparsed data at test time with nearly no loss in accuracy. Finally, we show that this architecture supports a novel and effective method for handling local context in sentence interpretation, and integrates will with soft attention methods for sentence pair tasks.
+
 \end{abstract}
 
 \todo{Anonymize.}
-\todo{Name the damn model!}
+\todo{Fill in name where needed.}
+\todo{SST!}
+\todo{Model 1!}
 
 \section{Introduction}
 
@@ -328,7 +328,7 @@ Padding, if done properly, should not impact the output of the model significant
 
 Cropping necessarily discards information, but if done properly, it is nonetheless possible to learn good representations for cropped sentences. When a transition sequence is cropped, the number of removed \shift~transitions is tracked, and an equal number of word tokens is removed from the tail (left) end of the buffer. This makes it possible for a transition sequence to begin with a \reduce~transition, or to otherwise use a \reduce~transition on a stack that does not have two elements to reduce. In this instance, we simply feed the composition function one or more zero vectors, which represent nonexistent stack elements. If the composition learns to interpret these zero vectors properly, they can be taken to be unknown or incomplete nodes in an otherwise complete tree that is constructed according to the intended parse structure. \todo{[SB] Make a figure showing the results of cropping if there's room.}
 
-\paragraph{Representing the stack in memory} Or, thin stack. 
+\paragraph{Representing the stack in memory} Or, thin stack. And the cursor strategy for the buffer. 
 \todo{[JG] Explain.}
 
 \vspace{8em}
@@ -396,7 +396,7 @@ SNLI is a corpus of 570k human-labeled pairs of scene descriptions like the one 
 
 \subsection{Models evaluated}
 
-We evaluate five models on the SNLI task. Each uses 150d hidden states: 
+We evaluate five models on the SNLI task. Each uses 300d hidden states: 
 \begin{itemize}
 \item A baseline LSTM model (similar to that of \citealt{snli:emnlp2015}) that uses the same classifier architecture as our models, but encodes sentences using a single layer LSTM RNN sequence model.
 \item The unaugmented transition-based sentence model.
@@ -437,14 +437,14 @@ Lexicalized classifier \cite{snli:emnlp2015}
 \midrule
 \multicolumn{4}{c}{New results}\\
 \midrule
-\result{150d LSTM RNN      }     & ?                  &   ?      &   81?       \\
-\result{150d TB TreeLSTM}   
+\result{300d LSTM RNN      }     & ?                  &   ?      &   81?       \\
+\result{300d TB TreeLSTM}   
                         & ?                  &   ?      &   81?       \\
-\result{150d TB TreeLSTM w/ tracking    }
+\result{300d TB TreeLSTM w/ tracking    }
                         & ?                  &   ?      &   83?       \\
-\result{150d TB TreeLSTM w/ tracking, sequence-based attn.   }     
+\result{300d TB TreeLSTM w/ tracking, sequence-based attn.   }     
                         & ?                  &   ?      &   85+?       \\
-\result{150d TB TreeLSTM w/ tracking, tree-based attn. }           
+\result{300d TB TreeLSTM w/ tracking, tree-based attn. }           
                         & ?                  &   ?      &   \textbf{?}\\
     \bottomrule
   \end{tabular}
