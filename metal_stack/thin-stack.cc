@@ -3,7 +3,7 @@ using namespace std;
 namespace k = kernels;
 
 ThinStack::ThinStack(ModelSpec spec, ThinStackParameters params,
-                     cublasHandle_t handle)
+    cublasHandle_t handle)
   : spec(spec), params(params), stack_size(spec.seq_length), handle(handle) {
 
   stack_total_size = (stack_size * spec.batch_size) * spec.model_dim;
@@ -106,18 +106,16 @@ ThinStack::step(int t) {
 
 
 ThinStack::recurrence(const float *stack_1_t, const float *stack_2_t,
-                      const float *buffer_top_t) {
+    const float *buffer_top_t) {
 
   // merge_out = W_l l
-  cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N,
-              spec.model_dim, spec.batch_size, spec.model_dim, 1.0,
-              params.W_l, spec.model_dim, stack_2_t, spec.model_dim,
-              0.0, merge_output, spec.model_dim);
+  cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, spec.model_dim, spec.batch_size,
+      spec.model_dim, 1.0, params.W_l, spec.model_dim, stack_2_t,
+      spec.model_dim, 0.0, merge_output, spec.model_dim);
   // merge_out += W_r r
-  cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N,
-              spec.model_dim, spec.batch_size, spec.model_dim, 1.0,
-              params.W_r, spec.model_dim, stack_1_t, spec.model_dim,
-              1.0, merge_output, spec.model_dim);
+  cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, spec.model_dim, spec.batch_size,
+      spec.model_dim, 1.0, params.W_r, spec.model_dim, stack_1_t,
+      spec.model_dim, 1.0, merge_output, spec.model_dim);
 
   // TODO relu
 
