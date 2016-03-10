@@ -9,16 +9,6 @@
 namespace kernels {
 
   /**
-   * Broadcast-add a scalar and a vector of dimension `N`.
-   *
-   *     dst = src_s + src_v_coeff * src_v
-   */
-  __global__ void add_sv(float *dst, float src_s, float src_v_coeff,
-          const float *src_v, int N);
-
-  __global__ void addi_vs(int *dst, int delta);
-
-  /**
    * Add two vectors inplace (writing to the first).
    *
    *     v1 = v1 * v1_coeff + v2 * v2_coeff
