@@ -106,7 +106,6 @@ ThinStack::step(int t) {
   mask_and_update_stack(t * spec.batch_size, buffer_top_t, merge_output,
                         transitions, t);
 
-  // cursors += 1 - 2*mask
   mask_and_update_cursors(cursors, transitions, t);
 
   // queue[cursors + 0 + batch_range * spec.seq_length] = t
@@ -163,7 +162,13 @@ ThinStack::mask_and_update_cursors(float *cursors, const int *transitions,
 
 
 ThinStack::update_buffer_cur(int *buffer_cur_t, int *transitions, int t) {
-  // TODO
+
+  // buffer_cur += 1
+  cublasSaxpy(handle, spec.batch_size, 1.0, batch_ones, 1, buffer_cur_t, 1);
+
+  // buffer_cur -= transitions
+  cublasSaxpy(handle, spec.batch_size, -1.0, transitions, 1, buffer_cur_t, 1);
+
 }
 
 
