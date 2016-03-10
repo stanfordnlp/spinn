@@ -1,7 +1,13 @@
 #ifndef _thin_stack_
 #define _thin_stack_
 
+#include <cuda_runtime.h>
+#include "cublas_v2.h"
+
 #include "util.h"
+
+#include "kernels.cuh"
+
 
 typedef struct ThinStackParameters {
   float *embeddings;
@@ -55,7 +61,9 @@ class ThinStack {
     int *buffer_top_idxs_t;
     float *buffer_top_t;
     int *stack_1_ptrs;
+    float *stack_1_t;
     int *stack_2_ptrs;
+    float *stack_2_t;
     float *push_output;
     float *merge_output;
 
