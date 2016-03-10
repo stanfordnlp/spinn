@@ -130,10 +130,16 @@ ThinStack::recurrence(const float *stack_1_t, const float *stack_2_t,
 }
 
 
-ThinStack::mask_and_update_stack(const int *stack_top_ptrs,
-    const float *push_value, const float *merge_value, const int *transitions,
-    int t) {
-  // TODO
+ThinStack::mask_and_update_stack(const float *push_value,
+    const float *merge_value, const int *transitions, int t) {
+
+  // Find start position of write destination (next-top corresponding to
+  // timestep `t`).
+  int stack_offset = t * spec.batch_size * spec.model_dim;
+
+  k::switch_m(&stack[stack_offset], transitions, merge_value, push_value,
+              spec.batch_size, spec.model_dim);
+
 }
 
 
