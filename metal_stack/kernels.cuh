@@ -4,6 +4,7 @@
 #include <cstdlib>
 
 #include <cuda_runtime.h>
+#include "cublas_v2.h"
 
 
 // Grid dimension constraints for jagupard machines.
@@ -22,8 +23,8 @@ namespace kernels {
    *
    *     v1 = v1 * v1_coeff + v2 * v2_coeff
    */
-  void addi_vv(float *v1, const float *v2, float v1_coeff, float v2_coeff,
-      int N);
+  void addi_vv(cublasHandle_t handle, float *v1, const float *v2,
+          float v1_coeff, float v2_coeff, int N);
 
   /**
    * Retrieve a subset of `N` rows from the contiguous `M * D` matrix `src`
@@ -47,10 +48,11 @@ namespace kernels {
    *
    *     dst[idxs + idx_scal_shift + idx_vec_shift_coeff * idx_vec_shift] = src
    */
-  void set_subtensor1i_s(float *dst, int src, const float *idxs, int N,
+  void set_subtensor1i_s(float *dst, float src, const float *idxs, int N,
           float idx_scal_shift, float idx_vec_shift_coeff, float *idx_vec_shift);
-  __global__ void set_subtensor1i_s(float *dst, int src, const float *idxs, int N,
-          float idx_scal_shift, float idx_vec_shift_coeff, float *idx_vec_shift);
+  __global__ void k_set_subtensor1i_s(float *dst, float src, const float *idxs,
+          int N, float idx_scal_shift, float idx_vec_shift_coeff,
+          float *idx_vec_shift);
 
   /**
    * Switch over the rows of two matrices using a mask.

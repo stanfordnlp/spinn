@@ -48,8 +48,9 @@ class ThinStack {
     void step(int t);
     void zero();
 
-    void recurrence();
-    void mask_and_update_stack(int stack_top_idx, const float *push_value,
+    void recurrence(const float *stack_1_t, const float *stack_2_t,
+            const float *buffer_top_t);
+    void mask_and_update_stack(const float *push_value,
             const float *merge_value, const float *transitions, int t);
     void mask_and_update_cursors(float *cursors, const float *transitions,
                                  int t);
