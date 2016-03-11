@@ -9,7 +9,7 @@ void muli_vs(float *v, int s, int N) {
 
 __global__ k_muli_vs(float *v, int s, int N) {
   int idx = blockIdx.x * blockDim.x + threadIdx.x;
-  if (idx > N) return;
+  if (idx >= N) return;
 
   v[idx] *= s;
 }
@@ -44,4 +44,24 @@ __global__ void k_subtensor1(float *dst, const float *src, const int *idxs,
     for (int i1 = threadIdx.x; i1 < D; i1 += blockDim.x)
       dst[dst_offset + i1] = src[src_offset + i1];
   }
+}
+
+
+void set_subtensor1i_s(int *dst, int src, const int *idxs, int N,
+    int idx_scal_shift, int idx_vec_shift_coeff, int *idx_vec_shift) {
+  int num_threads = min(N, MAX_THREADS_PER_BLOCK);
+  int num_blocks = (N + MAX_THREADS_PER_BLOCK - 1) / MAX_THREADS_PER_BLOCK;
+  k_set_subtensor1i_s<<<num_blocks, num_threads>>>(
+      dst, src, idxs, N, idx_scal_shift, idx_vec_shift_coeff, idx_vec_shift);
+}
+
+__global__ k_set_subtensor1i_s(int *dst, int src, const int *idxs, int N,
+    int idx_scal_shift, int idx_vec_shift_coeff, int *idx_vec_shift) {
+  int k_idx = blockIdx.x * blockDim.x + threadIdx.x;
+  if (idx >= N) return;
+
+  idx = idxs[k_idx] + idx_scal_shift;
+  idx += idx_vec_shift_coeff * idx_vec_shift[k_idx];
+
+  dst[idx] = src;
 }

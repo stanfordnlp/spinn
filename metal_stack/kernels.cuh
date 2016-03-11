@@ -49,6 +49,8 @@ namespace kernels {
    */
   void set_subtensor1i_s(int *dst, int src, const int *idxs, int N,
           int idx_scal_shift, int idx_vec_shift_coeff, int *idx_vec_shift);
+  __global__ void set_subtensor1i_s(int *dst, int src, const int *idxs, int N,
+          int idx_scal_shift, int idx_vec_shift_coeff, int *idx_vec_shift);
 
   /**
    * Switch over the rows of two matrices using a mask.
