@@ -10,6 +10,8 @@ float *load_weights(string filename, int N) {
     cout << x << endl;
     ret[i] = x;
   }
+
+  return ret;
 }
 
 float *load_weights_cuda(string filename, int N) {
@@ -18,6 +20,7 @@ float *load_weights_cuda(string filename, int N) {
   cudaMalloc(&d_weights, N * sizeof(float));
   cudaMemcpy(d_weights, h_weights, N * sizeof(float),
       cudaMemcpyHostToDevice);
+  free(h_weights);
   return d_weights;
 }
 
