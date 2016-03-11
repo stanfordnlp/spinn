@@ -2,6 +2,7 @@
 using namespace std;
 namespace k = kernels;
 
+
 ThinStack::ThinStack(ModelSpec spec, ThinStackParameters params,
     cublasHandle_t handle)
   : spec(spec), params(params), stack_size(spec.seq_length), handle(handle) {
@@ -10,6 +11,10 @@ ThinStack::ThinStack(ModelSpec spec, ThinStackParameters params,
   buffer_total_size = spec.batch_size * spec.seq_length * spec.model_dim;
   queue_total_size = spec.batch_size * spec.seq_length;
   cursors_total_size = spec.batch_size;
+
+  // Pre-allocate inputs.
+  cudaMalloc(&X, spec.batch_size * spec.seq_length * spec.model_dim * sizeof(float));
+  cudaMalloc(&transitions, spec.batch_size * spec.seq_length * sizeof(int));
 
   // Pre-allocate auxiliary data structures.
   cout << stack << endl;
@@ -38,17 +43,28 @@ ThinStack::ThinStack(ModelSpec spec, ThinStackParameters params,
 ThinStack::init_helpers() {
   cudaMalloc(&batch_ones, spec.batch_size * sizeof(int));
   cudaMemset(batch_ones, 1, spec.batch_size * sizeof(int));
+
+  float *h_batch_range[spec.batch_size];
+  for (int i = 0; i < spec.batch_size; i++)
+    h_batch_range[i] = i;
+  cudaMalloc(&batch_range, spec.batch_size * sizeof(int));
+  cudaMemcpy(batch_range, h_batch_range, spec.batch_size * sizeof(int),
+      cudaMemcpyHostToDevice);
 }
 
 
 ThinStack::free_helpers() {
   cudaFree(batch_ones);
+  cudaFree(batch_range);
 }
 
 
 ThinStack::~ThinStack() {
 
   free_helpers();
+
+  cudaFree(X);
+  cudaFree(transitions);
 
   cudaFree(stack);
   cudaFree(queue);
@@ -69,6 +85,9 @@ ThinStack::~ThinStack() {
 
 ThinStack::forward() {
 
+  // TODO embedding projection
+  buffer = X;
+
   for (int t = 0; t < spec.seq_length; t++) {
     step(t);
   }
@@ -80,9 +99,7 @@ ThinStack::step(int t) {
 
   // TODO sync after kernel calls.
 
-  // Extract top buffer values.
-  // TODO subtensor with idxs buffer_cur_t + 0 * 1 + buffer_shift
-  // == buffer_cur_t * 1 + (batch_range * seq_length)
+  // buffer_top = buffer[buffer_cur_t + (batch_range * seq_length)]
   k::subtensor1(buffer_top_t, buffer, buffer_cur_t,
                 spec.batch_size, spec.model_dim, 0, spec.seq_length,
                 batch_range);

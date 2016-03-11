@@ -10,7 +10,6 @@
 
 
 typedef struct ThinStackParameters {
-  float *embeddings;
   float *project_W;
   float *project_b;
   float *buffer_bn_ts;
@@ -35,10 +34,11 @@ class ThinStack {
 
     void forward();
 
-    // Model inputs
+    // Embedding inputs, of dimension `model_dim * (batch_size * seq_length)` --
+    // i.e., along 2nd axis we have `seq_length`-many `model_dim * batch_size`
+    // matrices.
     float *X;
     int *transitions;
-    float *y;
 
     float *stack;
 
@@ -81,7 +81,10 @@ class ThinStack {
 
     // Dumb helpers
     int *batch_ones;
+    int *batch_range;
 
+    // `model_dim * (batch_size * seq_length)`
+    // `seq_length`-many `model_dim * batch_size` matrices, flattened into one.
     float *buffer;
     float *queue;
     float *cursors;
