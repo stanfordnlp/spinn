@@ -62,6 +62,8 @@ namespace kernels {
    */
   void switch_m(float *dst, const int *mask, const float *ift,
       const float *iff, int N, int D);
+  __global__ k_switch_m(float *dst, const int *mask, const float *ift,
+      const float *iff, int N, int D);
 
 }
 

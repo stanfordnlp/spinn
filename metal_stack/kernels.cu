@@ -65,3 +65,21 @@ __global__ k_set_subtensor1i_s(int *dst, int src, const int *idxs, int N,
 
   dst[idx] = src;
 }
+
+
+void switch_m(float *dst, const int *mask, const float *ift, const float *iff,
+    int N, int D) {
+  int num_threads = min(D, MAX_THREADS_PER_BLOCK);
+  int num_blocks = min(N, MAX_BLOCKS);
+  k_switch_m<<<num_blocks, num_threads>>>(dst, mask, ift, iff, N, D);
+}
+
+__global__ k_switch_m(float *dst, const int *mask, const float *ift,
+    const float *iff, int N, int D) {
+  for (int i0 = blockIdx.x; i0 < N; i0 += gridDim.x) {
+    const float *src = mask[i0] ? ift : iff;
+    int offset = i0 * D;
+    for (int i1 = threadIdx.x; i1 < D; i1 += blockDim.x)
+      dst[offset + i1] = src[offset + i1];
+  }
+}
