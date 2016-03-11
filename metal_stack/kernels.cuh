@@ -14,8 +14,8 @@
 namespace kernels {
 
   // v *= s
-  void muli_vs(float *v, int s, int N);
-  __global__ void k_muli_vs(float *v, int s, int N);
+  void muli_vs(float *v, float s, int N);
+  __global__ void k_muli_vs(float *v, float s, int N);
 
   /**
    * Add two vectors inplace (writing to the first).
@@ -36,21 +36,21 @@ namespace kernels {
    *     idxs_ += idx_vec_shift_coeff * idx_vec_shift
    *     dst = src[idxs_]
    */
-  void subtensor1(float *dst, const float *src, const int *idxs, int N, int D,
-      int idx_scal_shift, int idx_vec_shift_coeff, int *idx_vec_shift);
-  __global__ void k_subtensor1(float *dst, const float *src, const int *idxs,
-      int N, int D, int idx_scal_shift, int idx_vec_shift_coeff,
-      int *idx_vec_shift);
+  void subtensor1(float *dst, const float *src, const float *idxs, int N, int D,
+      float idx_scal_shift, float idx_vec_shift_coeff, float *idx_vec_shift);
+  __global__ void k_subtensor1(float *dst, const float *src, const float *idxs,
+      int N, int D, float idx_scal_shift, float idx_vec_shift_coeff,
+      float *idx_vec_shift);
 
   /**
    * Write an int scalar into a subtensor range.
    *
    *     dst[idxs + idx_scal_shift + idx_vec_shift_coeff * idx_vec_shift] = src
    */
-  void set_subtensor1i_s(int *dst, int src, const int *idxs, int N,
-          int idx_scal_shift, int idx_vec_shift_coeff, int *idx_vec_shift);
-  __global__ void set_subtensor1i_s(int *dst, int src, const int *idxs, int N,
-          int idx_scal_shift, int idx_vec_shift_coeff, int *idx_vec_shift);
+  void set_subtensor1i_s(float *dst, int src, const float *idxs, int N,
+          float idx_scal_shift, float idx_vec_shift_coeff, float *idx_vec_shift);
+  __global__ void set_subtensor1i_s(float *dst, int src, const float *idxs, int N,
+          float idx_scal_shift, float idx_vec_shift_coeff, float *idx_vec_shift);
 
   /**
    * Switch over the rows of two matrices using a mask.
@@ -60,9 +60,9 @@ namespace kernels {
    * where `ift`, `iff` are `N * D` matrices, and `mask` is an `N`-dimensional
    * vector.
    */
-  void switch_m(float *dst, const int *mask, const float *ift,
+  void switch_m(float *dst, const float *mask, const float *ift,
       const float *iff, int N, int D);
-  __global__ void k_switch_m(float *dst, const int *mask, const float *ift,
+  __global__ void k_switch_m(float *dst, const float *mask, const float *ift,
       const float *iff, int N, int D);
 
 }

@@ -14,7 +14,7 @@ ThinStack::ThinStack(ModelSpec spec, ThinStackParameters params,
 
   // Pre-allocate inputs.
   cudaMalloc(&X, spec.batch_size * spec.seq_length * spec.model_dim * sizeof(float));
-  cudaMalloc(&transitions, spec.batch_size * spec.seq_length * sizeof(int));
+  cudaMalloc(&transitions, spec.batch_size * spec.seq_length * sizeof(float));
 
   // Pre-allocate auxiliary data structures.
   cout << stack << endl;
@@ -22,15 +22,15 @@ ThinStack::ThinStack(ModelSpec spec, ThinStackParameters params,
   cout << stack << endl;
   cudaMalloc(&queue, queue_total_size * sizeof(float));
   cudaMalloc(&cursors, cursors_total_size * sizeof(float));
-  cudaMalloc(&buffer, buffer_total_size * sizeof(int));
+  cudaMalloc(&buffer, buffer_total_size * sizeof(float));
 
   // Pre-allocate temporary containers.
-  cudaMalloc(&buffer_top_idxs_t, spec.batch_size * sizeof(int));
+  cudaMalloc(&buffer_top_idxs_t, spec.batch_size * sizeof(float));
   cudaMalloc(&buffer_top_t, spec.batch_size * spec.model_dim * sizeof(float));
-  cudaMalloc(&stack_1_ptrs, spec.batch_size * sizeof(int));
-  cudaMalloc(&stack_2_ptrs, spec.batch_size * sizeof(int));
-  cudaMalloc(&push_output, spec.batch_size * spec.model_dim * sizeof(int));
-  cudaMalloc(&merge_output, spec.batch_size * spec.model_dim * sizeof(int));
+  cudaMalloc(&stack_1_ptrs, spec.batch_size * sizeof(float));
+  cudaMalloc(&stack_2_ptrs, spec.batch_size * sizeof(float));
+  cudaMalloc(&push_output, spec.batch_size * spec.model_dim * sizeof(float));
+  cudaMalloc(&merge_output, spec.batch_size * spec.model_dim * sizeof(float));
 
   // Pre-allocate accumulators.
   cudaMalloc(&buffer_cur_t, spec.batch_size * sizeof(float));
@@ -41,14 +41,14 @@ ThinStack::ThinStack(ModelSpec spec, ThinStackParameters params,
 
 
 void ThinStack::init_helpers() {
-  cudaMalloc(&batch_ones, spec.batch_size * sizeof(int));
-  cudaMemset(batch_ones, 1, spec.batch_size * sizeof(int));
+  cudaMalloc(&batch_ones, spec.batch_size * sizeof(float));
+  cudaMemset(batch_ones, 1, spec.batch_size * sizeof(float));
 
   float *h_batch_range[spec.batch_size];
   for (int i = 0; i < spec.batch_size; i++)
-    h_batch_range[i] = i;
-  cudaMalloc(&batch_range, spec.batch_size * sizeof(int));
-  cudaMemcpy(batch_range, h_batch_range, spec.batch_size * sizeof(int),
+    h_batch_range[i] = (float) i;
+  cudaMalloc(&batch_range, spec.batch_size * sizeof(float));
+  cudaMemcpy(batch_range, h_batch_range, spec.batch_size * sizeof(float),
       cudaMemcpyHostToDevice);
 }
 
@@ -154,7 +154,7 @@ void ThinStack::recurrence(const float *stack_1_t, const float *stack_2_t,
 
 
 void ThinStack::mask_and_update_stack(const float *push_value,
-    const float *merge_value, const int *transitions, int t) {
+    const float *merge_value, const float *transitions, int t) {
 
   // Find start position of write destination (next-top corresponding to
   // timestep `t`).
@@ -166,7 +166,7 @@ void ThinStack::mask_and_update_stack(const float *push_value,
 }
 
 
-void ThinStack::mask_and_update_cursors(float *cursors, const int *transitions,
+void ThinStack::mask_and_update_cursors(float *cursors, const float *transitions,
     int t) {
 
   // cursors += 1
@@ -178,7 +178,7 @@ void ThinStack::mask_and_update_cursors(float *cursors, const int *transitions,
 }
 
 
-void ThinStack::update_buffer_cur(int *buffer_cur_t, int *transitions, int t) {
+void ThinStack::update_buffer_cur(float *buffer_cur_t, float *transitions, int t) {
 
   // buffer_cur += 1
   cublasSaxpy(handle, spec.batch_size, 1.0, batch_ones, 1, buffer_cur_t, 1);

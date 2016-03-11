@@ -39,7 +39,7 @@ class ThinStack {
     // i.e., along 2nd axis we have `seq_length`-many `model_dim * batch_size`
     // matrices.
     float *X;
-    int *transitions;
+    float *transitions;
 
     float *stack;
 
@@ -50,10 +50,10 @@ class ThinStack {
 
     void recurrence();
     void mask_and_update_stack(int stack_top_idx, const float *push_value,
-            const float *merge_value, const int *transitions, int t);
-    void mask_and_update_cursors(float *cursors, const int *transitions,
+            const float *merge_value, const float *transitions, int t);
+    void mask_and_update_cursors(float *cursors, const float *transitions,
                                  int t);
-    void update_buffer_cur(int *buffer_cur_t, int *transitions, int t);
+    void update_buffer_cur(float *buffer_cur_t, float *transitions, int t);
 
     void init_helpers();
     void free_helpers();
@@ -70,21 +70,21 @@ class ThinStack {
     size_t cursors_total_size;
 
     // Containers for temporary (per-step) data
-    int *buffer_top_idxs_t;
+    float *buffer_top_idxs_t;
     float *buffer_top_t;
-    int *stack_1_ptrs;
+    float *stack_1_ptrs;
     float *stack_1_t;
-    int *stack_2_ptrs;
+    float *stack_2_ptrs;
     float *stack_2_t;
     float *push_output;
     float *merge_output;
 
     // Per-step accumulators
-    int *buffer_cur_t;
+    float *buffer_cur_t;
 
     // Dumb helpers
-    int *batch_ones;
-    int *batch_range;
+    float *batch_ones;
+    float *batch_range;
 
     // `model_dim * (batch_size * seq_length)`
     // `seq_length`-many `model_dim * batch_size` matrices, flattened into one.
