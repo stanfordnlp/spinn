@@ -41,8 +41,12 @@ int main() {
 
   ThinStack ts(spec, params, handle);
 
-  for (int i = 0; i < 1000; i++)
-    ts.forward();
+  // Set model inputs.
+  cout << "X:" << endl;
+  fill_rand_matrix(ts.X, spec.model_dim, spec.batch_size * spec.seq_length);
+  print_device_matrix(ts.X, spec.model_dim, spec.batch_size * spec.seq_length);
+
+  ts.forward();
 
   destroy_params(params);
 }

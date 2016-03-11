@@ -100,6 +100,7 @@ void ThinStack::step(int t) {
   // buffer_top = buffer[buffer_cur_t + (batch_range * seq_length)]
   k::subtensor1(buffer_top_t, buffer, buffer_cur_t, spec.batch_size,
           spec.model_dim, 0, spec.seq_length, batch_range);
+  print_device_matrix(buffer_top_t, spec.model_dim, spec.batch_size);
 
   // stack_2_ptrs = (cursors - 1) + batch_range * seq_length
   k::subtensor1(stack_2_ptrs, queue, cursors, spec.batch_size,

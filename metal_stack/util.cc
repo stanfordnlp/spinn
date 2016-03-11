@@ -24,3 +24,38 @@ float *load_weights_cuda(string filename, int N) {
   return d_weights;
 }
 
+
+// Print a column-major matrix stored on device.
+void print_device_matrix(float *m, int M, int N) {
+  float *h_m = (float *) malloc(M * N * sizeof(float));
+  cudaMemcpy(h_m, m, M * N * sizeof(float), cudaMemcpyDeviceToHost);
+
+  cout << "[[ ";
+  for (int i = 0; i < M; i++) {
+    if (i > 0)
+      cout << "   ";
+
+    for (int j = 0; j < N; j++) {
+      float val = h_m[j * M + i];
+      printf(" %+.03f  ", val);
+    }
+
+    cout << " ]";
+    if (i < M - 1)
+      cout << endl;
+  }
+  cout << "]" << endl << endl;
+
+  free(h_m);
+}
+
+
+void fill_rand_matrix(float *m, int M, int N) {
+  static curandGenerator_t prng;
+  if (!prng) {
+    curandCreateGenerator(&prng, CURAND_RNG_PSEUDO_DEFAULT);
+    curandSetPseudoRandomGeneratorSeed(prng, (unsigned long long) clock());
+  }
+
+  curandGenerateUniform(prng, m, M * N);
+}
