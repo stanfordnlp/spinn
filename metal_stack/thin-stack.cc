@@ -17,9 +17,7 @@ ThinStack::ThinStack(ModelSpec spec, ThinStackParameters params,
   cudaMalloc(&transitions, spec.batch_size * spec.seq_length * sizeof(float));
 
   // Pre-allocate auxiliary data structures.
-  cout << stack << endl;
   cudaMalloc(&stack, stack_total_size * sizeof(float));
-  cout << stack << endl;
   cudaMalloc(&queue, queue_total_size * sizeof(float));
   cudaMalloc(&cursors, cursors_total_size * sizeof(float));
   cudaMalloc(&buffer, buffer_total_size * sizeof(float));

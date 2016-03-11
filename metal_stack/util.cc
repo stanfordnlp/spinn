@@ -2,12 +2,12 @@
 
 float *load_weights(string filename, int N) {
   float *ret = (float *) malloc(N * sizeof(float));
+  cout << filename << endl;
   ifstream file(filename);
 
   float x;
   for (int i = 0; i < N; i++) {
     file >> x;
-    cout << x << endl;
     ret[i] = x;
   }
 

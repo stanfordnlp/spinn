@@ -1,3 +1,5 @@
+#include <iostream>
+
 #include <cuda_runtime.h>
 #include "cublas_v2.h"
 
@@ -21,6 +23,11 @@ ThinStackParameters load_params(ModelSpec spec) {
   return ret;
 }
 
+void destroy_params(ThinStackParameters params) {
+  cudaFree(params.compose_W_l);
+  cudaFree(params.compose_W_r);
+}
+
 int main() {
   ModelSpec spec = {5, 5, 2, 10, 3, 5};
   ThinStackParameters params = load_params(spec);
@@ -28,9 +35,14 @@ int main() {
   cublasHandle_t handle;
   cublasStatus_t stat = cublasCreate(&handle);
   if (stat != CUBLAS_STATUS_SUCCESS) {
-    printf("CUBLAS initialization failed\n");
+    cout << "CUBLAS initialization failed" << endl;
     return 1;
   }
 
   ThinStack ts(spec, params, handle);
+
+  for (int i = 0; i < 1000; i++)
+    ts.forward();
+
+  destroy_params(params);
 }
