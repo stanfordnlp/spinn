@@ -40,7 +40,7 @@ ThinStack::ThinStack(ModelSpec spec, ThinStackParameters params,
 }
 
 
-ThinStack::init_helpers() {
+void ThinStack::init_helpers() {
   cudaMalloc(&batch_ones, spec.batch_size * sizeof(int));
   cudaMemset(batch_ones, 1, spec.batch_size * sizeof(int));
 
@@ -53,7 +53,7 @@ ThinStack::init_helpers() {
 }
 
 
-ThinStack::free_helpers() {
+void ThinStack::free_helpers() {
   cudaFree(batch_ones);
   cudaFree(batch_range);
 }
@@ -83,7 +83,7 @@ ThinStack::~ThinStack() {
 }
 
 
-ThinStack::forward() {
+void ThinStack::forward() {
 
   // TODO embedding projection
   buffer = X;
@@ -95,7 +95,7 @@ ThinStack::forward() {
 }
 
 
-ThinStack::step(int t) {
+void ThinStack::step(int t) {
 
   // TODO sync after kernel calls.
 
@@ -135,7 +135,7 @@ ThinStack::step(int t) {
 }
 
 
-ThinStack::recurrence(const float *stack_1_t, const float *stack_2_t,
+void ThinStack::recurrence(const float *stack_1_t, const float *stack_2_t,
     const float *buffer_top_t) {
 
   // merge_out = W_l l
@@ -153,7 +153,7 @@ ThinStack::recurrence(const float *stack_1_t, const float *stack_2_t,
 }
 
 
-ThinStack::mask_and_update_stack(const float *push_value,
+void ThinStack::mask_and_update_stack(const float *push_value,
     const float *merge_value, const int *transitions, int t) {
 
   // Find start position of write destination (next-top corresponding to
@@ -166,7 +166,7 @@ ThinStack::mask_and_update_stack(const float *push_value,
 }
 
 
-ThinStack::mask_and_update_cursors(float *cursors, const int *transitions,
+void ThinStack::mask_and_update_cursors(float *cursors, const int *transitions,
     int t) {
 
   // cursors += 1
@@ -178,7 +178,7 @@ ThinStack::mask_and_update_cursors(float *cursors, const int *transitions,
 }
 
 
-ThinStack::update_buffer_cur(int *buffer_cur_t, int *transitions, int t) {
+void ThinStack::update_buffer_cur(int *buffer_cur_t, int *transitions, int t) {
 
   // buffer_cur += 1
   cublasSaxpy(handle, spec.batch_size, 1.0, batch_ones, 1, buffer_cur_t, 1);
@@ -189,7 +189,7 @@ ThinStack::update_buffer_cur(int *buffer_cur_t, int *transitions, int t) {
 }
 
 
-ThinStack::zero() {
+void ThinStack::zero() {
   cudaMemset(stack, 0, stack_total_size * sizeof(float));
   cudaMemset(queue, 0, queue_total_size * sizeof(float));
   cudaMemset(cursors, 0, cursors_total_size * sizeof(float));

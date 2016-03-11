@@ -7,9 +7,9 @@
 
 ThinStackParameters load_params(ModelSpec spec) {
   float *compose_W_l = load_weights_cuda("params/compose_W_l.txt",
-      spec.model_dim ** 2);
+      spec.model_dim * spec.model_dim);
   float *compose_W_r = load_weights_cuda("params/compose_W_r.txt",
-      spec.model_dim ** 2);
+      spec.model_dim * spec.model_dim);
 
   ThinStackParameters ret = {
     NULL, NULL, // projection

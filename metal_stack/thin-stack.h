@@ -28,7 +28,8 @@ class ThinStack {
     /**
      * Constructs a new `ThinStack`.
      */
-    ThinStack(ModelSpec spec, ThinStackParameters params);
+    ThinStack(ModelSpec spec, ThinStackParameters params,
+            cublasHandle_t handle);
 
     ~ThinStack();
 
@@ -59,10 +60,12 @@ class ThinStack {
 
     ModelSpec spec;
     ThinStackParameters params;
+    cublasHandle_t handle;
 
     size_t stack_size;
 
     size_t stack_total_size;
+    size_t buffer_total_size;
     size_t queue_total_size;
     size_t cursors_total_size;
 

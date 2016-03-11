@@ -37,7 +37,7 @@ namespace kernels {
    *     dst = src[idxs_]
    */
   void subtensor1(float *dst, const float *src, const int *idxs, int N, int D,
-      int idx_scal_shift, int idx_vec_shift_coeff, int *idx_vec_shift)
+      int idx_scal_shift, int idx_vec_shift_coeff, int *idx_vec_shift);
   __global__ void k_subtensor1(float *dst, const float *src, const int *idxs,
       int N, int D, int idx_scal_shift, int idx_vec_shift_coeff,
       int *idx_vec_shift);
@@ -62,7 +62,7 @@ namespace kernels {
    */
   void switch_m(float *dst, const int *mask, const float *ift,
       const float *iff, int N, int D);
-  __global__ k_switch_m(float *dst, const int *mask, const float *ift,
+  __global__ void k_switch_m(float *dst, const int *mask, const float *ift,
       const float *iff, int N, int D);
 
 }
