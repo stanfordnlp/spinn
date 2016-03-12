@@ -79,7 +79,7 @@ class ThinStackTest : public ::testing::Test {
     ThinStack ts;
 
     ThinStackTest() :
-      spec({5, 5, 2, 10, 3, 5}),
+      spec({5, 5, 2, 10, 5, 5}),
       ts(make_stack(spec)) {
 
       fill_rand_matrix(ts.X, spec.model_dim, spec.seq_length * spec.batch_size);
@@ -99,7 +99,9 @@ TEST_F(ThinStackTest, ShiftShiftMerge) {
   float h_transitions[] = {
     0.0f, 0.0f,
     0.0f, 0.0f,
-    1.0f, 1.0f
+    1.0f, 1.0f,
+    0.0f, 0.0f, // DUMMY
+    0.0f, 0.0f, // DUMMY
   };
   cublasSetVector(spec.seq_length * spec.batch_size, sizeof(float),
       h_transitions, 1, ts.transitions, 1);
