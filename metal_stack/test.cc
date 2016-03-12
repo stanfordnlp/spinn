@@ -53,6 +53,23 @@ static inline void assert_matrices_equal(const float *m1, const float *m2,
   free(h_m1);
 }
 
+static float *compose(float *dst, ThinStack ts, const float *l,
+    const float *r) {
+  // W_l l
+  float alpha = 1.0f, beta = 0.0f;
+  cublasSgemm(ts.handle, CUBLAS_OP_N, CUBLAS_OP_N, ts.spec.model_dim,
+      ts.spec.batch_size, ts.spec.model_dim, &alpha, ts.params.compose_W_l,
+      ts.spec.model_dim, l, ts.spec.model_dim, &beta, dst, ts.spec.model_dim);
+
+  // += W_r r
+  float beta2 = 1.0f;
+  cublasSgemm(ts.handle, CUBLAS_OP_N, CUBLAS_OP_N, ts.spec.model_dim,
+      ts.spec.batch_size, ts.spec.model_dim, &alpha, ts.params.compose_W_r,
+      ts.spec.model_dim, r, ts.spec.model_dim, &beta2, dst, ts.spec.model_dim);
+
+  return dst;
+}
+
 
 // Test simple shift-shift-merge feedforward with live random weights.
 TEST(ThinStackTest, ShiftShiftMerge) {
@@ -80,19 +97,9 @@ TEST(ThinStackTest, ShiftShiftMerge) {
   float *expected;
   cudaMalloc(&expected, spec.model_dim * spec.batch_size * sizeof(float));
 
-  // W_l l
-  float alpha = 1.0f, beta = 0.0f;
   float *left_child = &ts.X[0];
-  cublasSgemm(ts.handle, CUBLAS_OP_N, CUBLAS_OP_N, spec.model_dim, spec.batch_size,
-      spec.model_dim, &alpha, ts.params.compose_W_l, spec.model_dim,
-      left_child, spec.model_dim, &beta, expected, spec.model_dim);
-
-  // += W_r r
-  float beta2 = 1.0f;
   float *right_child = &ts.X[spec.model_dim * spec.batch_size];
-  cublasSgemm(ts.handle, CUBLAS_OP_N, CUBLAS_OP_N, spec.model_dim, spec.batch_size,
-      spec.model_dim, &alpha, ts.params.compose_W_r, spec.model_dim,
-      right_child, spec.model_dim, &beta2, expected, spec.model_dim);
+  compose(expected, ts, left_child, right_child);
 
   float *output = &ts.stack[0];
   assert_matrices_equal(output, expected, spec.model_dim, spec.batch_size);

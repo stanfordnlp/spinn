@@ -37,6 +37,7 @@ gmock_main.a : gmock-all.o gtest-all.o gmock_main.o
 ######
 
 test: gtest_main.a gmock_main.a
+	rm -f test
 	nvcc -g -O0 -lcublas -lcurand \
 		-isystem $(GTEST_DIR)/include -isystem $(GMOCK_DIR)/include \
 		-std=c++11 -o test \
