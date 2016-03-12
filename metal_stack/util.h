@@ -11,6 +11,8 @@
 using namespace std;
 
 
+#define DEBUG 1
+
 typedef struct ModelSpec {
   size_t model_dim;
   size_t word_embedding_dim;

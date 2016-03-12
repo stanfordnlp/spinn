@@ -46,7 +46,10 @@ class ThinStack {
   private:
 
     void step(int t);
-    void zero();
+
+    // Reset internal storage. Must be run before beginning a sequence
+    // feedforward.
+    void reset();
 
     void recurrence(const float *stack_1_t, const float *stack_2_t,
             const float *buffer_top_t);

@@ -93,7 +93,7 @@ void ThinStack::forward() {
 
   // TODO embedding projection
   buffer = X;
-  zero();
+  reset();
 
   for (int t = 0; t < spec.seq_length; t++) {
     step(t);
@@ -159,6 +159,11 @@ void ThinStack::step(int t) {
   mask_and_update_stack(buffer_top_t, merge_output, transitions_t, t);
 
   mask_and_update_cursors(cursors, transitions_t, t);
+#if DEBUG
+  cout << "cursors after" << endl;
+  print_device_matrix(cursors, 1, spec.batch_size);
+#endif
+
 
   // queue[cursors + 0 + batch_range * spec.seq_length] = t
   k::set_subtensor1i_s(queue, t, cursors, spec.batch_size, 0, spec.seq_length,
@@ -251,10 +256,13 @@ void ThinStack::update_buffer_cur(float *buffer_cur_t, float *transitions, int t
 }
 
 
-void ThinStack::zero() {
+void ThinStack::reset() {
   cudaMemset(stack, 0, stack_total_size * sizeof(float));
   cudaMemset(queue, 0, queue_total_size * sizeof(float));
+
+  float alpha = -1.0f;
   cudaMemset(cursors, 0, cursors_total_size * sizeof(float));
+  cublasSaxpy(handle, spec.batch_size, &alpha, batch_ones, 1, cursors, 1);
 
   cudaMemset(buffer_cur_t, 0, spec.batch_size * sizeof(float));
 }

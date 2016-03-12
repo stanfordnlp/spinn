@@ -30,7 +30,7 @@ void destroy_params(ThinStackParameters params) {
 }
 
 int main() {
-  ModelSpec spec = {300, 300, 256, 10, 25, 300};//{300, 300, 256, 10, 25, 300};//{5, 5, 2, 10, 3, 5};
+  ModelSpec spec = {5, 5, 2, 10, 3, 5};//{300, 300, 256, 10, 25, 300};//{5, 5, 2, 10, 3, 5};
   ThinStackParameters params = load_params(spec);
 
   cublasHandle_t handle;
@@ -55,6 +55,8 @@ int main() {
     float val;
     if (i < spec.batch_size * 2) {
       val = 0.0f;
+    } else if (i >= spec.batch_size * 2 && i < spec.batch_size * 3) {
+      val = 1.0f;
     } else {
       val = rand() % 2 == 0 ? 1.0f : 0.0f;
     }
@@ -64,11 +66,12 @@ int main() {
   cudaMemcpy(ts.transitions, h_transitions, spec.seq_length * spec.batch_size * sizeof(float), cudaMemcpyHostToDevice);
   free(h_transitions);
 #if DEBUG
-  print_device_matrix(ts.transitions, spec.seq_length, spec.batch_size);
+  print_device_matrix(ts.transitions, spec.batch_size, spec.seq_length);
 #endif
 
   auto time_elapsed = chrono::microseconds::zero();
-  for (int t = 0; t < 50; t++) {
+  int n_batches = 1; // 50
+  for (int t = 0; t < n_batches; t++) {
     auto start = chrono::high_resolution_clock::now();
     ts.forward();
     auto end = chrono::high_resolution_clock::now();
