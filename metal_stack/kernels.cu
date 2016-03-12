@@ -1,4 +1,5 @@
 #include "kernels.cuh"
+#include <stdio.h>
 
 namespace kernels {
 
@@ -25,21 +26,30 @@ void addi_vv(cublasHandle_t handle, float *v1, const float *v2,
 }
 
 
-void subtensor1(float *dst, const float *src, const float *idxs, int N, int D,
-    float idx_scal_shift, float idx_vec_shift_coeff, float *idx_vec_shift) {
+void subtensor1(float *dst, const float *src, const float *idxs, int src_N,
+    int N, int D, float idx_scal_shift, float idx_scal_mul,
+    float idx_vec_shift_coeff, float *idx_vec_shift) {
   int num_threads = min(D, MAX_THREADS_PER_BLOCK);
   int num_blocks = min(N, MAX_BLOCKS);
-  k_subtensor1<<<num_blocks, num_threads>>>(dst, src, idxs, N, D,
-      idx_scal_shift, idx_vec_shift_coeff, idx_vec_shift);
+  k_subtensor1<<<num_blocks, num_threads>>>(dst, src, idxs, src_N, N, D,
+      idx_scal_shift, idx_scal_mul, idx_vec_shift_coeff, idx_vec_shift);
 }
 
 __global__ void k_subtensor1(float *dst, const float *src, const float *idxs,
-    int N, int D, float idx_scal_shift, float idx_vec_shift_coeff,
-    float *idx_vec_shift) {
+    int src_N, int N, int D, float idx_scal_shift, float idx_scal_mul,
+    float idx_vec_shift_coeff, float *idx_vec_shift) {
   for (int i0 = blockIdx.x; i0 < N; i0 += gridDim.x) {
-    float fsrc_idx = idxs[i0] + idx_scal_shift;
-    fsrc_idx += idx_vec_shift_coeff * idx_vec_shift[i0];
-    int src_idx = (int) fsrc_idx;
+    float fsrc_idx = idxs[i0] * idx_scal_mul + idx_scal_shift;
+    float shift = idx_vec_shift == NULL
+        ? 0.0f : idx_vec_shift_coeff * idx_vec_shift[i0];
+
+    int src_idx = (int) (fsrc_idx + shift);
+    if (src_idx < 0) {
+      // Negative index. Read from other end of the source matrix.
+      src_idx += src_N;
+    }
+
+    printf("%d  %5f  %5f  %5f  %5f  %5f  %d\n", i0, idxs[i0], shift, idx_scal_mul, idx_scal_shift, fsrc_idx, src_idx);
 
     int src_offset = src_idx * D;
     int dst_offset = i0 * D;

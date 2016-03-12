@@ -27,7 +27,7 @@ namespace kernels {
           float v1_coeff, float v2_coeff, int N);
 
   /**
-   * Retrieve a subset of `N` rows from the contiguous `M * D` matrix `src`
+   * Retrieve a subset of `N` rows from the contiguous `src_N * D` matrix `src`
    * and write them to `dst` (`M >= N`). `dst` should be large enough to hold
    * the `N * D` float result. `idxs` should be a length-`N` int array.
    *
@@ -37,11 +37,12 @@ namespace kernels {
    *     idxs_ += idx_vec_shift_coeff * idx_vec_shift
    *     dst = src[idxs_]
    */
-  void subtensor1(float *dst, const float *src, const float *idxs, int N, int D,
-      float idx_scal_shift, float idx_vec_shift_coeff, float *idx_vec_shift);
+  void subtensor1(float *dst, const float *src, const float *idxs, int src_N,
+      int N, int D, float idx_scal_shift, float idx_scal_mul,
+      float idx_vec_shift_coeff, float *idx_vec_shift);
   __global__ void k_subtensor1(float *dst, const float *src, const float *idxs,
-      int N, int D, float idx_scal_shift, float idx_vec_shift_coeff,
-      float *idx_vec_shift);
+      int src_N, int N, int D, float idx_scal_shift, float idx_scal_mul,
+      float idx_vec_shift_coeff, float *idx_vec_shift);
 
   /**
    * Write an int scalar into a subtensor range.

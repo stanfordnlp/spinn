@@ -26,9 +26,11 @@ float *load_weights_cuda(string filename, int N) {
 
 
 // Print a column-major matrix stored on device.
-void print_device_matrix(float *m, int M, int N) {
+void print_device_matrix(const float *m, int M, int N) {
+  cudaDeviceSynchronize();
   float *h_m = (float *) malloc(M * N * sizeof(float));
   cudaMemcpy(h_m, m, M * N * sizeof(float), cudaMemcpyDeviceToHost);
+  cudaDeviceSynchronize();
 
   cout << "[[ ";
   for (int i = 0; i < M; i++) {

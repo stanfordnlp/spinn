@@ -26,7 +26,9 @@ ThinStack::ThinStack(ModelSpec spec, ThinStackParameters params,
   cudaMalloc(&buffer_top_idxs_t, spec.batch_size * sizeof(float));
   cudaMalloc(&buffer_top_t, spec.batch_size * spec.model_dim * sizeof(float));
   cudaMalloc(&stack_1_ptrs, spec.batch_size * sizeof(float));
+  cudaMalloc(&stack_1_t, spec.model_dim * spec.batch_size * sizeof(float));
   cudaMalloc(&stack_2_ptrs, spec.batch_size * sizeof(float));
+  cudaMalloc(&stack_2_t, spec.model_dim * spec.batch_size * sizeof(float));
   cudaMalloc(&push_output, spec.batch_size * spec.model_dim * sizeof(float));
   cudaMalloc(&merge_output, spec.batch_size * spec.model_dim * sizeof(float));
 
@@ -39,15 +41,21 @@ ThinStack::ThinStack(ModelSpec spec, ThinStackParameters params,
 
 
 void ThinStack::init_helpers() {
-  cudaMalloc(&batch_ones, spec.batch_size * sizeof(float));
-  cudaMemset(batch_ones, 1, spec.batch_size * sizeof(float));
-
-  float h_batch_range[spec.batch_size];
-  for (int i = 0; i < spec.batch_size; i++)
-    h_batch_range[i] = (float) i;
   cudaMalloc(&batch_range, spec.batch_size * sizeof(float));
+  cudaMalloc(&batch_ones, spec.batch_size * sizeof(float));
+
+  float h_batch_ones[spec.batch_size];
+  float h_batch_range[spec.batch_size];
+  for (int i = 0; i < spec.batch_size; i++) {
+    h_batch_ones[i] = 1.0f;
+    h_batch_range[i] = (float) i;
+  }
+
   cudaMemcpy(batch_range, h_batch_range, spec.batch_size * sizeof(float),
       cudaMemcpyHostToDevice);
+  cudaMemcpy(batch_ones, h_batch_ones, spec.batch_size * sizeof(float),
+      cudaMemcpyHostToDevice);
+  cudaDeviceSynchronize();
 }
 
 
@@ -85,9 +93,11 @@ void ThinStack::forward() {
 
   // TODO embedding projection
   buffer = X;
+  zero();
 
-  for (int t = 0; t < spec.seq_length; t++) {
+  for (int t = 0; t < 1; t++) {//spec.seq_length; t++) {
     step(t);
+    cout << endl << "======================" << endl << endl;
   }
 
 }
@@ -96,39 +106,59 @@ void ThinStack::forward() {
 void ThinStack::step(int t) {
 
   // TODO sync after kernel calls.
+  float *transitions_t = &transitions[t * spec.batch_size];
 
-  // buffer_top = buffer[buffer_cur_t + (batch_range * seq_length)]
-  k::subtensor1(buffer_top_t, buffer, buffer_cur_t, spec.batch_size,
-          spec.model_dim, 0, spec.seq_length, batch_range);
+  // buffer_top = buffer[buffer_cur_t * batch_size + batch_range]
+  //cout << "buffer_top before:" << endl;
+  //print_device_matrix(buffer_top_t, spec.model_dim, spec.batch_size);
+  k::subtensor1(buffer_top_t, buffer, buffer_cur_t,
+          spec.batch_size * spec.model_dim, spec.batch_size,
+          spec.model_dim, 0.0f, spec.batch_size, 1.0f, batch_range);
+  cout << "buffer_top after:" << endl;
   print_device_matrix(buffer_top_t, spec.model_dim, spec.batch_size);
 
   // stack_2_ptrs = (cursors - 1) + batch_range * seq_length
   k::subtensor1(stack_2_ptrs, queue, cursors, spec.batch_size,
-          spec.model_dim, -1, spec.seq_length, batch_range);
+          spec.batch_size, spec.seq_length, -1.0f, 1.0f, spec.seq_length,
+          batch_range);
+  cout << "stack_2_ptrs #1" << endl;
+  print_device_matrix(stack_2_ptrs, 1, spec.batch_size);
+
   // stack_2_ptrs = stack_2_ptrs * batch_size + batch_range * 1
   k::addi_vv(handle, stack_2_ptrs, batch_range, spec.batch_size, 1,
           spec.batch_size);
+  cout << "stack_2_ptrs" << endl;
+  print_device_matrix(stack_2_ptrs, 1, spec.batch_size);
 
   // stack_1, stack_2
-  k::subtensor1(stack_1_t, stack, batch_range, spec.batch_size,
-          spec.model_dim, (t - 1) * spec.batch_size, 0, NULL);
-  k::subtensor1(stack_2_t, stack, stack_2_ptrs, spec.batch_size,
-          spec.model_dim, 0, 0, NULL);
+  // stack_1_t = stack[batch_range + (t - 1) * spec.batch_size]
+  k::subtensor1(stack_1_t, stack, batch_range,
+          spec.batch_size * spec.seq_length, spec.batch_size,
+          spec.model_dim, (float) (t - 1) * spec.batch_size, 1.0f, 0.0f,
+          NULL);
+
+  k::subtensor1(stack_2_t, stack, stack_2_ptrs,
+          spec.batch_size * spec.seq_length, spec.batch_size,
+          spec.model_dim, 0.0f, 1.0f, 0.0f, NULL);
 
   // Run recurrence, which writes into `push_output`, `merge_output`.
   recurrence(stack_1_t, stack_2_t, buffer_top_t);
 
   // Write in the next stack top.
-  mask_and_update_stack(buffer_top_t, merge_output, transitions, t);
+  mask_and_update_stack(buffer_top_t, merge_output, transitions_t, t);
 
-  mask_and_update_cursors(cursors, transitions, t);
+  mask_and_update_cursors(cursors, transitions_t, t);
 
   // queue[cursors + 0 + batch_range * spec.seq_length] = t
   k::set_subtensor1i_s(queue, t, cursors, spec.batch_size, 0, spec.seq_length,
           batch_range);
+  cout << "queue after" << endl;
+  print_device_matrix(queue, spec.seq_length, spec.batch_size);
 
   // buffer_cur += (1 - transitions)
-  update_buffer_cur(buffer_cur_t, transitions, t);
+  update_buffer_cur(buffer_cur_t, transitions_t, t);
+  cout << "buffer cur after" << endl;
+  print_device_matrix(buffer_cur_t, 1, spec.batch_size);
 
 }
 
@@ -161,8 +191,13 @@ void ThinStack::mask_and_update_stack(const float *push_value,
   // timestep `t`).
   int stack_offset = t * spec.batch_size * spec.model_dim;
 
+  cout << "push value:" << endl;
+  print_device_matrix(push_value, spec.model_dim, spec.batch_size);
   k::switch_m(&stack[stack_offset], transitions, merge_value, push_value,
               spec.batch_size, spec.model_dim);
+
+  cout << "stack top t:" << endl;
+  print_device_matrix(&stack[stack_offset], spec.model_dim, spec.batch_size);
 
 }
 
@@ -186,6 +221,9 @@ void ThinStack::update_buffer_cur(float *buffer_cur_t, float *transitions, int t
   // buffer_cur += 1
   float alpha1 = 1.0;
   cublasSaxpy(handle, spec.batch_size, &alpha1, batch_ones, 1, buffer_cur_t, 1);
+  cudaDeviceSynchronize();
+  print_device_matrix(buffer_cur_t, 1, spec.batch_size);
+  print_device_matrix(batch_ones, 1, spec.batch_size);
 
   // buffer_cur -= transitions
   float alpha2 = -1.0;

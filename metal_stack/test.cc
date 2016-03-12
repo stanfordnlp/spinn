@@ -45,6 +45,8 @@ int main() {
   cout << "X:" << endl;
   fill_rand_matrix(ts.X, spec.model_dim, spec.batch_size * spec.seq_length);
   print_device_matrix(ts.X, spec.model_dim, spec.batch_size * spec.seq_length);
+  cout << "transitions:" << endl;
+  cudaMemset(ts.transitions, 0, spec.batch_size * spec.seq_length * sizeof(int));
 
   ts.forward();
 
