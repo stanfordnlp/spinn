@@ -107,6 +107,9 @@ void ThinStack::forward() {
   // results and simultaneously begin the next batch + copy out results
   cudaDeviceSynchronize();
 
+  cout << "final" << endl;
+  print_device_matrix(stack, spec.model_dim, spec.batch_size * spec.seq_length);
+
 }
 
 
@@ -126,7 +129,7 @@ void ThinStack::step(int t) {
 
   // stack_2_ptrs = (cursors - 1) + batch_range * seq_length
   k::subtensor1(stack_2_ptrs, queue, cursors, spec.batch_size,
-          spec.batch_size, spec.seq_length, -1.0f, 1.0f, spec.seq_length,
+          spec.batch_size, 1, -1.0f, 1.0f, spec.seq_length,
           batch_range);
 #if DEBUG
   cout << "stack_2_ptrs #1" << endl;
@@ -170,7 +173,7 @@ void ThinStack::step(int t) {
           batch_range);
 #if DEBUG
   cout << "queue after" << endl;
-  print_device_matrix(queue, spec.seq_length, spec.batch_size);
+  print_device_matrix(queue, 1, spec.seq_length * spec.batch_size);
 #endif
 
   // buffer_cur += (1 - transitions)
@@ -222,7 +225,7 @@ void ThinStack::mask_and_update_stack(const float *push_value,
               spec.batch_size, spec.model_dim);
 
 #if DEBUG
-  cout << "stack top t:" << endl;
+  cout << "stack top t (offset " << stack_offset << "):" << endl;
   print_device_matrix(&stack[stack_offset], spec.model_dim, spec.batch_size);
 #endif
 
