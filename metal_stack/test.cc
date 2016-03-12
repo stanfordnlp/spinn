@@ -46,7 +46,7 @@ static inline void assert_matrices_equal(const float *m1, const float *m2,
 
   for (int i = 0; i < M; i++) {
     for (int j = 0; j < N; j++) {
-      ASSERT_THAT(h_m1[j * M + i], FloatEq(h_m1[j * M + i]));
+      ASSERT_THAT(h_m1[j * M + i], FloatEq(h_m2[j * M + i]));
     }
   }
 
@@ -71,15 +71,30 @@ static float *compose(float *dst, ThinStack ts, const float *l,
 }
 
 
+class ThinStackTest : public ::testing::Test {
+
+  public:
+
+    ModelSpec spec;
+    ThinStack ts;
+
+    ThinStackTest() :
+      spec({5, 5, 2, 10, 3, 5}),
+      ts(make_stack(spec)) {
+
+      fill_rand_matrix(ts.X, spec.model_dim, spec.seq_length * spec.batch_size);
+
+    }
+
+    virtual void TearDown() {
+      free_stack(ts);
+    }
+
+};
+
+
 // Test simple shift-shift-merge feedforward with live random weights.
-TEST(ThinStackTest, ShiftShiftMerge) {
-
-  // TODO: Try with larger batch size, model dim
-  ModelSpec spec = {5, 5, 2, 10, 3, 5};
-  ThinStack ts = make_stack(spec);
-
-  // Make up random inputs.
-  fill_rand_matrix(ts.X, spec.model_dim, spec.seq_length * spec.batch_size);
+TEST_F(ThinStackTest, ShiftShiftMerge) {
 
   float h_transitions[] = {
     0.0f, 0.0f,
@@ -101,9 +116,45 @@ TEST(ThinStackTest, ShiftShiftMerge) {
   float *right_child = &ts.X[spec.model_dim * spec.batch_size];
   compose(expected, ts, left_child, right_child);
 
-  float *output = &ts.stack[0];
+  print_device_matrix(ts.stack, spec.model_dim, spec.batch_size * 3);
+  print_device_matrix(expected, spec.model_dim, spec.batch_size);
+  float *output = &ts.stack[2 * spec.model_dim * spec.batch_size];
   assert_matrices_equal(output, expected, spec.model_dim, spec.batch_size);
 
-  free_stack(ts);
+}
+
+
+TEST_F(ThinStackTest, ShiftShiftMergeShiftMerge) {
+
+  float h_transitions[] = {
+    0.0f, 0.0f,
+    0.0f, 0.0f,
+    1.0f, 1.0f,
+    0.0f, 0.0f,
+    1.0f, 1.0f,
+  };
+  cublasSetVector(spec.seq_length * spec.batch_size, sizeof(float),
+      h_transitions, 1, ts.transitions, 1);
+
+  // Do the feedforward!
+  ts.forward();
+
+  // Now simulate the feedforward.
+  float *c1, *c2;
+  cudaMalloc(&c1, spec.model_dim * spec.batch_size * sizeof(float));
+  cudaMalloc(&c2, spec.model_dim * spec.batch_size * sizeof(float));
+
+  // c1
+  float *left_child = &ts.X[0];
+  float *right_child = &ts.X[spec.model_dim * spec.batch_size];
+  compose(c1, ts, left_child, right_child);
+
+  // c2
+  left_child = &ts.stack[0];
+  right_child = &ts.X[2 * spec.model_dim * spec.batch_size];
+  compose(c2, ts, left_child, right_child);
+
+  float *output = &ts.stack[spec.model_dim * spec.batch_size];
+  assert_matrices_equal(output, c2, spec.model_dim, spec.batch_size);
 
 }
