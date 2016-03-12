@@ -97,10 +97,15 @@ void ThinStack::forward() {
 
   for (int t = 0; t < spec.seq_length; t++) {
     step(t);
+    cudaDeviceSynchronize();
 #if DEBUG
     cout << endl << "======================" << endl << endl;
 #endif
   }
+
+  // TODO: Don't need to sync here. Could have the client establish a lock on
+  // results and simultaneously begin the next batch + copy out results
+  cudaDeviceSynchronize();
 
 }
 
