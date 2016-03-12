@@ -118,8 +118,6 @@ TEST_F(ThinStackTest, ShiftShiftMerge) {
   float *right_child = &ts.X[spec.model_dim * spec.batch_size];
   compose(expected, ts, left_child, right_child);
 
-  print_device_matrix(ts.stack, spec.model_dim, spec.batch_size * 3);
-  print_device_matrix(expected, spec.model_dim, spec.batch_size);
   float *output = &ts.stack[2 * spec.model_dim * spec.batch_size];
   assert_matrices_equal(output, expected, spec.model_dim, spec.batch_size);
 
