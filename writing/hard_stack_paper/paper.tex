@@ -97,34 +97,34 @@
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-\title{Combining parsing with sentence understanding} 
+\title{A unified model for parsing and sentence understanding} 
 
-\author{
-Samuel R.\ Bowman$^{1,2,5,}$\thanks{The first two authors contributed equally.} \\
-\texttt{\small sbowman@stanford.edu} \\
-\And
-Jon Gauthier$^{2,3,5,*}$ \\
-\texttt{\small jgauthie@stanford.edu} \\
-\And
-Abhinav Rastogi$^{4,5}$ \\
-\texttt{\small arastogi@stanford.edu} \\
-\AND
-Raghav Gupta$^{6}$ \\
-\texttt{\small rgupta93@stanford.edu} \\
-\And
-Christopher D.\ Manning$^{1,2,5,6}$\\
-\texttt{\small manning@stanford.edu}\\
-\And
-Christopher Potts$^{1}$\\
-\texttt{\small cgpotts@stanford.edu}
-\AND\\[-3ex]
-{$^{1}$Stanford Linguistics\quad
-$^{2}$Stanford NLP Group\quad
-$^{3}$Stanford Symbolic Systems}\\
-{$^{4}$Stanford Electrical Engineering\quad
-$^{5}$Stanford AI Lab\quad
-$^{6}$Stanford Computer Science}
-}
+%    \author{
+%    Samuel R.\ Bowman$^{1,2,5,}$\thanks{The first two authors contributed equally.} \\
+%    \texttt{\small sbowman@stanford.edu} \\
+%    \And
+%    Jon Gauthier$^{2,3,5,*}$ \\
+%    \texttt{\small jgauthie@stanford.edu} \\
+%    \And
+%    Abhinav Rastogi$^{4,5}$ \\
+%    \texttt{\small arastogi@stanford.edu} \\
+%    \AND
+%    Raghav Gupta$^{6}$ \\
+%    \texttt{\small rgupta93@stanford.edu} \\
+%    \And
+%    Christopher D.\ Manning$^{1,2,5,6}$\\
+%    \texttt{\small manning@stanford.edu}\\
+%    \And
+%    Christopher Potts$^{1}$\\
+%    \texttt{\small cgpotts@stanford.edu}
+%    \AND\\[-3ex]
+%    {$^{1}$Stanford Linguistics\quad
+%    $^{2}$Stanford NLP Group\quad
+%    $^{3}$Stanford Symbolic Systems}\\
+%    {$^{4}$Stanford Electrical Engineering\quad
+%    $^{5}$Stanford AI Lab\quad
+%    $^{6}$Stanford Computer Science}
+%    }
 
 \date{}
 
@@ -146,16 +146,10 @@ $^{6}$Stanford Computer Science}
 \begin{abstract}
 
 Tree-structured neural networks integrate valuable syntactic parse information into the process of interpreting sentence meaning, but suffer two key technical problems. They can only operate on parsed sentences and do not directly support batched computation, making them slow and unwieldy for large-scale NLP tasks. We address these issues by introducing the Parser-Interpreter Neural Network (PINN), which simulates tree-structured sentence interpretation within the sequential structure of a transition-based neural parser. This model  supports batched computation, and its integrated parser allows it to operate on unparsed data with nearly no loss of accuracy. We evaluate it on the Stanford NLI entailment task, show that it outperforms other sentence encoding models, and show that it can be integrated effectively with soft attention for sentence pair tasks like entailment for further gains in performance.
-
+\todo{[SB] Revise according to comments.}
 \end{abstract}
 
-\todo{Anonymize.}
-
-\todo{Fill in name where needed.}
-
-\todo{SST!}
-
-\todo{Model 1!}
+\question{Parser--Interpreter or Parser-Interpreter (hyphen or en-dash)?}
 
 \section{Introduction}
 
@@ -175,7 +169,13 @@ Tree-structured neural networks integrate valuable syntactic parse information i
 \begin{itemize}
 \item Efficient batched computation is a crucial enabling technology in allowing NNs to be used on large datasets. Since NNs require large datasets to be able to model complex problems like language understanding, this is crucial in NLP.
 \item Tree structured neural networks can't be batched. As the schematic in Figure~\ref{fig:batching:bad} indicates, different sentences are assigned different trees, and there is no straightforward way of aligning these trees to synchronize computation in the conventional style of implementation.
-\item Our proposed model builds on ideas from transition-based parsing to build a model which implements the same computations as a tree-structured model, but which can be efficiently batched.
+\item In addition, the requirement of an external parser complicated pipeline-building, and slows down inference. This is not necessarily a practical limitation, since modern parsers can assign reasonably high quality parses in so little time as to not dramatically impact the performance characteristics of our model \todo{[SB,JG,CM] How fast are fast constit parsers?}.
+
+\end{itemize}
+
+\item Our model
+\begin{itemize}
+\item In this paper, we present the Parser--Interpreter NN (PINN) 
 
 \end{itemize}
 
@@ -203,7 +203,7 @@ Tree-structured neural networks integrate valuable syntactic parse information i
 
 \subsection{Intuition: Transition-based parsing}
 
-Our model is based on a formalism adapted from transition-based parsing (\question{What's a good classic citation for this?}).
+The PINN is based on a formalism adapted from transition-based parsing (\question{What's a good classic citation for this?}).
 
 \todo{[SB, JG] Brief into to transition-based parsing.}
 
@@ -211,13 +211,14 @@ Our model is based on a formalism adapted from transition-based parsing (\questi
 
 \subsection{The model}
 
-Our model, which is shown in Figure~\ref{fig:model:0}, takes the form of a transition-based parser, but it is designed to produce sentence representations given parse structures, rather than producing parse structures as its output, leading to the following differences:
+The PINN, which is shown in Figure~\ref{fig:model:0}, takes the form of a transition-based parser, but it is designed to produce sentence representations given parse structures, rather than producing parse structures as its output, leading to the following differences: \todo{[SB] Swap in Model 1 fig.}
 \begin{itemize}
 \item The model takes a sequence of transitions (\shift s or \reduce s) as input, rather than incorporating a decision function which chooses which transition to perform at each step.
 \item The intermediate representations in the parser, including the representations of the tree structures on the stack, are vectors of a fixed length.
 \item The \reduce~operation, which combines two trees or tree nodes on the stack into a single larger tree, is represented using a parametric neural network layer function (in particular, a TreeLSTM layer, after \citealt{tai2015improved}).
 \item The intermediate states of the stack and buffer during parsing are stored during training. This makes it possible to learn the parameters of the composition function and the input word representations that are fed into the buffer using backpropagation on an objective function that depends on the final sentence representation that emerges at the head of the stack.
 \item A novel tracking LSTM component is added to improve the model's ability to efficiently track the context in which each step is being performed.
+\item A variant, PINN-GT uses ground truth parse information at training and test time, and omits the prediction layer.
 \end{itemize}
 
 \input{../model0_fig.tex}
@@ -236,7 +237,7 @@ We draw our word representations from the standard 300-dimensional vector packag
 
 \paragraph{The representations in the stack}
 
-In our model, each row of the stack contains a pair of vectors $(h, c)$, which together represent some node in the parse tree of the sentence. Since the \shift~operation simply copies entries from the buffer onto the stack, this means that the word representations in the buffer also have two parts, $h$ and $c$. 
+In a PINN, each row of the stack contains a pair of vectors $(h, c)$, which together represent some node in the parse tree of the sentence. Since the \shift~operation simply copies entries from the buffer onto the stack, this means that the word representations in the buffer also have two parts, $h$ and $c$. 
 
 \paragraph{The composition function}
 When a \reduce~operation is performed, vector representations of two tree nodes are popped off of the head of the stack and fed into a {\ii composition function}, which is a neural network function that produces a representation for a new tree node that is the parent of the two popped nodes. This new node is then pushed on to the stack.
@@ -298,6 +299,10 @@ In addition to our basic model, we additionally propose an extension that adds t
 
 The tracking LSTM is a standard LSTM RNN. At each step it takes three vectors as inputs: the top element of the buffer $\vec{h}_b^1$, which would be moved in a \shift~operation, and the two two elements of the stack $\vec{h}_s^1$ and $\vec{h}_s^2$ which would be composed in a \reduce~operation. Its output hidden state at each step is used as the external input to the TreeLSTM composition function for that step.
 
+\subsection{Parsing: Predicting transitions from the tracking state}
+
+\todo{[SB] Fill in math, Explain.}
+
 \subsection{Implementing the transition-based sentence model}
 
 \paragraph{The size of the stack}
@@ -348,7 +353,7 @@ We trained each model for 250k steps in each run, using a minibatch size of 64 f
 
 \subsection{TreeRNN-equivalence and efficiency}
 
-In its bare form, without the addition of the tracking LSTM, our model computes the precisely the same functions as a conventional tree-structured neural network model, and has the same learning dynamics: the representation of each sentence consists of the representation of the words, combined recursively using a TreeRNN composition function (in our case, the TreeLSTM function). While it adds no expressive power on its own, our model design improves upon the standard TreeRNN implementation in three ways:
+In its bare form, before the addition of the tracking LSTM, the PINN computes the precisely the same functions as a conventional tree-structured neural network model, and has the same learning dynamics: the representation of each sentence consists of the representation of the words, combined recursively using a TreeRNN composition function (in our case, the TreeLSTM function). While it adds no expressive power on its own, this design improves upon the standard TreeRNN implementation in three ways:
 
 \begin{itemize}
 \item It provides a straightforward strategy for implementing tree-structured composition which allows for batched computation, and provides near-optimal run times on typical computer systems. While our design includes some wasted computation induced by the full application of the composition function at every step, this is made up for by avoiding most of the (potentially expensive) scattered memory access that would be needed for batched computation strategies that more closely mimic the standard tree-based architecture.
@@ -360,7 +365,7 @@ In its bare form, without the addition of the tracking LSTM, our model computes 
 
 \subsection{Related work: Transition-based parsing and neural networks.}
 
-There has been a fairly long history of work on building neural-network based parsers that use the core operations and data structures from transition-based parsing \cite{henderson2004discriminative,emami2005neural,titov2010latent,buys2generative,chen2014,dyer-EtAl:2015:ACL-IJCNLP,kiperwasser2016easy}. In addition, there has been recent work \cite{zhang2016top,dyer2016rnn} proposing models designed primarily for generative language modeling tasks that use these structures as well. To our knowledge, our model is the first to use these structures for the purpose of sentence interpretation, rather than parsing or generation.
+There has been a fairly long history of work on building neural-network based parsers that use the core operations and data structures from transition-based parsing \cite{henderson2004discriminative,emami2005neural,titov2010latent,buys2generative,chen2014,dyer-EtAl:2015:ACL-IJCNLP,kiperwasser2016easy}. In addition, there has been recent work \cite{zhang2016top,dyer2016rnn} proposing models designed primarily for generative language modeling tasks that use these structures as well. To our knowledge, the PINN is the first model to use these structures for the purpose of sentence interpretation, rather than parsing or generation.
 
 \section{Attention over trees}
 
@@ -369,7 +374,7 @@ There has been a fairly long history of work on building neural-network based pa
 \paragraph{Constituent-by-constituent attention}
 We aim to build on the results of \citealt{rocktaschel2015reasoning} and \citealt{wang2015learning}, who find that neural soft attention models is an extremely effective technique for learning natural language inference. In particular, both papers use versions of word-by-word entailment, in which a latent alignment is learned from every word in the hypothesis to one or more words of the premise. We propose to borrow this basic idea, but to adapt it to a tree-structured setting, proposing \textit{constituent-by-constituent} attention. While these models do attention over a matrix $\mathbf{Y}$ of word-in-context representations from the premise encoder, we will perform attention instead over our own primary data structure, $\mathbf{Y}^{st}$, the matrix of vectors that have appeared at the top of the stack during premise encoding, which correspond one-to-one to the constituents in the tree structure representing the premise. Similarly, while the previous models perform one instance of soft attention conditioned on each word in the hypothesis, we perform one instance of soft attention conditioned on each stack top in the hypothesis encoder, representing the constituents of the hypothesis tree.
 
-In our model, attention is performed at each step $t$ of the premise encoder. At step $t$, the query vector that drives attention will be $S^t_0$, the top of the stack. 
+In the PINN, attention is performed at each step $t$ of the premise encoder. At step $t$, the query vector that drives attention will be $S^t_0$, the top of the stack. 
 
 \todo{[AR, RG] Write up the attention equations that you use.}
 
@@ -383,7 +388,7 @@ In our model, attention is performed at each step $t$ of the premise encoder. At
 
 \subsection{Natural language inference and SNLI}
 
-We evaluate our model on the task of natural language inference (NLI), also known as recognizing textual entailment (RTE). NLI is a sentence pair classification task, in which a model reads two sentences (a premise and a hypothesis), and outputs a judgment of {\it entailment}, {\it contradiction}, or {\it neutral}, reflecting the relationship between the meanings of the two sentences, as in this example from the Stanford NLI corpus (SNLI, \citealt{snli:emnlp2015}), which we use for training and evaluation: 
+We evaluate the PINN on the task of natural language inference (NLI), also known as recognizing textual entailment (RTE). NLI is a sentence pair classification task, in which a model reads two sentences (a premise and a hypothesis), and outputs a judgment of {\it entailment}, {\it contradiction}, or {\it neutral}, reflecting the relationship between the meanings of the two sentences, as in this example from the Stanford NLI corpus (SNLI, \citealt{snli:emnlp2015}), which we use for training and evaluation: 
 
 \begin{quote}
 Premise: {\it Girl in a red coat, blue head wrap and jeans is making a snow angel.}
@@ -399,7 +404,7 @@ SNLI is a corpus of 570k human-labeled pairs of scene descriptions like the one 
 
 \subsection{Models evaluated}
 
-We evaluate five models on the SNLI task. Each uses 300d hidden states: 
+We evaluate five models on the SNLI task. Each uses 300d hidden states: \todo{[SB] Reframe around M1.}
 \begin{itemize}
 \item A baseline LSTM model (similar to that of \citealt{snli:emnlp2015}) that uses the same classifier architecture as our models, but encodes sentences using a single layer LSTM RNN sequence model.
 \item The unaugmented transition-based sentence model.
@@ -412,46 +417,47 @@ We evaluate five models on the SNLI task. Each uses 300d hidden states:
   \centering\small
   \begin{tabular}{lcccc} 
     \toprule
-Model                   & Trained params.    &   Train  &   Test \\
+Model                   & Params.    & Trans. acc.  &   Train  &   Test \\
 \midrule
 \multicolumn{4}{c}{Previous non-NN results}\\
 \midrule
 Lexicalized classifier \cite{snli:emnlp2015}
-                        & --                 &   99.7   &   78.2      \\
+                        & --                & --                    &   99.7   &   78.2      \\
 \midrule
 \multicolumn{4}{c}{Previous NN results without attention}\\
 \midrule
 100d LSTM encoders \cite{snli:emnlp2015}
-                        & 221k               &   84.8   &   77.6      \\
+                        & 221k               & --               &   84.8   &   77.6      \\
 1024d pretrained GRU encoders \cite{DBLP:journals/corr/VendrovKFU15}
-                        & 15m                &   98.8   &   81.4       \\
+                        & 15m                & --              &   98.8   &   81.4       \\
 300d Tree-based CNN encoders \cite{mou2015recognizing}
-                        & 3.5m               &   83.4   &   82.1       \\
+                        & 3.5m                & --             &   83.4   &   82.1       \\
 \midrule
 \multicolumn{4}{c}{Previous NN results with attention}\\
 \midrule
 100d LSTM w/ word-by-word attention \cite{rocktaschel2015reasoning}
-                        & 252k               &   85.3   &   83.5       \\
+                        & 252k               & --              &   85.3   &   83.5       \\
 300d mLSTM word-by-word attention model \cite{DBLP:journals/corr/WangJ15b}
-                        & 1.9m               &   92.0   &   86.1      \\
-300d LSTMN with deep attention fusion \cite{cheng2016long} (1.4m params) 92.3    89.1
-
-                        & 1.4m               &   92.3   &   89.1      \\
+                        & 1.9m               & --             &   92.0   &   86.1      \\
+300d LSTMN with deep attention fusion \cite{cheng2016long}
+                        & 1.4m               & --                &   92.3   &   89.1      \\
 \midrule
 \multicolumn{4}{c}{New results}\\
 \midrule
-\result{300d LSTM RNN      }     & ?                  &   ?      &   81?       \\
-\result{300d TB TreeLSTM}   
-                        & ?                  &   ?      &   81?       \\
-\result{300d TB TreeLSTM w/ tracking    }
-                        & ?                  &   ?      &   83?       \\
-\result{300d TB TreeLSTM w/ tracking, sequence-based attn.   }     
-                        & ?                  &   ?      &   85+?       \\
-\result{300d TB TreeLSTM w/ tracking, tree-based attn. }           
-                        & ?                  &   ?      &   \textbf{?}\\
+\result{300d LSTM RNN      } & ?             & --                &   ?      &   81?       \\
+\result{300d PINN-GT w/o tracking}   
+                        & ?                  & --                &   ?      &   81?       \\
+\result{300d PINN-GT }
+                        & ?                  & --                &   ?      &   83?       \\
+\result{300d PINN }
+                        & ?                  & ??                  &   ?      &   83?       \\                        
+\result{300d PINN-GT, sequence-based attn.   }     
+                        & ?                  & --                &   ?      &   85+?       \\
+\result{300d PINN-GT, tree-based attn. }           
+                        & ?                  & --                &   ?      &   \textbf{?}\\
     \bottomrule
   \end{tabular}
-  \protect\caption{\protect\label{tab:results}Results on SNLI 3-way inference classification. All reported figures are percent accuracy. \result{[JG]Add seconds-per-step *if* we get a reasonably well-optimized model in time.}} 
+  \protect\caption{\protect\label{tab:results}Results on SNLI 3-way inference classification. Params. is the approximate number of trained parameters (excluding word embeddings for models where they are trained). Trans. acc. is the model's accuracy in predicting parsing transitions. Train and test are SNLI classification accuracy. \result{[JG]Add seconds-per-step *if* we get a reasonably well-optimized model in time.}} 
 \end{table*}
 
 \paragraph{Results}
@@ -483,16 +489,17 @@ Comparing model step time to the plain RNN of \citealt{li2015tree}. We use the s
 \item The advantages of attention carry over to tree-structured models.
 \end{itemize}
 
-
-\paragraph{Future work} The tracking LSTM that we incorporated into our model uses only simple, quick to compute features drawn from the head of the buffer and the head of the stack. It is plausible that giving the tracking LSTM access to more information from the buffer and stack at each step would allow it to better represent the context of each tree node, including information about that nodes neighbors in the sentence string and its likely position in the final tree, and that that context information could support better sentence encoding. One promising way to pursue this goal would be to encode the full contents of the stack and buffer at each time step following the method used by \citealt{dyer-EtAl:2015:ACL-IJCNLP} for parsing.
+\paragraph{Future work} The tracking LSTM that we incorporated into the PINN uses only simple, quick to compute features drawn from the head of the buffer and the head of the stack. It is plausible that giving the tracking LSTM access to more information from the buffer and stack at each step would allow it to better represent the context of each tree node, including information about that nodes neighbors in the sentence string and its likely position in the final tree, and that that context information could support better sentence encoding. One promising way to pursue this goal would be to encode the full contents of the stack and buffer at each time step following the method used by \citealt{dyer-EtAl:2015:ACL-IJCNLP} for parsing.
 The model presented here is only capable of operating over sentences which have already been assigned a binary constituency tree by a parser. This is not necessarily a practical limitation, since modern parsers can assign reasonably high quality parses in so little time as to not dramatically impact the performance characteristics of our model \todo{[SB,JG,CM] How fast are fast constit parsers?}. However, depending upon an external parser can be a missed opportunity.
+
+\todo{[SB] Remove Model 1 references.}
 
 In future work, we aim to incorporate a parser into our model, allowing it to simultaneously learn to parse sentences (using a conventional parsing objective function) and to use those parses to learn semantic representations for those sentences (using a classification objective function, as in this work). Implementing such a model on top of our proposed stack-based design would learn a model that could productively share representations between the two tasks. Implementing such a model on top of a differentiable version of our stack-based design (possibly following \citealt{grefenstette2015learning,joulin2015inferring}) would further make it possible for the model to learn to parse using guidance from the semantic representation objective, essentially allowing  learn to produce parses that are, in aggregate, better suited to supporting semantic interpretation than those supplied in the training data. 
 
-\subsubsection*{Acknowledgments}
-
-Some of the Tesla K40(s) used for this research was/were donated by the NVIDIA Corporation.
-\todo{[CM,CP] Acknowledge other grants.}
+%    \subsubsection*{Acknowledgments}
+%    
+%    Some of the Tesla K40(s) used for this research was/were donated by the NVIDIA Corporation.
+%    \todo{[CM,CP] Acknowledge other grants.}
 
 \bibliographystyle{../acl}
 \bibliography{../MLSemantics}
