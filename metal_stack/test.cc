@@ -24,8 +24,6 @@ static ThinStack make_stack(ModelSpec spec) {
   print_device_matrix(compose_W_r, spec.model_dim, spec.model_dim);
 
   ThinStackParameters params = {
-    NULL, NULL, // projection
-    NULL, NULL, // buffer batch-norm
     NULL, NULL, NULL, // tracking
     compose_W_l, compose_W_r, NULL, NULL // composition
   };

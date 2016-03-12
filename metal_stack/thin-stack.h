@@ -10,10 +10,6 @@
 
 
 typedef struct ThinStackParameters {
-  float *project_W;
-  float *project_b;
-  float *buffer_bn_ts;
-  float *buffer_bn_tm;
   float *tracking_W_inp;
   float *tracking_W_hid;
   float *tracking_b;
@@ -37,8 +33,12 @@ class ThinStack {
     ThinStackParameters params;
     cublasHandle_t handle;
 
+    void lookup_embeddings(float *embedding_source);
     void forward();
 
+    // Embedding index inputs, of dimension `batch_size * seq_length` -- i.e.,
+    // we have `seq_length`-many concatenated vectors of embedding integers
+    float *X_indices;
     // Embedding inputs, of dimension `model_dim * (batch_size * seq_length)` --
     // i.e., along 2nd axis we have `seq_length`-many `model_dim * batch_size`
     // matrices.

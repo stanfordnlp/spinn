@@ -13,6 +13,7 @@ ThinStack::ThinStack(ModelSpec spec, ThinStackParameters params,
   cursors_total_size = spec.batch_size;
 
   // Pre-allocate inputs.
+  cudaMalloc(&X_indices, spec.batch_size * spec.seq_length * sizeof(float));
   cudaMalloc(&X, spec.batch_size * spec.seq_length * spec.model_dim * sizeof(float));
   cudaMalloc(&transitions, spec.batch_size * spec.seq_length * sizeof(float));
 
@@ -89,6 +90,13 @@ ThinStack::~ThinStack() {
 
   cudaFree(buffer_cur_t);
 
+}
+
+
+void ThinStack::lookup_embeddings(float *embedding_source) {
+  k::subtensor1(X, embedding_source, X_indices, spec.vocab_size,
+          spec.seq_length * spec.batch_size, spec.model_dim, 0.0f, 1.0f, 0.0f,
+          NULL);
 }
 
 

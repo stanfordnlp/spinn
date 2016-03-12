@@ -15,8 +15,6 @@ ThinStackParameters load_params(ModelSpec spec) {
       spec.model_dim * spec.model_dim);
 
   ThinStackParameters ret = {
-    NULL, NULL, // projection
-    NULL, NULL, // buffer batch-norm
     NULL, NULL, NULL, // tracking
     compose_W_l, compose_W_r, NULL, NULL // composition
   };
