@@ -67,6 +67,9 @@ void ThinStack::free_helpers() {
 
 ThinStack::~ThinStack() {
 
+  cout << "!!!!!!!!!!!!!!!!" << endl;
+  cout << "ThinStack dying!" << endl;
+  cout << "!!!!!!!!!!!!!!!!" << endl;
   free_helpers();
 
   cudaFree(X);
@@ -116,7 +119,12 @@ void ThinStack::forward() {
 void ThinStack::step(int t) {
 
   // TODO sync after kernel calls.
+  cout << t * spec.batch_size << endl;
   float *transitions_t = &transitions[t * spec.batch_size];
+#if DEBUG
+  cout << "transitions " << t << endl;
+  print_device_matrix(transitions_t, 1, spec.batch_size);
+#endif
 
   // buffer_top = buffer[buffer_cur_t * batch_size + batch_range]
   k::subtensor1(buffer_top_t, buffer, buffer_cur_t,

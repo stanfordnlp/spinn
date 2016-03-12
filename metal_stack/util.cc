@@ -46,14 +46,14 @@ void print_device_matrix(const float *m, int M, int N) {
   cout << "[[ ";
   for (int i = 0; i < M; i++) {
     if (i > 0)
-      cout << "   ";
+      cout << " [ ";
 
     for (int j = 0; j < N; j++) {
       float val = h_m[j * M + i];
-      printf(" %+.03f  ", val);
+      printf(" %+.03f, ", val);
     }
 
-    cout << " ]";
+    cout << " ],";
     if (i < M - 1)
       cout << endl;
   }

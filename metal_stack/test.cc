@@ -17,6 +17,12 @@ static ThinStack make_stack(ModelSpec spec) {
   fill_rand_matrix(compose_W_l, spec.model_dim, spec.model_dim);
   fill_rand_matrix(compose_W_r, spec.model_dim, spec.model_dim);
 
+  cout << "compose_W_l" << endl;
+  print_device_matrix(compose_W_l, spec.model_dim, spec.model_dim);
+
+  cout << "compose_W_r" << endl;
+  print_device_matrix(compose_W_r, spec.model_dim, spec.model_dim);
+
   ThinStackParameters params = {
     NULL, NULL, // projection
     NULL, NULL, // buffer batch-norm
@@ -150,11 +156,11 @@ TEST_F(ThinStackTest, ShiftShiftMergeShiftMerge) {
   compose(c1, ts, left_child, right_child);
 
   // c2
-  left_child = &ts.stack[0];
+  left_child = c1;
   right_child = &ts.X[2 * spec.model_dim * spec.batch_size];
   compose(c2, ts, left_child, right_child);
 
-  float *output = &ts.stack[spec.model_dim * spec.batch_size];
+  float *output = &ts.stack[4 * spec.model_dim * spec.batch_size];
   assert_matrices_equal(output, c2, spec.model_dim, spec.batch_size);
 
 }
