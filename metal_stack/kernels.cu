@@ -49,7 +49,7 @@ __global__ void k_subtensor1(float *dst, const float *src, const float *idxs,
       src_idx += src_N;
     }
 
-    printf("%d  %5f  %5f  %5f  %5f  %5f  %d\n", i0, idxs[i0], shift, idx_scal_mul, idx_scal_shift, fsrc_idx, src_idx);
+    //printf("%d  %5f  %5f  %5f  %5f  %5f  %d\n", i0, idxs[i0], shift, idx_scal_mul, idx_scal_shift, fsrc_idx, src_idx);
 
     int src_offset = src_idx * D;
     int dst_offset = i0 * D;

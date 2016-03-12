@@ -95,7 +95,7 @@ void ThinStack::forward() {
   buffer = X;
   zero();
 
-  for (int t = 0; t < 1; t++) {//spec.seq_length; t++) {
+  for (int t = 0; t < spec.seq_length; t++) {
     step(t);
     cout << endl << "======================" << endl << endl;
   }
@@ -174,9 +174,9 @@ void ThinStack::recurrence(const float *stack_1_t, const float *stack_2_t,
       spec.model_dim, &beta, merge_output, spec.model_dim);
   // merge_out += W_r r
   float beta2 = 1.0f;
-  cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, spec.model_dim, spec.batch_size,
+  auto ret = cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, spec.model_dim, spec.batch_size,
       spec.model_dim, &alpha, params.compose_W_r, spec.model_dim, stack_1_t,
-      spec.model_dim, &beta, merge_output, spec.model_dim);
+      spec.model_dim, &beta2, merge_output, spec.model_dim);
 
   // TODO bias (broadcast-add)
   // TODO relu
@@ -191,8 +191,12 @@ void ThinStack::mask_and_update_stack(const float *push_value,
   // timestep `t`).
   int stack_offset = t * spec.batch_size * spec.model_dim;
 
+  cout << "merge value:" << endl;
+  print_device_matrix(merge_value, spec.model_dim, spec.batch_size);
+
   cout << "push value:" << endl;
   print_device_matrix(push_value, spec.model_dim, spec.batch_size);
+
   k::switch_m(&stack[stack_offset], transitions, merge_value, push_value,
               spec.batch_size, spec.model_dim);
 
@@ -221,9 +225,6 @@ void ThinStack::update_buffer_cur(float *buffer_cur_t, float *transitions, int t
   // buffer_cur += 1
   float alpha1 = 1.0;
   cublasSaxpy(handle, spec.batch_size, &alpha1, batch_ones, 1, buffer_cur_t, 1);
-  cudaDeviceSynchronize();
-  print_device_matrix(buffer_cur_t, 1, spec.batch_size);
-  print_device_matrix(batch_ones, 1, spec.batch_size);
 
   // buffer_cur -= transitions
   float alpha2 = -1.0;
