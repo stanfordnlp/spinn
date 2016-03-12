@@ -110,8 +110,10 @@ void ThinStack::forward() {
   // results and simultaneously begin the next batch + copy out results
   cudaDeviceSynchronize();
 
+#if DEBUG
   cout << "final" << endl;
   print_device_matrix(stack, spec.model_dim, spec.batch_size * spec.seq_length);
+#endif
 
 }
 
