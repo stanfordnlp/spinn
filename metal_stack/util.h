@@ -7,6 +7,7 @@
 
 #include <cuda_runtime.h>
 #include <curand.h>
+#include "cublas_v2.h"
 
 using namespace std;
 
@@ -25,6 +26,8 @@ typedef struct ModelSpec {
 
 float *load_weights(string filename, int N);
 float *load_weights_cuda(string filename, int N);
+
+cublasHandle_t getCublasHandle();
 
 void print_device_matrix(const float *m, int M, int N);
 void fill_rand_matrix(float *m, int M, int N);

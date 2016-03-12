@@ -25,6 +25,17 @@ float *load_weights_cuda(string filename, int N) {
 }
 
 
+cublasHandle_t getCublasHandle() {
+  cublasHandle_t handle;
+  cublasStatus_t stat = cublasCreate(&handle);
+  if (stat != CUBLAS_STATUS_SUCCESS) {
+    cout << "CUBLAS initialization failed (" << stat << ")" << endl;
+    return NULL;
+  }
+  return handle;
+}
+
+
 // Print a column-major matrix stored on device.
 void print_device_matrix(const float *m, int M, int N) {
   cudaDeviceSynchronize();

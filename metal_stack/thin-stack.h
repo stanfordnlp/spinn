@@ -33,6 +33,10 @@ class ThinStack {
 
     ~ThinStack();
 
+    ModelSpec spec;
+    ThinStackParameters params;
+    cublasHandle_t handle;
+
     void forward();
 
     // Embedding inputs, of dimension `model_dim * (batch_size * seq_length)` --
@@ -61,10 +65,6 @@ class ThinStack {
 
     void init_helpers();
     void free_helpers();
-
-    ModelSpec spec;
-    ThinStackParameters params;
-    cublasHandle_t handle;
 
     size_t stack_size;
 
