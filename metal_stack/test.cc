@@ -1,3 +1,4 @@
+#include <chrono>
 #include <iostream>
 
 #include <cuda_runtime.h>
@@ -29,7 +30,7 @@ void destroy_params(ThinStackParameters params) {
 }
 
 int main() {
-  ModelSpec spec = {5, 5, 2, 10, 3, 5};
+  ModelSpec spec = {300, 300, 256, 10, 25, 300};//{300, 300, 256, 10, 25, 300};//{5, 5, 2, 10, 3, 5};
   ThinStackParameters params = load_params(spec);
 
   cublasHandle_t handle;
@@ -44,19 +45,37 @@ int main() {
   // Set model inputs.
   cout << "X:" << endl;
   fill_rand_matrix(ts.X, spec.model_dim, spec.batch_size * spec.seq_length);
+#if DEBUG
   print_device_matrix(ts.X, spec.model_dim, spec.batch_size * spec.seq_length);
+#endif
 
   cout << "transitions:" << endl;
-  float transitions[] = {
-    0.0f, 0.0f,
-    0.0f, 0.0f,
-    1.0f, 1.0f
-  };
+  float *h_transitions = (float *) malloc(spec.seq_length * spec.batch_size * sizeof(float));
+  for (int i = 0; i < spec.seq_length * spec.batch_size; i++) {
+    float val;
+    if (i < spec.batch_size * 2) {
+      val = 0.0f;
+    } else {
+      val = rand() % 2 == 0 ? 1.0f : 0.0f;
+    }
+    h_transitions[i] = val;
+  }
   //cudaMemset(ts.transitions, 0, spec.batch_size * spec.seq_length * sizeof(int));
-  cudaMemcpy(ts.transitions, transitions, spec.seq_length * spec.batch_size * sizeof(float), cudaMemcpyHostToDevice);
+  cudaMemcpy(ts.transitions, h_transitions, spec.seq_length * spec.batch_size * sizeof(float), cudaMemcpyHostToDevice);
+  free(h_transitions);
+#if DEBUG
   print_device_matrix(ts.transitions, spec.seq_length, spec.batch_size);
+#endif
 
-  ts.forward();
+  auto time_elapsed = chrono::microseconds::zero();
+  for (int t = 0; t < 50; t++) {
+    auto start = chrono::high_resolution_clock::now();
+    ts.forward();
+    auto end = chrono::high_resolution_clock::now();
+    time_elapsed += chrono::duration_cast<chrono::microseconds>(end - start);
+  }
+
+  cout << "Total time elapsed: " << time_elapsed.count() << endl;
 
   destroy_params(params);
 }

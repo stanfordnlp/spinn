@@ -97,7 +97,9 @@ void ThinStack::forward() {
 
   for (int t = 0; t < spec.seq_length; t++) {
     step(t);
+#if DEBUG
     cout << endl << "======================" << endl << endl;
+#endif
   }
 
 }
@@ -109,26 +111,30 @@ void ThinStack::step(int t) {
   float *transitions_t = &transitions[t * spec.batch_size];
 
   // buffer_top = buffer[buffer_cur_t * batch_size + batch_range]
-  //cout << "buffer_top before:" << endl;
-  //print_device_matrix(buffer_top_t, spec.model_dim, spec.batch_size);
   k::subtensor1(buffer_top_t, buffer, buffer_cur_t,
           spec.batch_size * spec.model_dim, spec.batch_size,
           spec.model_dim, 0.0f, spec.batch_size, 1.0f, batch_range);
+#if DEBUG
   cout << "buffer_top after:" << endl;
   print_device_matrix(buffer_top_t, spec.model_dim, spec.batch_size);
+#endif
 
   // stack_2_ptrs = (cursors - 1) + batch_range * seq_length
   k::subtensor1(stack_2_ptrs, queue, cursors, spec.batch_size,
           spec.batch_size, spec.seq_length, -1.0f, 1.0f, spec.seq_length,
           batch_range);
+#if DEBUG
   cout << "stack_2_ptrs #1" << endl;
   print_device_matrix(stack_2_ptrs, 1, spec.batch_size);
+#endif
 
   // stack_2_ptrs = stack_2_ptrs * batch_size + batch_range * 1
   k::addi_vv(handle, stack_2_ptrs, batch_range, spec.batch_size, 1,
           spec.batch_size);
+#if DEBUG
   cout << "stack_2_ptrs" << endl;
   print_device_matrix(stack_2_ptrs, 1, spec.batch_size);
+#endif
 
   // stack_1, stack_2
   // stack_1_t = stack[batch_range + (t - 1) * spec.batch_size]
@@ -152,13 +158,17 @@ void ThinStack::step(int t) {
   // queue[cursors + 0 + batch_range * spec.seq_length] = t
   k::set_subtensor1i_s(queue, t, cursors, spec.batch_size, 0, spec.seq_length,
           batch_range);
+#if DEBUG
   cout << "queue after" << endl;
   print_device_matrix(queue, spec.seq_length, spec.batch_size);
+#endif
 
   // buffer_cur += (1 - transitions)
   update_buffer_cur(buffer_cur_t, transitions_t, t);
+#if DEBUG
   cout << "buffer cur after" << endl;
   print_device_matrix(buffer_cur_t, 1, spec.batch_size);
+#endif
 
 }
 
@@ -174,7 +184,7 @@ void ThinStack::recurrence(const float *stack_1_t, const float *stack_2_t,
       spec.model_dim, &beta, merge_output, spec.model_dim);
   // merge_out += W_r r
   float beta2 = 1.0f;
-  auto ret = cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, spec.model_dim, spec.batch_size,
+  cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, spec.model_dim, spec.batch_size,
       spec.model_dim, &alpha, params.compose_W_r, spec.model_dim, stack_1_t,
       spec.model_dim, &beta2, merge_output, spec.model_dim);
 
@@ -191,17 +201,20 @@ void ThinStack::mask_and_update_stack(const float *push_value,
   // timestep `t`).
   int stack_offset = t * spec.batch_size * spec.model_dim;
 
+#if DEBUG
   cout << "merge value:" << endl;
   print_device_matrix(merge_value, spec.model_dim, spec.batch_size);
-
   cout << "push value:" << endl;
   print_device_matrix(push_value, spec.model_dim, spec.batch_size);
+#endif
 
   k::switch_m(&stack[stack_offset], transitions, merge_value, push_value,
               spec.batch_size, spec.model_dim);
 
+#if DEBUG
   cout << "stack top t:" << endl;
   print_device_matrix(&stack[stack_offset], spec.model_dim, spec.batch_size);
+#endif
 
 }
 
