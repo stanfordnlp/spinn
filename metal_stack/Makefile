@@ -36,18 +36,20 @@ gmock_main.a : gmock-all.o gtest-all.o gmock_main.o
 	$(AR) $(ARFLAGS) $@ $^
 ######
 
-test: gtest_main.a gmock_main.a
+SOURCES = thin-stack.cc \
+		  kernels.cu util.cc
+
+test: gtest_main.a gmock_main.a test.cc $(SOURCES)
 	rm -f test
 	nvcc -g -O0 -lcublas -lcurand \
 		-isystem $(GTEST_DIR)/include -isystem $(GMOCK_DIR)/include \
 		-std=c++11 -o test \
-		$^ \
-		kernels.cu test.cc thin-stack.cc util.cc
+		$^
 
-testrun:
+testrun: $(SOURCES)
 	nvcc -g -O0 -lcublas -lcurand \
 	  -std=c++11 -o testrun \
-	  kernels.cu testrun.cc thin-stack.cc util.cc
+	  testrun.cc $^
 
 clean:
 	rm -f testrun
