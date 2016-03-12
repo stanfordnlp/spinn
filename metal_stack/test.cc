@@ -53,7 +53,7 @@ static inline void assert_matrices_equal(const float *m1, const float *m2,
   free(h_m1);
 }
 
-static float *compose(float *dst, ThinStack ts, const float *l,
+static float *compose(float *dst, ThinStack& ts, const float *l,
     const float *r) {
   // W_l l
   float alpha = 1.0f, beta = 0.0f;
