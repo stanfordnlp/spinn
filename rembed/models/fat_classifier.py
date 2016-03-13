@@ -190,7 +190,7 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
         initialize_hyp_tracking_state=FLAGS.initialize_hyp_tracking_state)
 
     premise_stack_tops = premise_model.stack_tops if FLAGS.use_attention != "None" else None
-    premise_tracking_c_state_final = premise_model.tracking_c_state_final
+    premise_tracking_c_state_final = premise_model.tracking_c_state_final if cls is not rembed.plain_rnn.RNN else None
     hypothesis_model = cls(
         FLAGS.model_dim, FLAGS.word_embedding_dim, vocab_size, seq_length,
         compose_network, embedding_projection_network, training_mode, ground_truth_transitions_visible, vs,
