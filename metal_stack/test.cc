@@ -4,6 +4,7 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
+#include "kernels.cuh"
 #include "thin-stack.h"
 #include "util.h"
 
@@ -161,4 +162,27 @@ TEST_F(ThinStackTest, ShiftShiftMergeShiftMerge) {
   float *output = &ts.stack[4 * spec.model_dim * spec.batch_size];
   assert_matrices_equal(output, c2, spec.model_dim, spec.batch_size);
 
+}
+
+
+TEST(Kernels, AddI_MV) {
+  int M = 5, N = 10;
+  float *m, *v;
+  cudaMalloc(&m, M * N * sizeof(float));
+  cudaMalloc(&v, M * sizeof(float));
+
+  fill_rand_matrix(m, M, N);
+  fill_rand_matrix(v, M, 1);
+
+  cout << "matrix" << endl;
+  print_device_matrix(m, M, N);
+
+  cout << "vector" << endl;
+  print_device_matrix(v, M, 1);
+
+  kernels::addi_mv(m, v, 1.0, M, N);
+  cudaDeviceSynchronize();
+
+  cout << "result" << endl;
+  print_device_matrix(m, M, N);
 }

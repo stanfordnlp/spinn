@@ -27,6 +27,15 @@ namespace kernels {
           float v1_coeff, float v2_coeff, int N);
 
   /**
+   * Broadcast-add an `N`-dim column vector onto an `M * N` matrix.
+   *
+   *     m += coeff * v
+   */
+  void addi_mv(float *m, const float *v, float coeff, int M, int N);
+  __global__ void k_addi_mv(float *m, const float *v, float coeff, int M,
+      int N);
+
+  /**
    * Retrieve a subset of `N` rows from the contiguous `src_N * D` matrix `src`
    * and write them to `dst` (`M >= N`). `dst` should be large enough to hold
    * the `N * D` float result. `idxs` should be a length-`N` int array.
