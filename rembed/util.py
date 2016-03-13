@@ -991,7 +991,6 @@ def CropAndPadForRNN(dataset, length, logger=None, sentence_pair_data=False):
         keys = ["tokens"]
 
     for example in dataset:
-        print example
         for tokens_key in keys:
             num_tokens = len(example[tokens_key])
             tokens_left_padding = length - num_tokens
