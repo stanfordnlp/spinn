@@ -109,7 +109,6 @@ void ThinStack::forward() {
 
   for (int t = 0; t < spec.seq_length; t++) {
     step(t);
-    cudaDeviceSynchronize();
 #if DEBUG
     cout << endl << "======================" << endl << endl;
 #endif
@@ -130,7 +129,6 @@ void ThinStack::forward() {
 void ThinStack::step(int t) {
 
   // TODO sync after kernel calls.
-  cout << t * spec.batch_size << endl;
   float *transitions_t = &transitions[t * spec.batch_size];
 #if DEBUG
   cout << "transitions " << t << endl;
