@@ -401,7 +401,7 @@ Lexicalized classifier \cite{snli:emnlp2015}
 \multicolumn{5}{c}{Our results}\\
 \midrule
 300d LSTM RNN encoders          & 1.7m                  & --                &   83.9      &   80.6       \\
-\result{300d PINN-Ext w/o tracking}   
+\result{300d PINN-Ext-NoTracking}   
                         & ?                  & --                &   ?      &   81.9dv       \\
 \result{300d PINN-Ext }
                         & ?                  & --                &   ?      &   \underline{84.8dv}       \\
@@ -431,24 +431,23 @@ We find that the bare PINN-Ext model performs relatively poorly, but that the fu
 
 \subsection{Step time}
 
-\todo{[JG,SB] Does anyone know of a better baseline TreeRNN implementation that we can use on Jagupard? We can use the CoreNLP SST model, but using a Java model as a baseline seems worrying unless we're guaranteed that it's competitively fast.}
+\todo{[JG] Write me!}
 
-Comparing model step time to the plain RNN of \citealt{li2015tree}. We use the small \citealt{pang2004sentimental} sentiment corpus that they use, and train with identical hyperparameters: ...
-
-\todo{Comment on how long top-quality stand-alone greedy parsers take, for comparison.}
+\vspace{10em}
 
 \section{Discussion}
 
-\todo{Contrast sentence encoders w/ other models}
+\todo{[SB] Contrast sentence encoders w/ other models}
 
-\result{Patterns in the examples that the tree model got right that the LSTM didn't}
+\result{[SB] Patterns in the examples that the tree model got right that the LSTM didn't}
 
 \section{Conclusions and future work}
 
+We find that:
 \begin{itemize}
-\item It is possible to train a tree-structured model, without approximation, on large-scale language learning tasks.
-\item Tree structure helps in large-scale language learning tasks. Not massively, but measurably.
-\item An external parser is not necessary.
+\item Our PINN-Ext-NoTracking model precisely implements tree-structured compositionality (as in a TreeLSTM), but is capable of exploiting batched computation for dramatic \todo{[JG] Numbers} improvements in inference speed.
+\item While the use of tree-structure alone does not offer a substantial improvement over an LSTM baseline, our tree-sequence hybrid model (PINN-Ext) substantially outperforms that baseline, suggesting that our model is able to successfully exploit tree structure, while using sequential context information to better resolve ambiguity.
+\item It is possible to remove the dependence on an external parser from our model ...
 \end{itemize}
 
 \paragraph{Future work} Because our aim for this paper aims to introduce a general purpose model for sentence encoding, we did not pursue the use of soft attention, despite its demonstrated effectiveness of the SNLI task. However, the choice of whether to use soft attention and the choice of what representations to perform attention over are orthogonal, and we expect that it should be possible to productively combine our model with soft attention to yield state-of-the-art performance.
