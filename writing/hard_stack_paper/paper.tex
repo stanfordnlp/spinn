@@ -260,7 +260,7 @@ This paper presents the transition-based sentence model within the context of \t
     {\vec{h}_{\text{premise}} * \vec{h}_{\text{hypothesis}}}
 \end{equation}
 
-This feature vector is then passed to a series of two (\todo{Update w/ final number}) ReLU neural network layers, then passed into a linear transformation, and then finally passed to a softmax layer, which yields a distribution among the three labels.
+This feature vector is then passed to a series of two (\todo{Update w/ final number}) ReLU neural network layers (following \citealt{snli:emnlp2015}), then passed into a linear transformation, and then finally passed to a softmax layer, which yields a distribution among the three labels.
 
 \subsection{Tracking left context with an auxiliary LSTM}
 
@@ -280,7 +280,7 @@ The model described so far is the PINN-Ext model, which uses sequences of \shift
 \vec{p}_{trans} = \text{softmax}(M_{trans}\vec{h}_{track})
 \end{equation}
 
-The use of a probabilistic classifier is simply a convenience for training. Transition decisions are hard, and only a single transition is chosen at each step (i.e., it is not well defined in our model to perform only three-quarters of a \shift operation). 
+The use of a probabilistic classifier is simply a convenience for training. Transition decisions are hard, and only a single transition is chosen at each step (i.e., it is not well defined in our model to perform only three-quarters of a \shift operation). Because of this, the transition prediction function is trained solely using a parsing-related objective, and cannot be directly trained to optimize for the downstream semantic objective, even though it uses the same word and phrase representations that are used for that downstream objective. We leave the project of true joint learning---learning syntactic parsing from a semantic objective---to future work.
 
 We train the model to mimic the decisions of an external parser. In particular, we use the transition sequences corresponding to the Stanford Parser parses included with the SNLI corpus. At training time, the classifier is trained using a cross-entropy objective using a supervision signal from those parses, and we use those external parses to guide the behavior of the model. At test time, a transition is chosen at each step by taking a hard max over the output of this function. We did not find the technique of scheduled sampling \cite{bengio2015scheduled}, or allowing the model to use its own transition decisions in some instances at training time, to be helpful.
 
@@ -368,14 +368,15 @@ SNLI is a corpus of 570k human-labeled pairs of scene descriptions like the one 
 
 \subsection{Models evaluated}
 
-We evaluate five models on the SNLI task. Each uses 300d hidden states: \todo{[SB] Reframe around M1.}
+We evaluate four models on the SNLI task. Each uses 300d hidden states:
 \begin{itemize}
 \item A baseline LSTM model (similar to that of \citealt{snli:emnlp2015}) that uses the same classifier architecture as our models, but encodes sentences using a single layer LSTM RNN sequence model.
-\item The unaugmented transition-based sentence model.
-\item The transition-based sentence model with the tracking LSTM.
+\item The minimal PINN-Ext model, which uses transitions from an external parser, and has no tracking LSTM to inform semantic composition. This model is strictly equivalent to a TreeLSTM.
+\item The full PINN-Ext model, which adds in the use of a tracking LSTM to guide composition, making it a tree-sequence hybrid.
+\item The full PINN model, which makes its own parsing decisions, and does not depend on an external parser at test time, making it slightly weaker but a practical choice in applied settings.
 \end{itemize}
 
-\todo{[SB] Describe metrics, esp parsing.}
+We compare our models against a range of baselines, including the strongest published non-neural network-based result from \cite{snli:emnlp2015}, a set of previous neural network models built around sentence encoders, and a set of models built around soft attention architectures. We should note that these attention-based models are by far the strongest published on SNLI to date, but we do not wish to compare our model with those models directly. SNLI was originally presented as an evaluation and development task for sentence encoding models, on the premise that sentence encoding models that do well on SNLI capture sentence meaning in a general sense, and are well suited to use on a range of NLP tasks. We follow that approach, and focus on sentence encoding, rather than on attentional models, which are much more narrowly adapted to the sentence-pair structure of SNLI examples.
 
 \begin{table*}[t]
   \centering\small
@@ -383,12 +384,12 @@ We evaluate five models on the SNLI task. Each uses 300d hidden states: \todo{[S
     \toprule
 Model                   & Params.    & Trans. acc.  &   Train  &   Test \\
 \midrule
-\multicolumn{4}{c}{Previous non-NN results}\\
+\multicolumn{5}{c}{Previous non-NN results}\\
 \midrule
 Lexicalized classifier \cite{snli:emnlp2015}
                         & --                & --                    &   99.7   &   78.2      \\
 \midrule
-\multicolumn{4}{c}{Previous sentence encoder-based NN results}\\
+\multicolumn{5}{c}{Previous sentence encoder-based NN results}\\
 \midrule
 100d LSTM encoders \cite{snli:emnlp2015}
                         & 221k               & --               &   84.8   &   77.6      \\
@@ -397,7 +398,21 @@ Lexicalized classifier \cite{snli:emnlp2015}
 300d Tree-based CNN encoders \cite{mou2015recognizing}
                         & 3.5m                & --             &   83.4   &   82.1       \\
 \midrule
-\multicolumn{4}{c}{Other previous NN results}\\
+\multicolumn{5}{c}{Our results}\\
+\midrule
+300d LSTM RNN encoders          & 1.7m                  & --                &   83.9      &   80.6       \\
+\result{300d PINN-Ext w/o tracking}   
+                        & ?                  & --                &   ?      &   81.9dv       \\
+\result{300d PINN-Ext }
+                        & ?                  & --                &   ?      &   \underline{84.8dv}       \\
+\result{300d PINN }
+                        & ?                  & 92.2+dv            &   ?    &   83.3+dv       \\          
+% \result{300d PINN-Ext, sequence-based attn.   }     
+%                         & ?                  & --                &   ?      &   86.3dv         \\
+% \result{300d PINN-Ext, tree-based attn. }           
+%                         & ?                  & --                &   ?      &   \textbf{?}\\
+\midrule
+\multicolumn{5}{c}{Other previous NN results}\\
 \midrule
 100d LSTM w/ word-by-word attention \cite{rocktaschel2015reasoning}
                         & 252k               & --              &   85.3   &   83.5       \\
@@ -405,28 +420,14 @@ Lexicalized classifier \cite{snli:emnlp2015}
                         & 1.9m               & --             &   92.0   &   86.1      \\
 300d LSTMN with deep attention fusion \cite{cheng2016long}
                         & 1.4m               & --                &   92.3   &   \textbf{89.1}      \\
-\midrule
-\multicolumn{4}{c}{New results}\\
-\midrule
-\result{300d LSTM RNN } & ?                  & --                &   83.9      &   80.6       \\
-\result{300d PINN-Ext w/o tracking}   
-                        & ?                  & --                &   ?      &   81.9dv       \\
-\result{300d PINN-Ext }
-                        & ?                  & --                &   ?      &   \underline{84.8dv}       \\
-\result{300d PINN }
-                        & ?                  & 92.2+dv                  &   ?    &   83.3+dv       \\          
-% \result{300d PINN-Ext, sequence-based attn.   }     
-%                         & ?                  & --                &   ?      &   86.3dv         \\
-% \result{300d PINN-Ext, tree-based attn. }           
-%                         & ?                  & --                &   ?      &   \textbf{?}\\
     \bottomrule
   \end{tabular}
-  \protect\caption{\protect\label{tab:results}Results on SNLI 3-way inference classification. Params. is the approximate number of trained parameters (excluding word embeddings for models where they are trained). Trans. acc. is the model's accuracy in predicting parsing transitions. Train and test are SNLI classification accuracy. \result{[JG]Add seconds-per-step *if* we get a reasonably well-optimized model in time.} \todo{[SB]: Estimate param counts.}} 
+  \protect\caption{\protect\label{tab:results}Results on SNLI 3-way inference classification. Params. is the approximate number of trained parameters (excluding word embeddings for models where they are trained). Trans. acc. is the model's accuracy in predicting parsing transitions. Train and test are SNLI classification accuracy. \todo{[SB]: Estimate param counts as numbers come in.}} 
 \end{table*}
 
-\paragraph{Results}
+\paragraph{Results} Table~\ref{tab:results} shows our results. Our primary evaluation metric for all models is three-way classification accuracy on the SNLI test set. For the full PINN model, we also report a measure of the agreement of its generated parses with the Stanford Parser's parses of the same data, expressed in terms of the model's accuracy in making two-way transition decisions. In addition, we report the number of trained parameters in each model as well as training set accuracy.
 
-Table~\ref{tab:results} shows our results.
+We find that the bare PINN-Ext model performs relatively poorly, but that the full PINN-Ext with the added tracking LSTM reaches state-of-the-art accuracy among sentence encoding based models, indicating that our tree-sequence hybrid approach succeeds in combining the strengths of both approaches to encoding. The fully independent PINN model with its relatively weak internal parser performs more poorly, but nonetheless exceeds the performance of the LSTM baseline. None of our models reached the performance of the strongest attention-based models, which were explicitly engineered for the sentence pair-based structure of the SNLI task.
 
 \subsection{Step time}
 
@@ -454,7 +455,7 @@ Comparing model step time to the plain RNN of \citealt{li2015tree}. We use the s
 
 The tracking LSTM that we incorporated into the PINN uses only simple, quick-to-compute features drawn from the head of the buffer and the head of the stack. It is plausible that giving the tracking LSTM access to more information from the buffer and stack at each step would allow it to better represent the context of each tree node, including information about that nodes neighbors in the sentence string and its likely position in the final tree, and that that context information could support both better parsing and better sentence encoding. One promising way to pursue this goal would be to encode the full contents of the stack and buffer at each time step following the method used by \citealt{dyer-EtAl:2015:ACL-IJCNLP} for parsing.
 
-Implementing such a model on top of our proposed stack-based design would learn a model that could productively share representations between the two tasks. Implementing such a model on top of a differentiable version of our stack-based design (possibly following \citealt{grefenstette2015learning,joulin2015inferring}) would further make it possible for the model to learn to parse using guidance from the semantic representation objective, essentially allowing  learn to produce parses that are, in aggregate, better suited to supporting semantic interpretation than those supplied in the training data. 
+For a more ambitious goal, we expect that it should be possible to implement a variant of the PINN on top of a modified stack data structure with differentiable \textsc{push} and \textsc{pop} operations (possibly following \citealt{grefenstette2015learning,joulin2015inferring}) would make it possible for the model to learn to parse using guidance from the semantic representation objective, essentially allowing learn to produce parses that are, in aggregate, better suited to supporting semantic interpretation than those supplied in the training data. 
 
 %    \subsubsection*{Acknowledgments}
 %    
