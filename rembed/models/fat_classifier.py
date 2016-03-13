@@ -98,16 +98,16 @@ def build_sentence_model(cls, vocab_size, seq_length, tokens, transitions,
         ss_prob=ss_prob,
         connect_tracking_comp=FLAGS.connect_tracking_comp,
         context_sensitive_shift=FLAGS.context_sensitive_shift,
-        context_sensitive_use_relu=FLAGS.context_sensitive_use_relu)
+        context_sensitive_use_relu=FLAGS.context_sensitive_use_relu,
+        use_input_batch_norm=False)
 
     # Extract top element of final stack timestep.
-    if FLAGS.lstm_composition:
+    if FLAGS.lstm_composition or cls is rembed.plain_rnn.RNN:
         sentence_vector = sentence_model.final_representations[:,:FLAGS.model_dim / 2].reshape((-1, FLAGS.model_dim / 2))
         sentence_vector_dim = FLAGS.model_dim / 2
     else:
         sentence_vector = sentence_model.final_representations.reshape((-1, FLAGS.model_dim))
         sentence_vector_dim = FLAGS.model_dim
-    # TODO(SB): Make sure something sensible happens with the plain RNN.
 
     sentence_vector = util.BatchNorm(sentence_vector, sentence_vector_dim, vs, "sentence_vector", training_mode)
     sentence_vector = util.Dropout(sentence_vector, FLAGS.semantic_classifier_keep_rate, training_mode)
@@ -190,7 +190,7 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
         initialize_hyp_tracking_state=FLAGS.initialize_hyp_tracking_state)
 
     premise_stack_tops = premise_model.stack_tops if FLAGS.use_attention != "None" else None
-    premise_tracking_state_final = premise_model.tracking_state_final
+    premise_tracking_c_state_final = premise_model.tracking_c_state_final if cls is not rembed.plain_rnn.RNN else None
     hypothesis_model = cls(
         FLAGS.model_dim, FLAGS.word_embedding_dim, vocab_size, seq_length,
         compose_network, embedding_projection_network, training_mode, ground_truth_transitions_visible, vs,
@@ -209,7 +209,7 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
         premise_stack_tops=premise_stack_tops,
         is_hypothesis=True,
         initialize_hyp_tracking_state=FLAGS.initialize_hyp_tracking_state,
-        premise_tracking_state_final=premise_tracking_state_final)
+        premise_tracking_c_state_final=premise_tracking_c_state_final)
 
     # Extract top element of final stack timestep.
     if FLAGS.use_attention == "None" or FLAGS.use_difference_feature or FLAGS.use_product_feature:
@@ -730,8 +730,8 @@ if __name__ == '__main__':
     gflags.DEFINE_boolean("connect_tracking_comp", True,
         "Connect tracking unit and composition unit. Can only be true if using LSTM in both units.")
     gflags.DEFINE_boolean("initialize_hyp_tracking_state", False,
-        "Initialize the h and c state of the tracking unit of hypothesis model with the final"
-        "tracking unit states of the premise model.")
+        "Initialize the c state of the tracking unit of hypothesis model with the final"
+        "tracking unit c state of the premise model.")
 
     # Optimization settings.
     gflags.DEFINE_integer("training_steps", 500000, "Stop training after this point.")

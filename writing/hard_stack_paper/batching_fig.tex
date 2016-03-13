@@ -1,37 +1,8 @@
 %!TEX root = paper.tex
 
 \begin{figure}[t]
-\begin{subfigure}[t]{0.9\columnwidth}
-\begin{center}
- \begin{tikzpicture}
-    \tikzstyle{word}=[fill=yellow!40,text height=2mm,line width=1pt,draw=black]    
-    \tikzstyle{nonleaf}=[fill=yellow!40,text height=2mm,line width=1pt,draw=black]
-    \tikzstyle{alt}=[fill=orange!40]    
-    \pgfsetarrowsend{latex}
-    \tikzset{edge from parent/.append style={<-, line width=1pt}}   
 
-    \begin{scope}[shift={(0in,0in)}]
-
-    \Tree [.\node[nonleaf,alt](2thekittenmeowed){the old cat meowed}; [.\node[nonleaf,alt](2thekitten){the old cat}; \node[word,alt](2the){the}; [.\node[nonleaf,alt](2bigkitten){old cat}; \node[word,alt](2kitten){old}; \node[word,alt](2kitten){cat}; ] ] \node[word,alt](2meowed){meowed}; ]
-
-    \end{scope}
-
-
-    \begin{scope}[shift={(0.9in,-0.8in)}, frontier/.style={distance from root=60pt}]
-
-    \Tree [.\node[nonleaf](1thecatsatdown){the cat sat down}; [.\node[nonleaf](1thecat){the cat}; \node[word](1the){the}; \node[word](1cat){cat}; ] [.\node[nonleaf](1satdown){sat down}; \node[word](1sat){sat}; \node[word](1down){down}; ] ]
-
-    \end{scope}
-
-\end{tikzpicture}
-\end{center}
-
-\caption{\label{fig:batching:bad}Trees are hard to batch.}
-\end{subfigure}
-
-\vspace{2em}
-
-\begin{subfigure}[t]{0.9\columnwidth}
+\begin{subfigure}[t]{\columnwidth}
  \begin{tikzpicture}
     \tikzstyle{word}=[fill=yellow!40,text height=2mm,line width=1pt,draw=black]    
     \tikzstyle{nonleaf}=[fill=yellow!40,text height=2mm,line width=1pt,draw=black] 
@@ -39,7 +10,7 @@
     \pgfsetarrowsend{latex}
     \tikzstyle{fwd} = [draw=black, line width=1pt]
    
-    \def\dx{26pt}
+    \def\dx{23pt}
     \def\dy{11pt}
     \def\sy{7*\dy}
     \def\oxb{5.5*\dx}
@@ -52,12 +23,13 @@
     \node[word,alt]  (w1) at (\ox+-3*\dx,\by+0*\dy) {the};
     \node[word,alt]  (w2) at (\ox+-1*\dx,\by+0*\dy) {old};
     \node[word,alt]  (w3) at (\ox+1*\dx,\by+0*\dy) {cat};
-    \node[word,alt]  (w4) at (\ox+3*\dx,\by+0*\dy) {meowed};
+    \node[word,alt]  (w4) at (\ox+3*\dx,\by+0*\dy) {ate};
 
     \node[word,alt]  (n1) at (\ox+-3*\dx,\by+3*\dy) {~~~~~};
     \node[word,alt]  (n2) at (\ox+-1*\dx,\by+3*\dy) {~~~~~};
     \node[word,alt]  (n3) at (\ox+1*\dx,\by+3*\dy) {~~~~~};
     \node[word,alt]  (n4) at (\ox+3*\dx,\by+3*\dy) {~~~~~};
+    \node[]  (n5) at (\ox+4.5*\dx,\by+3*\dy) {...};
 
    \draw [fwd] (w1) -- (n1);
    \draw [fwd] (w2) -- (n2);
@@ -67,6 +39,8 @@
    \draw [fwd] (n1) -- (n2);
    \draw [fwd] (n2) -- (n3);
    \draw [fwd] (n3) -- (n4);
+   \draw [fwd] (n4) -- (n5);
+
 
     \end{scope}
 
@@ -81,6 +55,8 @@
     \node[word]  (n2) at (\ox+-1*\dx,\by+3*\dy) {~~~~~};
     \node[word]  (n3) at (\ox+1*\dx,\by+3*\dy) {~~~~~};
     \node[word]  (n4) at (\ox+3*\dx,\by+3*\dy) {~~~~~};
+    \node[]  (n5) at (\ox+4.5*\dx,\by+3*\dy) {...};
+
 
    \draw [fwd] (w1) -- (n1);
    \draw [fwd] (w2) -- (n2);
@@ -90,13 +66,45 @@
    \draw [fwd] (n1) -- (n2);
    \draw [fwd] (n2) -- (n3);
    \draw [fwd] (n3) -- (n4);
+   \draw [fwd] (n4) -- (n5);
 
     \end{scope}
 
 \end{tikzpicture}
 
 
-\caption{\label{fig:batching:good}Sequences are easy to batch.}
+\caption{\label{fig:batching:good}A conventional sequence-based RNN, instantiated for two sentences.}
 \end{subfigure}
-\caption{An illustration of a conventionally-implemented TreeRNN model (a) and a sequence-based RNN model (b).
+
+\vspace{2em}
+
+\begin{subfigure}[t]{\columnwidth}
+\begin{center}
+ \begin{tikzpicture}
+    \tikzstyle{word}=[fill=yellow!40,text height=2mm,line width=1pt,draw=black]    
+    \tikzstyle{nonleaf}=[fill=yellow!40,text height=2mm,line width=1pt,draw=black]
+    \tikzstyle{alt}=[fill=orange!40]    
+    \pgfsetarrowsend{latex}
+    \tikzset{edge from parent/.append style={<-, line width=1pt}}   
+
+    \begin{scope}[shift={(0in,0in)}]
+
+    \Tree [.\node[](root){...}; [.\node[nonleaf,alt](2thekittenate){the old cat ate}; [.\node[nonleaf,alt](2thekitten){the old cat}; \node[word,alt](2the){the}; [.\node[nonleaf,alt](2bigkitten){old cat}; \node[word,alt](2kitten){old}; \node[word,alt](2kitten){cat}; ] ] \node[word,alt](2ate){ate}; ] ]
+
+    \end{scope}
+
+
+    \begin{scope}[shift={(0.9in,-0.8in)}]
+
+    \Tree [.\node[](root){...}; [.\node[nonleaf](1thecatsatdown){the cat sat down}; [.\node[nonleaf](1thecat){the cat}; \node[word](1the){the}; \node[word](1cat){cat}; ] [.\node[nonleaf](1satdown){sat down}; \node[word](1sat){sat}; \node[word](1down){down}; ] ] ]
+
+    \end{scope}
+
+\end{tikzpicture}
+\end{center}
+
+\caption{\label{fig:batching:bad}A conventional TreeRNN, instantiated for two sentences.}
+\end{subfigure}
+
+\caption{An illustration of two standard designs for sentence encoders. Note that the TreeRNN, unlike the sequence-based RNN, requires a substantially different connection structure for each sentence.}
 \end{figure}
