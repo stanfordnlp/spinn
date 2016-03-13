@@ -12,7 +12,7 @@
 using namespace std;
 
 
-#define DEBUG 0
+#define DEBUG 1
 
 typedef struct ModelSpec {
   size_t model_dim;
@@ -25,7 +25,7 @@ typedef struct ModelSpec {
 
 
 float *load_weights(string filename, int N);
-float *load_weights_cuda(string filename, int N);
+float *load_weights_cuda(string filename, int N, float *target=NULL);
 
 cublasHandle_t getCublasHandle();
 

@@ -46,10 +46,10 @@ test: gtest_main.a gmock_main.a test.cc $(SOURCES)
 		-std=c++11 -o test \
 		$^
 
-testrun: $(SOURCES)
+testrun: testrun.cc $(SOURCES)
 	nvcc -g -O0 -lcublas -lcurand \
 	  -std=c++11 -o testrun \
-	  testrun.cc $^
+	  $^
 
 clean:
 	rm -f testrun

@@ -105,6 +105,7 @@ void ThinStack::forward() {
   // TODO embedding projection
   buffer = X;
   reset();
+  cudaDeviceSynchronize();
 
   for (int t = 0; t < spec.seq_length; t++) {
     step(t);
@@ -206,6 +207,14 @@ void ThinStack::step(int t) {
 
 void ThinStack::recurrence(const float *stack_1_t, const float *stack_2_t,
     const float *buffer_top_t) {
+
+#if DEBUG
+  cout << "left child:" << endl;
+  print_device_matrix(stack_2_t, spec.model_dim, spec.batch_size);
+
+  cout << "right child:" << endl;
+  print_device_matrix(stack_1_t, spec.model_dim, spec.batch_size);
+#endif
 
   // merge_out = W_l l
   float alpha = 1.0f;

@@ -14,14 +14,18 @@ float *load_weights(string filename, int N) {
   return ret;
 }
 
-float *load_weights_cuda(string filename, int N) {
+float *load_weights_cuda(string filename, int N, float *target) {
   float *h_weights = load_weights(filename, N);
-  float *d_weights;
-  cudaMalloc(&d_weights, N * sizeof(float));
-  cudaMemcpy(d_weights, h_weights, N * sizeof(float),
-      cudaMemcpyHostToDevice);
+
+  if (!target) {
+    float *d_weights;
+    cudaMalloc(&d_weights, N * sizeof(float));
+    target = d_weights;
+  }
+  cudaMemcpy(target, h_weights, N * sizeof(float),
+        cudaMemcpyHostToDevice);
   free(h_weights);
-  return d_weights;
+  return target;
 }
 
 
@@ -50,7 +54,7 @@ void print_device_matrix(const float *m, int M, int N) {
 
     for (int j = 0; j < N; j++) {
       float val = h_m[j * M + i];
-      printf(" %+.03f, ", val);
+      printf(" %+.05f, ", val);
     }
 
     cout << " ],";
