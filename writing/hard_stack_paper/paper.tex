@@ -156,7 +156,7 @@ Tree-structured neural networks integrate valuable syntactic parse information i
 
 \input{batching_fig.tex}
 
-A wide range of current state-of-the-art models in NLP are built around neural network components that build vector representations of sentence meaning \cite{socher2011semi,sutskever2014sequence} \todo{[SB] Cite Oriol's conversation paper.}. This component, the sentence encoder, is generally formulated as a learned parametric function from word vectors to sentence vectors, and this function can take a range of different forms. Common sentence encoders include sequence-based recurrent neural network models (RNNs) with Long Short-Term Memory (\citealt{hochreiter1997long}, see Figure~\ref{fig:batching:good}), which accumulate information over the sentence sequentially, convolutional neural networks over words or characters \cite{kalchbrenner2014convolutional} \todo{Cite LeCun CharConvNet}, which pool information over short localsequences of words, and tree-structured recursive neural networks (TreeRNNs \citealt{goller1996learning,socher2011semi}, see Figure~\ref{fig:batching:bad}), which propagate information up a binary tree structure over the words. Of these, there are tidy theoretical arguments suggesting that the TreeRNN is the principled choice: meaning in natural language sentences is widely believed to be constructed incrementally according to a tree-structure \cite{Partee84,Janssen97}, and so a model which instantiates that tree structure should have a maximally easy time recovering the process by which meaning is constructed.
+A wide range of current state-of-the-art models in NLP are built around neural network components that build vector representations of sentence meaning \cite{socher2011semi,sutskever2014sequence,vinyals2015neural}. This component, the sentence encoder, is generally formulated as a learned parametric function from word vectors to sentence vectors, and this function can take a range of different forms. Common sentence encoders include sequence-based recurrent neural network models (RNNs) with Long Short-Term Memory (\citealt{hochreiter1997long}, see Figure~\ref{fig:batching:good}), which accumulate information over the sentence sequentially, convolutional neural networks over words or characters \cite{kalchbrenner2014convolutional} \todo{Cite LeCun CharConvNet}, which pool information over short localsequences of words, and tree-structured recursive neural networks (TreeRNNs \citealt{goller1996learning,socher2011semi}, see Figure~\ref{fig:batching:bad}), which propagate information up a binary tree structure over the words. Of these, there are tidy theoretical arguments suggesting that the TreeRNN is the principled choice: meaning in natural language sentences is widely believed to be constructed incrementally according to a tree-structure \cite{Partee84,Janssen97}, and so a model which instantiates that tree structure should have a maximally easy time recovering the process by which meaning is constructed.
 
 In practice, TreeRNNs have shown promise, but they have largely been overlooked in favor of sequence-based RNNs for practical reasons. Batched computation--performing synchronized computation across many examples at once--is a crucial enabling technology in allowing neural networks to be trained efficiently on large datasets \question{What, if anything, can we cite here?}. Batching yields order-of-magnitude improvements in standard CPU implementation, and substantial additional gains on GPUs. TreeRNNs build the parse structure of each sentence they process into the structure of the network itself, forcing the model to perform a different sequence of computations for each sentence, and thereby requiring that each sentence be processed one-by-one, making batched computation impossible. One aim of this paper is to make these large-scale evaluations possible. Beyond even this large handicap, TreeRNNs can only operate on sentences that have already been processed by a syntactic parser, which slows and complicates the implementation of these models for most applications.
 
@@ -169,8 +169,6 @@ In this paper, we introduce the Parser--Interpreter Neural Network, or PINN. The
 \item It supports a novel tree-sequence hybrid mechanism for handling local context in sentence interpretation that yields substantial gains in accuracy over either pure sequence-based models or pure tree-based models.
 \end{itemize}
 
-The paper is structured as follows: We first introduce the PINN, then demonstrate its application to the task of natural language inference. We then present experimental results and discussion. \todo{[SB] Update.}
-
 \input{../model1_fig.tex}
 
 \section{The transition-based sentence model}
@@ -179,7 +177,7 @@ The paper is structured as follows: We first introduce the PINN, then demonstrat
 
 The PINN is based on a formalism adapted from transition-based parsing (\question{What's a good classic citation for this?}).
 
-\todo{[SB, JG] Brief into to transition-based parsing.}
+\todo{[JG, SB] Brief into to transition-based parsing.}
 
 \vspace{10em}
 
@@ -264,13 +262,15 @@ This paper presents the transition-based sentence model within the context of \t
 
 This feature vector is then passed to a series of two (\todo{Update w/ final number}) ReLU neural network layers, then passed into a linear transformation, and then finally passed to a softmax layer, which yields a distribution among the three labels.
 
-\subsection{Tracking left context with an auxiliary LSTM} \todo{[SB] Recheck.}
+\subsection{Tracking left context with an auxiliary LSTM}
 
-Lexical ambiguity is omnipresent in natural language. Most words have multiple senses or meanings, and it is generally necessary to use the context in which a word occurs to determine which of its senses or meanings is meant in a given sentence. Simpler sequence-based sentence encoding models like the standard LSTM RNN have an advantage here: when a sequence-based model first processes a word (first incorporates it into a partial sentence representation), the model has access to a state vector that summarizes all of the words to the left of the current word, and that state vector can serve as a crude but effective form of context to help with disambiguation. In contrast, when standard tree-structured models first process a word, they only have access to the constituent that the word is merging with, which is strictly less than the sequence model has access to, and is often just a single additional word. 
+While it is possible to use the model that we have described thus far as a sentence encoder, at least when an external parser is available to supply \shift~and \reduce~instructions (and we do evaluate such a model), our full model includes an additional component: the tracking LSTM. The tracking LSTM is a simple low-dimensional sequence-based LSTM RNN that operates in tandem with the model, taking inputs from the buffer and stack at each step. It is meant to maintain a low-resolution summary of the portion of the sentence that has been processed so far, and it is used for two purposes: it supplies feature representations to the transition decision function, which is what allows the model to stand alone as a parser, and it additionally supplies a secondary input to the composition function, allowing context information to leak into the construction of sentence meaning, and forming what is effectively a tree-sequence hybrid model.
 
-In addition to our basic model, we additionally propose an extension that adds to the model (and exploits its sequential structure) by building in a parallel sequence-based model to track left context. This auxiliary model, called the tracking LSTM, maintains a low dimensional representation that is updated after every transition, thereby maintaining a representation of the left context at each time point. That representation is fed into the composition function as an additional input to allow for more efficient disambiguation. As long as the representations produced by the tracking LSTM are substantially smaller than those produced by the main composition function, the model is heavily biased towards computing sentence meaning compositionally according to the assigned tree structure, and is simply given the ability to do so with a better awareness of context.
+Technically, the tracking LSTM takes three vectors as inputs at each step: the top element of the buffer $\vec{h}_b^1$, which would be moved in a \shift~operation, and the two two elements of the stack $\vec{h}_s^1$ and $\vec{h}_s^2$ which would be composed in a \reduce~operation. Its output hidden state at each step is used as the external input to the TreeLSTM composition function for that step and as the sole input to the transition prediction function.
 
-The tracking LSTM is a standard LSTM RNN. At each step it takes three vectors as inputs: the top element of the buffer $\vec{h}_b^1$, which would be moved in a \shift~operation, and the two two elements of the stack $\vec{h}_s^1$ and $\vec{h}_s^2$ which would be composed in a \reduce~operation. Its output hidden state at each step is used as the external input to the TreeLSTM composition function for that step.
+\paragraph{Tracking left context for parsing} The decision function which determines which transitions (and thereby, which parses) the PINN will use needs to take as its input some representation of the current state of the model. Because the tracking LSTM directly takes the buffer top as input, it can directly inform that function of what word is under consideration for a possible \shift. Because the tracking LSTM sees the top of the stack at every step, and information only enters the stack by being at the top at some step, the tracking LSTM is able to supply that function with a summary of the state of the stack without having to iterate over the full stack at each step.
+
+\paragraph{Tracking left context for interpretation} Lexical ambiguity is omnipresent in natural language. Most words have multiple senses or meanings, and it is generally necessary to use the context in which a word occurs to determine which of its senses or meanings is meant in a given sentence. Simpler sequence-based sentence encoding models like the standard LSTM RNN have an advantage here: when a sequence-based model first processes a word (first incorporates it into a partial sentence representation), the model has access to a state vector that summarizes all of the words to the left of the current word, and that state vector can serve as a crude but effective form of context to help with disambiguation. In contrast, when standard tree-structured models first process a word, they only have access to the constituent that the word is merging with, which is strictly less than the sequence model has access to, and is often just a single additional word. Feeding a context representation from the tracking LSTM into the composition function is a simple and efficient way to mitigate this disadvantage of tree-structured models.
 
 \subsection{Parsing: Predicting transitions from the tracking state}
 
@@ -280,7 +280,9 @@ The model described so far is the PINN-Ext model, which uses sequences of \shift
 \vec{p}_{trans} = \text{softmax}(M_{trans}\vec{h}_{track})
 \end{equation}
 
-\todo{[SB] Objective function, soft v. hard max.} 
+The use of a probabilistic classifier is simply a convenience for training. Transition decisions are hard, and only a single transition is chosen at each step (i.e., it is not well defined in our model to perform only three-quarters of a \shift operation). 
+
+We train the model to mimic the decisions of an external parser. In particular, we use the transition sequences corresponding to the Stanford Parser parses included with the SNLI corpus. At training time, the classifier is trained using a cross-entropy objective using a supervision signal from those parses, and we use those external parses to guide the behavior of the model. At test time, a transition is chosen at each step by taking a hard max over the output of this function. We did not find the technique of scheduled sampling \cite{bengio2015scheduled}, or allowing the model to use its own transition decisions in some instances at training time, to be helpful.
 
 \subsection{Implementing the transition-based sentence model}
 
@@ -373,6 +375,8 @@ We evaluate five models on the SNLI task. Each uses 300d hidden states: \todo{[S
 \item The transition-based sentence model with the tracking LSTM.
 \end{itemize}
 
+\todo{[SB] Describe metrics, esp parsing.}
+
 \begin{table*}[t]
   \centering\small
   \begin{tabular}{lcccc} 
@@ -404,13 +408,13 @@ Lexicalized classifier \cite{snli:emnlp2015}
 \midrule
 \multicolumn{4}{c}{New results}\\
 \midrule
-\result{300d LSTM RNN      } & ?             & --                &   83.9      &   80.6       \\
+\result{300d LSTM RNN } & ?                  & --                &   83.9      &   80.6       \\
 \result{300d PINN-Ext w/o tracking}   
                         & ?                  & --                &   ?      &   81.9dv       \\
 \result{300d PINN-Ext }
                         & ?                  & --                &   ?      &   \underline{84.8dv}       \\
 \result{300d PINN }
-                        & ?                  & ??                  &   ?    &   82.6+dv       \\          
+                        & ?                  & 92.2+dv                  &   ?    &   83.3+dv       \\          
 % \result{300d PINN-Ext, sequence-based attn.   }     
 %                         & ?                  & --                &   ?      &   86.3dv         \\
 % \result{300d PINN-Ext, tree-based attn. }           
@@ -434,14 +438,9 @@ Comparing model step time to the plain RNN of \citealt{li2015tree}. We use the s
 
 \section{Discussion}
 
+\todo{Contrast sentence encoders w/ other models}
+
 \result{Patterns in the examples that the tree model got right that the LSTM didn't}
-
-\result{Induced alignments}
-
-\begin{figure}
-\vspace{14em}
-\caption{\label{fig:induced-alignment}The alignment induced between two sentences by \result{one of our models.}. Compare with a similar alignment presented by \protect\citealt{DBLP:journals/corr/WangJ15b}.}
-\end{figure}
 
 \section{Conclusions and future work}
 
@@ -451,12 +450,11 @@ Comparing model step time to the plain RNN of \citealt{li2015tree}. We use the s
 \item An external parser is not necessary.
 \end{itemize}
 
-\paragraph{Future work} The tracking LSTM that we incorporated into the PINN uses only simple, quick to compute features drawn from the head of the buffer and the head of the stack. It is plausible that giving the tracking LSTM access to more information from the buffer and stack at each step would allow it to better represent the context of each tree node, including information about that nodes neighbors in the sentence string and its likely position in the final tree, and that that context information could support better sentence encoding. One promising way to pursue this goal would be to encode the full contents of the stack and buffer at each time step following the method used by \citealt{dyer-EtAl:2015:ACL-IJCNLP} for parsing.
-The model presented here is only capable of operating over sentences which have already been assigned a binary constituency tree by a parser. This is not necessarily a practical limitation, since modern parsers can assign reasonably high quality parses in so little time as to not dramatically impact the performance characteristics of our model \todo{[SB,JG,CM] How fast are fast constit parsers?}. However, depending upon an external parser can be a missed opportunity.
+\paragraph{Future work} Because our aim for this paper aims to introduce a general purpose model for sentence encoding, we did not pursue the use of soft attention, despite its demonstrated effectiveness of the SNLI task. However, the choice of whether to use soft attention and the choice of what representations to perform attention over are orthogonal, and we expect that it should be possible to productively combine our model with soft attention to yield state-of-the-art performance.
 
-\todo{[SB] Remove Model 1 references.}
+The tracking LSTM that we incorporated into the PINN uses only simple, quick-to-compute features drawn from the head of the buffer and the head of the stack. It is plausible that giving the tracking LSTM access to more information from the buffer and stack at each step would allow it to better represent the context of each tree node, including information about that nodes neighbors in the sentence string and its likely position in the final tree, and that that context information could support both better parsing and better sentence encoding. One promising way to pursue this goal would be to encode the full contents of the stack and buffer at each time step following the method used by \citealt{dyer-EtAl:2015:ACL-IJCNLP} for parsing.
 
-In future work, we aim to incorporate a parser into our model, allowing it to simultaneously learn to parse sentences (using a conventional parsing objective function) and to use those parses to learn semantic representations for those sentences (using a classification objective function, as in this work). Implementing such a model on top of our proposed stack-based design would learn a model that could productively share representations between the two tasks. Implementing such a model on top of a differentiable version of our stack-based design (possibly following \citealt{grefenstette2015learning,joulin2015inferring}) would further make it possible for the model to learn to parse using guidance from the semantic representation objective, essentially allowing  learn to produce parses that are, in aggregate, better suited to supporting semantic interpretation than those supplied in the training data. 
+Implementing such a model on top of our proposed stack-based design would learn a model that could productively share representations between the two tasks. Implementing such a model on top of a differentiable version of our stack-based design (possibly following \citealt{grefenstette2015learning,joulin2015inferring}) would further make it possible for the model to learn to parse using guidance from the semantic representation objective, essentially allowing  learn to produce parses that are, in aggregate, better suited to supporting semantic interpretation than those supplied in the training data. 
 
 %    \subsubsection*{Acknowledgments}
 %    
