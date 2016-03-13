@@ -56,8 +56,8 @@
 \newcommand{\pland}{\mathbin{\textit{and}}}
 \newcommand{\plor}{\mathbin{\textit{or}}}
 
-\newcommand{\shift}{\textsc{shift}}
-\newcommand{\reduce}{\textsc{reduce}}
+\newcommand{\shift}{\textsc{push}}
+\newcommand{\reduce}{\textsc{merge}}
 
 % Strikeout
 \newlength{\howlong}\newcommand{\strikeout}[1]{\settowidth{\howlong}{#1}#1\unitlength0.5ex%
@@ -287,7 +287,7 @@ We train the model to mimic the decisions of an external parser. In particular, 
 \subsection{Implementing the transition-based sentence model}
 
 \paragraph{The size of the stack}
-The size of the stack should be $N$ for sentences of $N$ words, in case the first reduce merges the final two words. The size of the buffer should be $N$.
+The size of the stack should be $N$ for sentences of $N$ words, in case the first \reduce~operation merges the final two words. The size of the buffer should be $N$.
 
 \paragraph{Converting parses to transition sequences}
 
@@ -315,7 +315,7 @@ To efficiently implement batched computation, we must stipulate a fixed number o
 
 Padding, if done properly, should not impact the output of the model significantly:\footnote{The tracking LSTM can cause a slight dependence of the final representation on unrolling length. Because of this, we always train and test the model with a fixed unrolling length.} a model with the fixed parameters should produce the same representation for a 10-word sentence whether it is unrolled for 19 transitions (the minimum to avoid cropping) or 100.
 
-Cropping necessarily discards information, but if done properly, it is nonetheless possible to learn good representations for cropped sentences. When a transition sequence is cropped, the number of removed \shift~transitions is tracked, and an equal number of word tokens is removed from the tail (left) end of the buffer. This makes it possible for a transition sequence to begin with a \reduce~transition, or to otherwise use a \reduce~transition on a stack that does not have two elements to reduce. In this instance, we simply feed the composition function one or more zero vectors, which represent nonexistent stack elements. If the composition learns to interpret these zero vectors properly, they can be taken to be unknown or incomplete nodes in an otherwise complete tree that is constructed according to the intended parse structure. \todo{[SB] Make a figure showing the results of cropping if there's room.}
+Cropping necessarily discards information, but if done properly, it is nonetheless possible to learn good representations for cropped sentences. When a transition sequence is cropped, the number of removed \shift~transitions is tracked, and an equal number of word tokens is removed from the tail (left) end of the buffer. This makes it possible for a transition sequence to begin with a \reduce~transition, or to otherwise use a \reduce~transition on a stack that does not have two elements to merge. In this instance, we simply feed the composition function one or more zero vectors, which represent nonexistent stack elements. If the composition learns to interpret these zero vectors properly, they can be taken to be unknown or incomplete nodes in an otherwise complete tree that is constructed according to the intended parse structure. \todo{[SB] Make a figure showing the results of cropping if there's room.}
 
 \paragraph{Representing the stack in memory} Or, thin stack. And the cursor strategy for the buffer. 
 \todo{[JG] Explain.}
