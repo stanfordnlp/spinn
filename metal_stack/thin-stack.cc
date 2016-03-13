@@ -219,7 +219,10 @@ void ThinStack::recurrence(const float *stack_1_t, const float *stack_2_t,
       spec.model_dim, &alpha, params.compose_W_r, spec.model_dim, stack_1_t,
       spec.model_dim, &beta2, merge_output, spec.model_dim);
 
-  // TODO bias (broadcast-add)
+  // merge_out += b
+  k::addi_mv(merge_output, params.compose_b, 1.0, spec.model_dim,
+          spec.batch_size);
+
   // TODO relu
 
 }
