@@ -35,6 +35,9 @@ namespace kernels {
   __global__ void k_addi_mv(float *m, const float *v, float coeff, int M,
       int N);
 
+  void relu(float *m, int M, int N);
+  __global__ void k_relu(float *m, int M, int N);
+
   /**
    * Retrieve a subset of `N` rows from the contiguous `src_N * D` matrix `src`
    * and write them to `dst` (`M >= N`). `dst` should be large enough to hold

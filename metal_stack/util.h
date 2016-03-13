@@ -12,7 +12,7 @@
 using namespace std;
 
 
-#define DEBUG 1
+#define DEBUG 0
 
 typedef struct ModelSpec {
   size_t model_dim;

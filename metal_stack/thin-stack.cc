@@ -223,7 +223,7 @@ void ThinStack::recurrence(const float *stack_1_t, const float *stack_2_t,
   k::addi_mv(merge_output, params.compose_b, 1.0, spec.model_dim,
           spec.batch_size);
 
-  // TODO relu
+  k::relu(merge_output, spec.model_dim, spec.batch_size);
 
 }
 

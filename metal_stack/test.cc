@@ -12,11 +12,13 @@ using namespace testing;
 
 static ThinStack make_stack(ModelSpec spec) {
   // Make up random parameters.
-  float *compose_W_l, *compose_W_r;
+  float *compose_W_l, *compose_W_r, *compose_b;
   cudaMalloc(&compose_W_l, spec.model_dim * spec.model_dim * sizeof(float));
   cudaMalloc(&compose_W_r, spec.model_dim * spec.model_dim * sizeof(float));
+  cudaMalloc(&compose_b, spec.model_dim * sizeof(float));
   fill_rand_matrix(compose_W_l, spec.model_dim, spec.model_dim);
   fill_rand_matrix(compose_W_r, spec.model_dim, spec.model_dim);
+  fill_rand_matrix(compose_b, spec.model_dim, 1);
 
   cout << "compose_W_l" << endl;
   print_device_matrix(compose_W_l, spec.model_dim, spec.model_dim);
@@ -24,9 +26,12 @@ static ThinStack make_stack(ModelSpec spec) {
   cout << "compose_W_r" << endl;
   print_device_matrix(compose_W_r, spec.model_dim, spec.model_dim);
 
+  cout << "compose_b" << endl;
+  print_device_matrix(compose_b, 1, spec.model_dim);
+
   ThinStackParameters params = {
     NULL, NULL, NULL, // tracking
-    compose_W_l, compose_W_r, NULL, NULL // composition
+    compose_W_l, compose_W_r, NULL, compose_b // composition
   };
   cublasHandle_t handle = getCublasHandle();
   ThinStack ts(spec, params, handle);
@@ -72,6 +77,12 @@ static float *compose(float *dst, ThinStack& ts, const float *l,
       ts.spec.batch_size, ts.spec.model_dim, &alpha, ts.params.compose_W_r,
       ts.spec.model_dim, r, ts.spec.model_dim, &beta2, dst, ts.spec.model_dim);
 
+  // += b
+  kernels::addi_mv(dst, ts.params.compose_b, 1.0f, ts.spec.model_dim,
+      ts.spec.batch_size);
+
+  kernels::relu(dst, ts.spec.model_dim, ts.spec.batch_size);
+
   return dst;
 }
 
@@ -84,7 +95,7 @@ class ThinStackTest : public ::testing::Test {
     ThinStack ts;
 
     ThinStackTest() :
-      spec({5, 5, 2, 10, 5, 5}),
+      spec({300, 300, 2, 10, 5, 300}),
       ts(make_stack(spec)) {
 
       fill_rand_matrix(ts.X, spec.model_dim, spec.seq_length * spec.batch_size);

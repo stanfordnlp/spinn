@@ -42,6 +42,23 @@ __global__ void k_addi_mv(float *m, const float *v, float coeff, int M, int N) {
 }
 
 
+void relu(float *m, int M, int N) {
+  // NB: a bias here: that we're working with small M, large N
+  int num_threads = min(M, MAX_THREADS_PER_BLOCK);
+  int num_blocks = min(N, MAX_BLOCKS);
+  k_relu<<<num_blocks, num_threads>>>(m, M, N);
+}
+
+__global__ void k_relu(float *m, int M, int N) {
+  for (int i0 = blockIdx.x; i0 < N; i0 += gridDim.x) {
+    for (int i1 = threadIdx.x; i1 < M; i1 += blockDim.x) {
+      m[i0 * M + i1] = max(0.0f, m[i0 * M + i1]);
+    }
+  }
+}
+
+
+
 void subtensor1(float *dst, const float *src, const float *idxs, int src_N,
     int N, int D, float idx_scal_shift, float idx_scal_mul,
     float idx_vec_shift_coeff, float *idx_vec_shift) {
