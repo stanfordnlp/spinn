@@ -58,8 +58,8 @@
 \newcommand{\pland}{\mathbin{\textit{and}}}
 \newcommand{\plor}{\mathbin{\textit{or}}}
 
-\newcommand{\shift}{\textsc{push}}
-\newcommand{\reduce}{\textsc{merge}}
+\newcommand{\shift}{\textsc{shift}}
+\newcommand{\reduce}{\textsc{reduce}}
 
 % Strikeout
 \newlength{\howlong}\newcommand{\strikeout}[1]{\settowidth{\howlong}{#1}#1\unitlength0.5ex%
@@ -282,7 +282,7 @@ The model described so far is the PINN-Ext model, which uses sequences of \shift
 \vec{p}_{trans} = \text{softmax}(W_{trans}\vec{h}_{track})
 \end{equation}
 
-The resulting vector $\vec{p}_{trans}$ is a probability distribution over parsing decisions (i.e., predicting whether to \shift or \reduce at the current timestep). In the full PINN model, we follow whichever transition has a higher predicted probability in this distribution. This prediction module is trained to mimic the decisions of an external parser. In particular, we use the transition sequences corresponding to the constituency parses included in the SNLI corpus. The classifier is trained using a cross-entropy objective:
+The resulting vector $\vec{p}_{trans}$ is a probability distribution over parsing decisions (i.e., predicting whether to \shift~or \reduce~at the current timestep). In the full PINN model, we follow whichever transition has a higher predicted probability in this distribution. This prediction module is trained to mimic the decisions of an external parser. In particular, we use the transition sequences corresponding to the constituency parses included in the SNLI corpus. The classifier is trained using a cross-entropy objective:
 \begin{equation}
   L_{trans} = - \log \vec{p}_{trans}[t^*]
 \end{equation}
@@ -335,9 +335,9 @@ We trained each model for 250k steps in each run, using a minibatch size of 64 f
 
 \subsection{Efficient stack representation}
 
-A naive implementation of the PINN model would require simulating a stack of size $N$ for each input sentence. In order to update the model weights via backpropagation, we would also need to maintain all intermediate stack representations for later chain rule calculations. This implies a total space requirement of $M \times N \times T \times D$, which is prohibitively large for significant batch sizes $M$ or sentence lengths $N$. Such a naive implementation would also require duplicating a largely unchanged stack at each timestep (as \shift and \reduce operations only affect the top of the stack).
+A naive implementation of the PINN model would require simulating a stack of size $N$ for each input sentence. In order to update the model weights via backpropagation, we would also need to maintain all intermediate stack representations for later chain rule calculations. This implies a total space requirement of $B \times N \times T \times D$, which is prohibitively large for significant batch sizes $B$ or sentence lengths $N$. Such a naive implementation would also require duplicating a largely unchanged stack at each timestep (as \shift~and \reduce~operations only affect the top of the stack).
 
-We designed an alternative minimal-space stack algorithm inspired by the zipper technique \cite{huet1997zipper}. For a single input sentence, we represent the stack over the entire feedforward with a $T \times D$ matrix $S$. Each row $S_t$ represents the top of the actual stack at timestep $t$. We maintain a queue of backpointers onto $S$ in order to track which elements should be involved in a \reduce~operation at any given time. Algorithm~\ref{alg:thin-stack} below describes the full mechanics of a stack feedforward in this compressed representation. It operates on the compressed $T \times D$ matrix $S$ and a backpointer queue $Q$. Table~\ref{tbl:thin-stack} shows an example run of this algorithm.
+We designed an alternative minimal-space stack algorithm inspired by the zipper technique \cite{huet1997zipper}. For a single input sentence, we represent the stack with a single $T \times D$ matrix $S$. \todo{[JG] Either expand or remove references to batch size.} Each row $S_t$ represents the top of the actual stack at timestep $t$. We maintain a queue of backpointers onto $S$ in order to track which elements should be involved in a \reduce~operation at any given time. Algorithm~\ref{alg:thin-stack} below describes the full mechanics of a stack feedforward in this compressed representation. It operates on the compressed $T \times D$ matrix $S$ and a backpointer queue $Q$. Table~\ref{tbl:thin-stack} shows an example run of this algorithm.
 
 \begin{algorithm}
 \caption{The thin-stack algorithm}
@@ -367,11 +367,11 @@ This stack representation requires substantially less space. It stores each elem
   0 & $a$ & 0 \\
   1 & $b$ & 0 1 \\
   2 & $c$ & 0 1 2 \\
-  3 & $M(c, b)$ & 0 3 \\
-  4 & $M(M(c, b), a)$ & 4 \\
+  3 & $(c~b)$ & 0 3 \\
+  4 & $((c~b)~a)$ & 4 \\
   \bottomrule
 \end{tabular}
-\caption{An example of the thin-stack algorithm computing a \shift-\shift-\shift-\reduce-\reduce sequence on the input sentence $(a, b, c)$. $S$ is shown in the second column and may be thought of as a list of the tops of the stack at all timesteps $t$. The last two elements of $Q$ specify the rows $t$ which should be involved in a \reduce~operation at the next timestep.}
+\caption{An example of the thin-stack algorithm computing a \shift-\shift-\shift-\reduce-\reduce~sequence on the input sentence $(a, b, c)$. $S$ is shown in the second column and may be thought of as a list of the tops of the stack at all timesteps $t$. The last two elements of $Q$ specify the rows $t$ which should be involved in a \reduce~operation at the next timestep.}
 \label{tbl:thin-stack}
 \end{table}
 
@@ -392,34 +392,6 @@ In its bare form, before the addition of the tracking LSTM, the PINN computes th
 There has been a fairly long history of work on building neural-network based parsers that use the core operations and data structures from transition-based parsing \cite{henderson2004discriminative,emami2005neural,titov2010latent,buys2generative,chen2014,dyer-EtAl:2015:ACL-IJCNLP,kiperwasser2016easy}. In addition, there has been recent work \cite{zhang2016top,dyer2016rnn} proposing models designed primarily for generative language modeling tasks that use these structures as well. To our knowledge, the PINN is the first model to use these structures for the purpose of sentence interpretation, rather than parsing or generation.
 
 \section{Experiments}
-
-\subsection{Natural language inference and SNLI}
-
-We evaluate the PINN on the task of natural language inference (NLI), also known as recognizing textual entailment (RTE). NLI is a sentence pair classification task, in which a model reads two sentences (a premise and a hypothesis), and outputs a judgment of {\it entailment}, {\it contradiction}, or {\it neutral}, reflecting the relationship between the meanings of the two sentences, as in this example from the Stanford NLI corpus (SNLI, \citealt{snli:emnlp2015}), which we use for training and evaluation: 
-
-\begin{quote}
-Premise: {\it Girl in a red coat, blue head wrap and jeans is making a snow angel.}
-
-Hypothesis: {\it A girl outside plays in the snow.}
-
-Correct label: {\it entailment}
-\end{quote}
-
-Even though NLI is framed as a relatively simple three-way classification task, it is nonetheless an effective way of evaluating the ability of some model to extract broadly informative representations of sentence meaning. In order for a model to reliably perform well on NLI across a range of sentence types and text genres, it must be able to represent and reason with all of the core phenomena of natural language semantics, including quantification, coreference, scope, and several types of ambiguity.
-
-SNLI is a corpus of 570k human-labeled pairs of scene descriptions like the one above. We use the standard train--test split and ignore unlabeled examples, which leaves about 549k examples for training, 9,842 for development, and 9,824 for testing. SNLI labels are roughly balanced, with the most frequent label, {\it entailment}, making up 34.2\% of the test set.
-
-\subsection{Models evaluated}
-
-We evaluate four models on the SNLI task. Each uses 300d hidden states:
-\begin{itemize}
-\item A baseline LSTM model (similar to that of \citealt{snli:emnlp2015}) that uses the same classifier architecture as our models, but encodes sentences using a single layer LSTM RNN sequence model.
-\item The minimal PINN-Ext model, which uses transitions from an external parser, and has no tracking LSTM to inform semantic composition. This model is strictly equivalent to a TreeLSTM.
-\item The full PINN-Ext model, which adds in the use of a tracking LSTM to guide composition, making it a tree-sequence hybrid.
-\item The full PINN model, which makes its own parsing decisions, and does not depend on an external parser at test time, making it slightly weaker but a practical choice in applied settings.
-\end{itemize}
-
-We compare our models against a range of baselines, including the strongest published non-neural network-based result from \cite{snli:emnlp2015}, a set of previous neural network models built around sentence encoders, and a set of models built around soft attention architectures. We should note that these attention-based models are by far the strongest published on SNLI to date, but we do not wish to compare our model with those models directly. SNLI was originally presented as an evaluation and development task for sentence encoding models, on the premise that sentence encoding models that do well on SNLI capture sentence meaning in a general sense, and are well suited to use on a range of NLP tasks. We follow that approach, and focus on sentence encoding, rather than on attentional models, which are much more narrowly adapted to the sentence-pair structure of SNLI examples.
 
 \begin{table*}[t]
   \centering\small
@@ -445,11 +417,11 @@ Lexicalized classifier \cite{snli:emnlp2015}
 \midrule
 300d LSTM RNN encoders          & 3.0m                  & --                &   83.9      &   80.6       \\
 \result{300d PINN-Ext-NoTracking}   
-                        & ?                  & --                &   ?      &   81.9dv       \\
+                        & 3.4m                  & --                &   ?      &   81.9dv       \\
 \result{300d PINN-Ext }
-                        & ?                  & --                &   ?      &   \underline{84.8dv}       \\
+                        & 3.7m                  & --                &   ?      &   \underline{84.8dv}       \\
 \result{300d PINN }
-                        & ?                  & 92.2+dv            &   ?    &   83.3+dv       \\          
+                        & ??                  & 92.2+dv            &   ?    &   83.3+dv       \\          
 % \result{300d PINN-Ext, sequence-based attn.   }     
 %                         & ?                  & --                &   ?      &   86.3dv         \\
 % \result{300d PINN-Ext, tree-based attn. }           
@@ -465,8 +437,39 @@ Lexicalized classifier \cite{snli:emnlp2015}
                         & 1.4m               & --                &   92.3   &   \textbf{89.1}      \\
     \bottomrule
   \end{tabular}
-  \protect\caption{\protect\label{tab:results}Results on SNLI 3-way inference classification. Params. is the approximate number of trained parameters (excluding word embeddings for models where they are trained). Trans. acc. is the model's accuracy in predicting parsing transitions. Train and test are SNLI classification accuracy. \todo{[SB]: Estimate param counts as numbers come in.}} 
+  \protect\caption{\protect\label{tab:results}Results on SNLI 3-way inference classification. Params. is the approximate number of trained parameters (excluding word embeddings for models where they are trained). Trans. acc. is the model's accuracy in predicting parsing transitions. Train and test are SNLI classification accuracy.} 
 \end{table*}
+
+
+\subsection{Natural language inference and SNLI}
+
+We evaluate the PINN on the task of natural language inference (NLI), also known as recognizing textual entailment (RTE). NLI is a sentence pair classification task, in which a model reads two sentences (a premise and a hypothesis), and outputs a judgment of {\it entailment}, {\it contradiction}, or {\it neutral}, reflecting the relationship between the meanings of the two sentences, as in this example from the Stanford NLI corpus (SNLI, \citealt{snli:emnlp2015}), which we use for training and evaluation: 
+
+\begin{quote}
+Premise: {\it Girl in a red coat, blue head wrap and jeans is making a snow angel.}
+
+Hypothesis: {\it A girl outside plays in the snow.}
+
+Correct label: {\it entailment}
+\end{quote}
+
+Even though NLI is framed as a relatively simple three-way classification task, it is nonetheless an effective way of evaluating the ability of some model to extract broadly informative representations of sentence meaning. In order for a model to reliably perform well on NLI across a range of sentence types and text genres, it must be able to represent and reason with all of the core phenomena of natural language semantics, including quantification, coreference, scope, and several types of ambiguity.
+
+SNLI is a corpus of 570k human-labeled pairs of scene descriptions like the one above. We use the standard train--test split and ignore unlabeled examples, which leaves about 549k examples for training, 9,842 for development, and 9,824 for testing. SNLI labels are roughly balanced, with the most frequent label, {\it entailment}, making up 34.2\% of the test set.
+
+
+\subsection{Models evaluated}
+
+We evaluate four models on the SNLI task. Each uses 300d hidden states:
+\begin{itemize}
+\item A baseline LSTM model (similar to that of \citealt{snli:emnlp2015}) that uses the same classifier architecture as our models, but encodes sentences using a single layer LSTM RNN sequence model.
+\item The minimal PINN-Ext model, which uses transitions from an external parser, and has no tracking LSTM to inform semantic composition. This model is strictly equivalent to a TreeLSTM.
+\item The full PINN-Ext model, which adds in the use of a tracking LSTM to guide composition, making it a tree-sequence hybrid.
+\item The full PINN model, which makes its own parsing decisions, and does not depend on an external parser at test time, making it slightly weaker but a practical choice in applied settings.
+\end{itemize}
+
+We compare our models against a range of baselines, including the strongest published non-neural network-based result from \cite{snli:emnlp2015}, a set of previous neural network models built around sentence encoders, and a set of models built around soft attention architectures. We should note that these attention-based models are by far the strongest published on SNLI to date, but we do not wish to compare our model with those models directly. SNLI was originally presented as an evaluation and development task for sentence encoding models, on the premise that sentence encoding models that do well on SNLI capture sentence meaning in a general sense, and are well suited to use on a range of NLP tasks. We follow that approach, and focus on sentence encoding, rather than on attentional models, which are much more narrowly adapted to the sentence-pair structure of SNLI examples.
+
 
 \paragraph{Results} Table~\ref{tab:results} shows our results. Our primary evaluation metric for all models is three-way classification accuracy on the SNLI test set. For the full PINN model, we also report a measure of the agreement of its generated parses with the Stanford Parser's parses of the same data, expressed in terms of the model's accuracy in making two-way transition decisions. In addition, we report the number of trained parameters in each model as well as training set accuracy.
 
