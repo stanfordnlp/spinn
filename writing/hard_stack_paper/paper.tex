@@ -186,17 +186,14 @@ The PINN is based on a formalism adapted from transition-based parsing (\questio
 
 \subsection{Composition and representation}
 
-The PINN, which is shown in Figure~\ref{fig:model:1d}, takes the form of a transition-based parser, but it is designed to produce sentence representations given parse structures, rather than producing parse structures as its output, leading to the following differences:
+The full PINN model is shown in Figure~\ref{fig:model:1d}. The PINN takes the form of a transition-based parser, but is designed to produce sentence representations given parse structures, rather than producing parse structures as its output. It extends the standard transition-based model in the following ways:
 \begin{itemize}
-\item The intermediate representations in the parser, including the representations of the tree structures on the stack, are vectors of a fixed length.
-\item The \reduce~operation, which combines two trees or tree nodes on the stack into a single larger tree, is represented using a parametric neural network layer function (in particular, a TreeLSTM layer, after \citealt{tai2015improved}).
-\item The intermediate states of the stack and buffer during parsing are stored during the processing of each sentence at training time. This makes it possible to learn the parameters of the composition function and the input word representations that are fed into the buffer using backpropagation on an objective function that depends on the final sentence representation that emerges at the head of the stack.
-\item A novel tracking LSTM component is added to improve the model's ability to efficiently track the context in which each step is being performed.
-\item The model can construct sentence representations on sentences which have already been parsed by an external parser. In this setting, which we call PINN-Ext, the model takes a sequence of transitions (\shift s or \reduce s) as an additional input.
-
+\item The intermediate representations in the parser, including the representations of partial tree structures on the stack, are fixed-length vectors.
+\item The \reduce~operation combines two such representations of trees on the stack into a larger tree using a neural network.
+\item After processing a sentence, the model has a single vector representation of the sentence on its stack. This representation is a differentiable function of all prior representations. We can thus learn the weights of the model via backpropagation of some downstream error.
 \end{itemize}
 
-This subsection describes the core functions and representations of the PINN.
+This subsection describes the core functions and representations of the PINN. We begin with the most basic model, PINN-Ext, which processes input sentences with gold parses provided by some external parser.
 
 \paragraph{The buffer and word representations}
 
