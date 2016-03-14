@@ -356,6 +356,8 @@ We designed an alternative minimal-space stack algorithm inspired by the zipper 
 \end{algorithmic}
 \end{algorithm}
 
+This stack representation requires substantially less space. It stores each element involved in the feedforward computation exactly once, meaning that this representation can still support efficient backpropagation. Furthermore, all of the updates to $S$ and $Q$ can be performed in-place on a GPU. These features allow this stack model to run efficiently on a GPU. We describe speed results in Section~\ref{sec:speed}.
+
 \begin{table}
 \centering
 \begin{tabular}{c|cl}
@@ -470,7 +472,8 @@ Lexicalized classifier \cite{snli:emnlp2015}
 
 We find that the bare PINN-Ext model performs relatively poorly, but that the full PINN-Ext with the added tracking LSTM reaches state-of-the-art accuracy among sentence encoding based models, indicating that our tree-sequence hybrid approach succeeds in combining the strengths of both approaches to encoding. The fully independent PINN model with its relatively weak internal parser performs more poorly, but nonetheless exceeds the performance of the LSTM baseline. None of our models reached the performance of the strongest attention-based models, which were explicitly engineered for the sentence pair-based structure of the SNLI task.
 
-\subsection{Step time}
+\subsection{Runtime performance}
+\label{sec:speed}
 
 \todo{[JG] Write me!}
 
