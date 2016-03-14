@@ -164,7 +164,7 @@ In practice, TreeRNNs have shown promise, but they have largely been overlooked 
 
 In spite of the unwieldiness of current standard TreeRNNs, there is still value in the idea of using syntactic parse trees to guide the construction of meaning in neural network models. Tree-structured models have shown substantial performance gains on some smaller-scale NLP tasks \cite{tai2015improved,li2015tree}, and their theoretical foundations are strong. Tree-structured compositionality is a property of natural language, and simpler sequence-based RNNs have a difficult time exploiting this property---while sequence-based models should, theoretically, be able to learn to simulate tree-structured composition, this behavior does not emerge in practice on reasonably-sized tasks \cite{bowman2015trees}. 
 
-In this paper, we introduce the Parser--Interpreter Neural Network, or PINN. The PINN is a model which reimplements tree-structured composition within an alternative design that incorporates a neural network parser. This design improves upon the previous TreeRNN approach to compositionality in three ways:
+In this paper, we introduce the Parser--Interpreter Neural Network, or PINN. The PINN executes tree-structured computations in a linearized sequence, and can incorporate a neural network parser that determines the overall tree structure on-the-fly. This design improves upon the previous TreeRNN approach to compositionality in three ways:
 \begin{itemize}
 \item At test time, it can simultaneously parse and interpret unparsed sentences, removing the dependence on an external parser.
 \item It supports batched computation for both parsed and unparsed sentences, supporting dramatic speedups over standard TreeRNNs.
