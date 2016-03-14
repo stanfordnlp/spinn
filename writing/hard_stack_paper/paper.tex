@@ -21,6 +21,8 @@
 \usepackage{tikz-qtree}
 \usepackage{ifthen}
 \usepackage{framed}
+\usepackage{algorithm}
+\usepackage[noend]{algpseudocode}
 
 
 \newcommand\todo[1]{\textcolor{blue}{\textbf{TODO:} #1}}
@@ -321,11 +323,6 @@ Padding, if done properly, should not impact the output of the model significant
 
 Cropping necessarily discards information, but if done properly, it is nonetheless possible to learn good representations for cropped sentences. When a transition sequence is cropped, the number of removed \shift~transitions is tracked, and an equal number of word tokens is removed from the tail (left) end of the buffer. This makes it possible for a transition sequence to begin with a \reduce~transition, or to otherwise use a \reduce~transition on a stack that does not have two elements to merge. In this instance, we simply feed the composition function one or more zero vectors, which represent nonexistent stack elements. If the composition learns to interpret these zero vectors properly, they can be taken to be unknown or incomplete nodes in an otherwise complete tree that is constructed according to the intended parse structure. \todo{[SB] Make a figure showing the results of cropping if there's room.}
 
-\paragraph{Representing the stack in memory} Or, thin stack. And the cursor strategy for the buffer. 
-\todo{[JG] Explain.}
-
-\vspace{8em}
-
 \paragraph{Optimization and hyperparameters}
 
 We use the RMSProp optimizer (\todo{Cite.}) with a tuned starting learning rate that decays by a factor of 0.75 every 10k steps. We apply both dropout \cite{srivastava2014dropout} and batch normalization \cite{2015SIoffeCSzegedy} to the word embeddings in the buffer (after the linear projection is applied) and to the feature vectors that serve as the inputs and outputs to the MLP that precedes the final entailment classifier. In addition, we apply an L2 regularization penalty to all parameters.
@@ -335,6 +332,46 @@ We used random search to tune many of the hyperparameters, including the learnin
 We trained each model for 250k steps in each run, using a minibatch size of 64 for each step. We tracked each model's performance on the development set during training and saving parameters when this performance reached a new peak. We used early stopping, evaluating on the test set using the parameters that performed best on the development set.
 
 \paragraph{Software infrastructure} We will make Theano code available.
+
+\subsection{Efficient stack representation}
+
+A naive implementation of the PINN model would require simulating a stack of size $N$ for each input sentence. In order to update the model weights via backpropagation, we would also need to maintain all intermediate stack representations for later chain rule calculations. This implies a total space requirement of $M \times N \times T \times D$, which is prohibitively large for significant batch sizes $M$ or sentence lengths $N$. Such a naive implementation would also require duplicating a largely unchanged stack at each timestep (as \shift and \reduce operations only affect the top of the stack).
+
+We designed an alternative minimal-space stack algorithm inspired by the zipper technique \cite{huet1997zipper}. For a single input sentence, we represent the stack over the entire feedforward with a $T \times D$ matrix $S$. Each row $S_t$ represents the top of the actual stack at timestep $t$. We maintain a queue of backpointers onto $S$ in order to track which elements should be involved in a \reduce~operation at any given time. Algorithm~\ref{alg:thin-stack} below describes the full mechanics of a stack feedforward in this compressed representation. It operates on the compressed $T \times D$ matrix $S$ and a backpointer queue $Q$. Table~\ref{tbl:thin-stack} shows an example run of this algorithm.
+
+\begin{algorithm}
+\caption{The thin-stack algorithm}
+\label{alg:thin-stack}
+\begin{algorithmic}[1]
+  \Function{Step}{bufferTop, op, $t$, $S$, $Q$}
+    \If{op = \shift}
+      \State $S$[$t$] := bufferTop
+    \ElsIf{op = \reduce}
+      \State right := $S$[$Q$.pop()]
+      \State left := $S$[$Q$.pop()]
+      \State $S$[$t$] := \Call{Compose}{left, right}
+    \EndIf
+    \State $Q$.push($t$)
+  \EndFunction
+\end{algorithmic}
+\end{algorithm}
+
+\begin{table}
+\centering
+\begin{tabular}{c|cl}
+  \toprule
+  $t$ & $S$[$t$] & $Q_t$ \\
+  \midrule
+  0 & $a$ & 0 \\
+  1 & $b$ & 0 1 \\
+  2 & $c$ & 0 1 2 \\
+  3 & $M(c, b)$ & 0 3 \\
+  4 & $M(M(c, b), a)$ & 4 \\
+  \bottomrule
+\end{tabular}
+\caption{An example of the thin-stack algorithm computing a \shift-\shift-\shift-\reduce-\reduce sequence on the input sentence $(a, b, c)$. $S$ is shown in the second column and may be thought of as a list of the tops of the stack at all timesteps $t$. The last two elements of $Q$ specify the rows $t$ which should be involved in a \reduce~operation at the next timestep.}
+\label{tbl:thin-stack}
+\end{table}
 
 \subsection{TreeRNN-equivalence and efficiency}
 
