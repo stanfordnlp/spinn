@@ -223,29 +223,29 @@ Our composition function is based on the TreeLSTM of \citealt{tai2015improved}. 
     {\vec{f}_l}
     {\vec{f}_r}
     {\vec{o}}
-= \sigma(
+= \sigma\left(
 W_{\text{iffo}}
 \colvec{3}
     {\vec{h}_s^1}
     {\vec{h}_s^2}
     {\vec{e}}
-)
+\right)
 \\
 \vec{g}
-= \tanh(
+= \tanh\left(
 W_{g}
 \colvec{3}
     {\vec{h}_s^1}
     {\vec{h}_s^2}
     {\vec{e}}
-)
+\right)
 \\
-\vec{c} = \vec{f}_l * \vec{c}_s^{\,2} + \vec{f}_r * \vec{c}_s^{\,1} + \vec{i} * \vec{g}  
+\vec{c} = \vec{f}_l \odot \vec{c}_s^{\,2} + \vec{f}_r \odot \vec{c}_s^{\,1} + \vec{i} \odot \vec{g}  
 \\
-\vec{h} = \vec{o} * \vec{c}
+\vec{h} = \vec{o} \odot \vec{c}
 \end{gather}
 
-The results of this function are the pair $(\vec{h}, \vec{c})$, which are placed back on the stack. The two input tree nodes popped off the stack are represented as the pairs $(\vec{h}^1_s, \vec{c}^{\,1}_s)$ and $(\vec{h}^2_s, \vec{c}^{\,2}_s)$. In addition, $\vec{e}$ is an optional input argument which is either the empty vector $[]$ or a vector from an external source like the tracking LSTM (see below). $*$ denotes the elementwise product. Each vector-valued variable listed here is of dimension $D$, except $\vec{e}$, which is of dimensions $D_t$, which can be chosen independently.
+The results of this function are the pair $\langle\vec{h}, \vec{c}\rangle$, which are placed back on the stack. The two input tree nodes popped off the stack are represented as the pairs $\langle\vec{h}^1_s, \vec{c}^{\,1}_s\rangle$ and $\langle\vec{h}^2_s, \vec{c}^{\,2}_s\rangle$. In addition, $\vec{e}$ is an optional input argument which is either the empty vector $[]$ or a vector from an external source like the tracking LSTM (see below). $\odot$ denotes the elementwise product. Each vector-valued variable listed here is of dimension $D$, except $\vec{e}$, which is of dimensions $D_t$, which can be chosen independently.
 
 \paragraph{Creating a sentence pair classifier}
 
@@ -257,7 +257,7 @@ This paper presents the transition-based sentence model within the context of \t
     {\vec{h}_{\text{premise}}}
     {\vec{h}_{\text{hypothesis}}}
     {\vec{h}_{\text{premise}} - \vec{h}_{\text{hypothesis}}}
-    {\vec{h}_{\text{premise}} * \vec{h}_{\text{hypothesis}}}
+    {\vec{h}_{\text{premise}} \odot \vec{h}_{\text{hypothesis}}}
 \end{equation}
 
 This feature vector is then passed to a series of two (\todo{Update w/ final number}) ReLU neural network layers (following \citealt{snli:emnlp2015}), then passed into a linear transformation, and then finally passed to a softmax layer, which yields a distribution among the three labels.
@@ -271,6 +271,7 @@ Technically, the tracking LSTM takes three vectors as inputs at each step: the t
 \paragraph{Tracking left context for parsing} The decision function which determines which transitions (and thereby, which parses) the PINN will use needs to take as its input some representation of the current state of the model. Because the tracking LSTM directly takes the buffer top as input, it can directly inform that function of what word is under consideration for a possible \shift. Because the tracking LSTM sees the top of the stack at every step, and information only enters the stack by being at the top at some step, the tracking LSTM is able to supply that function with a summary of the state of the stack without having to iterate over the full stack at each step.
 
 \paragraph{Tracking left context for interpretation} Lexical ambiguity is omnipresent in natural language. Most words have multiple senses or meanings, and it is generally necessary to use the context in which a word occurs to determine which of its senses or meanings is meant in a given sentence. Simpler sequence-based sentence encoding models like the standard LSTM RNN have an advantage here: when a sequence-based model first processes a word (first incorporates it into a partial sentence representation), the model has access to a state vector that summarizes all of the words to the left of the current word, and that state vector can serve as a crude but effective form of context to help with disambiguation. In contrast, when standard tree-structured models first process a word, they only have access to the constituent that the word is merging with, which is strictly less than the sequence model has access to, and is often just a single additional word. Feeding a context representation from the tracking LSTM into the composition function is a simple and efficient way to mitigate this disadvantage of tree-structured models.
+\todo{Include figure of post-order traversal sequence made by the tracking LSTM?}
 
 \subsection{Parsing: Predicting transitions from the tracking state}
 
