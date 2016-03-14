@@ -479,16 +479,18 @@ We find that the bare PINN-Ext model performs relatively poorly, but that the fu
 \label{sec:speed}
 
 \begin{figure}
+\resizebox{\linewidth}{!}{
 \begin{tikzpicture}
 \begin{axis}[xlabel=Batch size, ylabel=Feedforward time (sec),
-			 legend style={anchor=north west}]
+			 legend pos=north east]
   \addplot table [x={Batch size}, y=CPU, col sep=tab] {runtime.csv};
-  \addlegendentry{CPU}
+  \addlegendentry{CPU \cite{irsoy2014deep}}
   \addplot table [x={Batch size}, y=GPU, col sep=tab] {runtime.csv};
   \addlegendentry{Thin-stack GPU}
 \end{axis}
 \end{tikzpicture}
-\caption{Runtime performance results with the thin-stack GPU algorithm for tree-structured neural networks. \todo{[JG] Add some comments, avg points, add larger batch sizes for thin-stack}}
+}
+\caption{Runtime performance results with the thin-stack GPU algorithm for tree-structured neural networks. \todo{[JG] Add some comments}}
 \end{figure}
 
 \todo{[JG] Write me! In short: We're an order of magnitude faster than plain C++ CPU TreeRNNs w/ reasonable model sizes.}
