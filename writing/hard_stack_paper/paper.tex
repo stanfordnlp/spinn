@@ -276,14 +276,17 @@ Technically, the tracking LSTM takes three vectors as inputs at each step: the t
 \subsection{Parsing: Predicting transitions from the tracking state}
 
 The model described so far is the PINN-Ext model, which uses sequences of \shift~and \reduce~operations from an external parser. To build the fully independent PINN model, we simply add a single-layer neural network classifier that chooses which operation to perform at each step using the state of the tracking LSTM:
-
 \begin{equation}
-\vec{p}_{trans} = \text{softmax}(M_{trans}\vec{h}_{track})
+\vec{p}_{trans} = \text{softmax}(W_{trans}\vec{h}_{track})
 \end{equation}
 
-The use of a probabilistic classifier is simply a convenience for training. Transition decisions are hard, and only a single transition is chosen at each step (i.e., it is not well defined in our model to perform only three-quarters of a \shift operation). Because of this, the transition prediction function is trained solely using a parsing-related objective, and cannot be directly trained to optimize for the downstream semantic objective, even though it uses the same word and phrase representations that are used for that downstream objective. We leave the project of true joint learning---learning syntactic parsing from a semantic objective---to future work.
+The resulting vector $\vec{p}_{trans}$ is a probability distribution over parsing decisions (i.e., predicting whether to \shift or \reduce at the current timestep). In the full PINN model, we follow whichever transition has a higher predicted probability in this distribution. This prediction module is trained to mimic the decisions of an external parser. In particular, we use the transition sequences corresponding to the constituency parses included in the SNLI corpus. The classifier is trained using a cross-entropy objective:
+\begin{equation}
+  L_{trans} = - \log \vec{p}_{trans}[t^*]
+\end{equation}
+where $t^*$ is the correct transition specified by the gold parse, and $\vec{p}[\cdot]$ represents vector indexing.
 
-We train the model to mimic the decisions of an external parser. In particular, we use the transition sequences corresponding to the Stanford Parser parses included with the SNLI corpus. At training time, the classifier is trained using a cross-entropy objective using a supervision signal from those parses, and we use those external parses to guide the behavior of the model. At test time, a transition is chosen at each step by taking a hard max over the output of this function. We did not find the technique of scheduled sampling \cite{bengio2015scheduled}, or allowing the model to use its own transition decisions in some instances at training time, to be helpful.
+At training time, the model follows the transitions corresponding to the gold parse. At test time, a transition is chosen at each step by taking a hard max over the output of this function. We did not find the technique of scheduled sampling \cite{bengio2015scheduled}, or allowing the model to use its own transition decisions in some instances at training time, to be helpful.
 
 \subsection{Implementing the transition-based sentence model}
 
