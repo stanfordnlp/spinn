@@ -1,3 +1,6 @@
 [submodule "theano"]
 	path = theano
 	url = git://github.com/hans/theano-hacked.git
+[submodule "metal_stack/lib/googletest"]
+	path = metal_stack/lib/googletest
+	url = https://github.com/google/googletest

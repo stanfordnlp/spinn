@@ -991,7 +991,6 @@ def CropAndPadForRNN(dataset, length, logger=None, sentence_pair_data=False):
         keys = ["tokens"]
 
     for example in dataset:
-        print example
         for tokens_key in keys:
             num_tokens = len(example[tokens_key])
             tokens_left_padding = length - num_tokens
@@ -1152,14 +1151,17 @@ def LoadEmbeddingsFromASCII(vocabulary, embedding_dim, path):
 
 
 def TransitionsToParse(transitions, words):
-    stack = ["*ZEROS*"] * len(transitions)
-    buffer_ptr = 0
-    for transition in transitions:
-        if transition == 0:
-            stack.append("(P " + words[buffer_ptr] +")")
-            buffer_ptr += 1
-        elif transition == 1:
-            r = stack.pop()
-            l = stack.pop()
-            stack.append("(M " + l + " " + r + ")")
-    return stack.pop()
+    if transitions is not None:
+        stack = ["*ZEROS*"] * len(transitions)
+        buffer_ptr = 0
+        for transition in transitions:
+            if transition == 0:
+                stack.append("(P " + words[buffer_ptr] +")")
+                buffer_ptr += 1
+            elif transition == 1:
+                r = stack.pop()
+                l = stack.pop()
+                stack.append("(M " + l + " " + r + ")")
+        return stack.pop()
+    else:
+        return " ".join(words)

@@ -98,6 +98,7 @@ class RNN(object):
                 outputs_info=[hidden_init])[0]
 
         self.final_representations = self.states[-1]
-        self.transitions_pred = None
+        self.transitions_pred = T.zeros((batch_size, 0))
+        self.predict_transitions = False
         self.tracking_state_final = None
         
