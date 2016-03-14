@@ -148,8 +148,8 @@
 \maketitle
 \begin{abstract}
 
-Tree-structured neural networks integrate valuable syntactic parse information into the process of interpreting sentence meaning, but suffer two key technical problems. They can only operate on parsed sentences and do not directly support batched computation, making them slow and unwieldy for large-scale NLP tasks. We address these issues by introducing the Parser-Interpreter Neural Network (PINN), which simulates tree-structured sentence interpretation within the sequential structure of a transition-based neural parser. This model  supports batched computation, and its integrated parser allows it to operate on unparsed data with nearly no loss of accuracy. We evaluate it on the Stanford NLI entailment task, and show that it outperforms other sentence encoding models.
-\todo{[SB] Revise according to comments.}
+Tree-structured neural networks exploit valuable syntactic parse information as they interpret the meanings of sentences. However, they suffer two key technical problems: they can only operate on parsed sentences and do not directly support batched computation, making them slow and unwieldy for large-scale NLP tasks. We address these issues by introducing the Parser-Interpreter Neural Network (PINN), which combines parsing and interpretation within a single model by integrating tree-structured sentence interpretation into the linear sequential structure of a transition-based parser. This model  supports batched computation, and its integrated parser allows it to operate on unparsed data with nearly no loss of accuracy. We evaluate it on the Stanford NLI entailment task, show that it outperforms other sentence encoding models, and show that it can be integrated effectively with soft attention for sentence pair tasks like entailment for further gains in performance.
+
 \end{abstract}
 
 \question{Parser--Interpreter or Parser-Interpreter (hyphen or en-dash)?}
