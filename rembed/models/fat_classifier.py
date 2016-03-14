@@ -346,12 +346,14 @@ def evaluate(eval_fn, eval_set, logger, step):
     return acc_accum / eval_batches
 
 
-def evaluate_expanded(eval_fn, eval_set, eval_path, logger, step, sentence_pair_data, ind_to_word):
+def evaluate_expanded(eval_fn, eval_set, eval_path, logger, step, sentence_pair_data, ind_to_word, predict_transitions):
     """
     Write the  gold parses and predicted parses in the files <eval_out_path>.gld and <eval_out_path>.tst
     respectively. These files can be given as inputs to Evalb to evaluate parsing performance -
 
         evalb -p evalb_rembed.prm <eval_out_path>.gld  <eval_out_path>.tst
+
+    TODO(SB): Set up for RNN and Model0 on non-sentence-pair data; port support to classifier.py.
     """
     # TODO: Prune out redundant code, make usable on Model0 as well.
     acc_accum = 0.0
@@ -379,15 +381,21 @@ def evaluate_expanded(eval_fn, eval_set, eval_path, logger, step, sentence_pair_
                 # write each predicted transition to file
                 for orig_transitions, pred_logit_hyp, pred_logit_prem, tokens, true_class, example_sem_logits \
                         in zip(eval_transitions_batch, logits_pred_hyp,
-                               logits_pred_prem, eval_X_batch, eval_y_batch, sem_logit_values):
-                    orig_hyp_transitions, orig_prem_transitions = orig_transitions.T
+                               logits_pred_prem, eval_X_batch, eval_y_batch, sem_logit_values):    
+                    if predict_transitions:
+                        orig_hyp_transitions, orig_prem_transitions = orig_transitions.T
+                        pred_hyp_transitions = pred_logit_hyp.argmax(axis=1)
+                        pred_prem_transitions = pred_logit_prem.argmax(axis=1)
+                    else: 
+                        orig_hyp_transitions = orig_prem_transitions = pred_hyp_transitions = pred_prem_transitions = None
+
                     hyp_tokens, prem_tokens = tokens.T
                     hyp_words = [ind_to_word[t] for t in hyp_tokens]
                     prem_words = [ind_to_word[t] for t in prem_tokens]
                     eval_gold.write(util.TransitionsToParse(orig_hyp_transitions, hyp_words) + "\n")
-                    eval_out.write(util.TransitionsToParse(pred_logit_hyp.argmax(axis=1), hyp_words) + "\n")
+                    eval_out.write(util.TransitionsToParse(pred_hyp_transitions, hyp_words) + "\n")
                     eval_gold.write(util.TransitionsToParse(orig_prem_transitions, prem_words) + "\n")
-                    eval_out.write(util.TransitionsToParse(pred_logit_prem.argmax(axis=1), prem_words) + "\n")
+                    eval_out.write(util.TransitionsToParse(pred_prem_transitions, prem_words) + "\n")
 
                     predicted_class = np.argmax(example_sem_logits)
                     exp_logit_values = np.exp(example_sem_logits)
@@ -554,9 +562,9 @@ def run(only_forward=False):
         l2_cost += FLAGS.l2_lambda * T.sum(T.sqr(vs.vars[var]))
 
     # Compute cross-entropy cost on action predictions.
-    if (not data_manager.SENTENCE_PAIR_DATA) and predicted_transitions is not None:
+    if (not data_manager.SENTENCE_PAIR_DATA) and FLAGS.model_type not in ["Model0", "RNN"]:
         transition_cost, action_acc = build_transition_cost(predicted_transitions, transitions, num_transitions)
-    elif data_manager.SENTENCE_PAIR_DATA and predicted_hypothesis_transitions is not None:
+    elif data_manager.SENTENCE_PAIR_DATA and FLAGS.model_type not in ["Model0", "RNN"]:
         p_transition_cost, p_action_acc = build_transition_cost(predicted_premise_transitions, transitions[:, :, 0],
             num_transitions[:, 0])
         h_transition_cost, h_action_acc = build_transition_cost(predicted_hypothesis_transitions, transitions[:, :, 1],
@@ -617,7 +625,7 @@ def run(only_forward=False):
         for eval_set, eval_out_path in zip(eval_iterators, eval_output_paths):
             logger.Log("Writing eval output for %s." % (eval_set[0],))
             evaluate_expanded(eval_fn, eval_set, eval_out_path, logger, step,
-                              data_manager.SENTENCE_PAIR_DATA, ind_to_word)
+                              data_manager.SENTENCE_PAIR_DATA, ind_to_word, FLAGS.model_type not in ["Model0", "RNN"])
     else:
          # Train
 

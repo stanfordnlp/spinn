@@ -469,7 +469,8 @@ class HardStack(object):
         if self._predict_transitions:
             self.transitions_pred = scan_ret[0][-1].dimshuffle(1, 0, 2)
         else:
-            self.transitions_pred = None
+            self.transitions_pred = T.zeros((batch_size, 0))
+
 
         if self.use_attention != "None" and not self.is_hypothesis:
             # Store the stack top at each step as an attribute.

@@ -1151,14 +1151,17 @@ def LoadEmbeddingsFromASCII(vocabulary, embedding_dim, path):
 
 
 def TransitionsToParse(transitions, words):
-    stack = ["*ZEROS*"] * len(transitions)
-    buffer_ptr = 0
-    for transition in transitions:
-        if transition == 0:
-            stack.append("(P " + words[buffer_ptr] +")")
-            buffer_ptr += 1
-        elif transition == 1:
-            r = stack.pop()
-            l = stack.pop()
-            stack.append("(M " + l + " " + r + ")")
-    return stack.pop()
+    if transitions is not None:
+        stack = ["*ZEROS*"] * len(transitions)
+        buffer_ptr = 0
+        for transition in transitions:
+            if transition == 0:
+                stack.append("(P " + words[buffer_ptr] +")")
+                buffer_ptr += 1
+            elif transition == 1:
+                r = stack.pop()
+                l = stack.pop()
+                stack.append("(M " + l + " " + r + ")")
+        return stack.pop()
+    else:
+        return " ".join(words)
