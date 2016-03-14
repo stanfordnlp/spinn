@@ -173,24 +173,26 @@ In this paper, we introduce the Parser--Interpreter Neural Network, or PINN. The
 
 \input{../model1_fig.tex}
 
-\section{The transition-based sentence model}
+\section{The shift-reduce sentence model}
 
-\subsection{Intuition: Transition-based parsing}
+\subsection{Shift-reduce parsing}
 
-The PINN is based on a formalism adapted from transition-based parsing (\question{What's a good classic citation for this?}).
+The PINN is inspired by the shift-reduce parsing formalism \cite{aho1986compilers}, which builds a tree structure over a sequence (e.g. a natural language sentence) by a single left-to-right scan over the tokens of the sequence. Shift-reduce parsing has been successfully applied in algorithms for natural language parsing \cite{nivre2003efficient}.
 
-\todo{[JG, SB] Brief into to transition-based parsing.}
+A shift-reduce parser accepts a sequence of input tokens $\mathbf x = (x_1, \dots, x_N)$ and transitions $\mathbf t = (t_1, \dots, t_T)$. It reads left-to-right over the input transition sequence, combining the input tokens $\mathbf x$ incrementally into a tree structure. (For a binary-branching tree structure, this requires $T = 2N - 1$ operations.)
 
-\vspace{10em}
-
+The parser uses two auxiliary data structures, a stack $S$ of partially completed subtrees and a buffer $B$ of tokens yet to be parsed. We initialize the parser with an empty stack and with a buffer containing all the sentence tokens $\mathbf x$. Let $\langle S, B \rangle = \langle \emptyset, \mathbf x \rangle$ denote this starting state. We next proceed through the transition sequence, where each transition $t_i$ selects one of the two following operations. Below $\mid$ denotes an infix \textit{cons} function.
+\begin{description}
+  \item[\shift:] $\langle S, x \mid B \rangle \to \langle x \mid S, B \rangle$. This operation pops an element from the buffer and pushes it onto the top of the stack.
+  \item[\reduce:] $\langle x \mid y \mid S, B \rangle \to \langle (x, y) \mid S, B \rangle$. This operation pops the top two elements from the stack, merges them into a binary tree with children $(x, y)$, and pushes the result back onto the stack.
+\end{description}
 
 \subsection{Composition and representation}
 
-The full PINN model is shown in Figure~\ref{fig:model:1d}. The PINN takes the form of a transition-based parser, but is designed to produce sentence representations given parse structures, rather than producing parse structures as its output. It extends the standard transition-based model in the following ways:
+The core PINN model implements a sequential shift-reduce parser which operates over sentences. It is designed to produce a vector representation of the sentence as output (as opposed to a tree). This is accomplished by the following modifications to the shift-reduce algorithm:
 \begin{itemize}
 \item The intermediate representations in the parser, including the representations of partial tree structures on the stack, are fixed-length vectors.
 \item The \reduce~operation combines two such representations of trees on the stack into a larger tree using a neural network.
-\item After processing a sentence, the model has a single vector representation of the sentence on its stack. This representation is a differentiable function of all prior representations. We can thus learn the weights of the model via backpropagation of some downstream error.
 \end{itemize}
 
 This subsection describes the core functions and representations of the PINN. We begin with the most basic model, PINN-Ext, which processes input sentences with gold parses provided by some external parser.
