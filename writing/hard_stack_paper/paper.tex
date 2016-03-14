@@ -481,8 +481,8 @@ We find that the bare PINN-Ext model performs relatively poorly, but that the fu
 \begin{figure}
 \resizebox{\linewidth}{!}{
 \begin{tikzpicture}
-\begin{axis}[xlabel=Batch size, ylabel=Feedforward time (sec),
-			 legend pos=north east]
+\begin{axis}[xmin=0, ymin=0, xlabel=Batch size, ylabel=Feedforward time (sec),
+			 xtick={0,256,512,1024,2048}, legend style={at={(1, 1)},anchor=north east}]
   \addplot table [x={Batch size}, y=CPU, col sep=tab] {runtime.csv};
   \addlegendentry{CPU \cite{irsoy2014deep}}
   \addplot table [x={Batch size}, y=GPU, col sep=tab] {runtime.csv};
