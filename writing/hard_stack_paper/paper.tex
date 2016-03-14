@@ -400,7 +400,7 @@ Lexicalized classifier \cite{snli:emnlp2015}
 \midrule
 \multicolumn{5}{c}{Our results}\\
 \midrule
-300d LSTM RNN encoders          & 1.7m                  & --                &   83.9      &   80.6       \\
+300d LSTM RNN encoders          & 3.0m                  & --                &   83.9      &   80.6       \\
 \result{300d PINN-Ext-NoTracking}   
                         & ?                  & --                &   ?      &   81.9dv       \\
 \result{300d PINN-Ext }
@@ -433,13 +433,15 @@ We find that the bare PINN-Ext model performs relatively poorly, but that the fu
 
 \todo{[JG] Write me!}
 
+\todo{Note that the full PINN (i.e. Model 1) is in the same complexity class as PINN-Ext (what we're evaluating here) with very similar constants.}
+
 \vspace{10em}
 
 \section{Discussion}
 
-\todo{[SB] Contrast sentence encoders w/ other models}
-
 \result{[SB] Patterns in the examples that the tree model got right that the LSTM didn't}
+
+\vspace{10em}
 
 \section{Conclusions and future work}
 
@@ -447,7 +449,7 @@ We find that:
 \begin{itemize}
 \item Our PINN-Ext-NoTracking model precisely implements tree-structured compositionality (as in a TreeLSTM), but is capable of exploiting batched computation for dramatic \todo{[JG] Numbers} improvements in inference speed.
 \item While the use of tree-structure alone does not offer a substantial improvement over an LSTM baseline, our tree-sequence hybrid model (PINN-Ext) substantially outperforms that baseline, suggesting that our model is able to successfully exploit tree structure, while using sequential context information to better resolve ambiguity.
-\item It is possible to remove the dependence on an external parser from our model ...
+\item It is possible to remove the dependence on an external parser from our model and replace it with a fast model-internal parser (as in the full PINN) with only a small decrease in model performance.
 \end{itemize}
 
 \paragraph{Future work} Because our aim for this paper aims to introduce a general purpose model for sentence encoding, we did not pursue the use of soft attention, despite its demonstrated effectiveness of the SNLI task. However, the choice of whether to use soft attention and the choice of what representations to perform attention over are orthogonal, and we expect that it should be possible to productively combine our model with soft attention to yield state-of-the-art performance.
