@@ -3,6 +3,8 @@
 \begin{figure}[t]
 
 \begin{subfigure}[t]{\columnwidth}
+\begin{center}
+\scalebox{0.6}{
  \begin{tikzpicture}
     \tikzstyle{word}=[fill=yellow!40,text height=2mm,line width=1pt,draw=black]    
     \tikzstyle{nonleaf}=[fill=yellow!40,text height=2mm,line width=1pt,draw=black] 
@@ -70,16 +72,16 @@
 
     \end{scope}
 
-\end{tikzpicture}
+\end{tikzpicture}}
+\end{center}
 
 
 \caption{\label{fig:batching:good}A conventional sequence-based RNN for two sentences.}
 \end{subfigure}
 
-\vspace{2em}
-
 \begin{subfigure}[t]{\columnwidth}
 \begin{center}
+\scalebox{0.6}{
  \begin{tikzpicture}
     \tikzstyle{word}=[fill=yellow!40,text height=2mm,line width=1pt,draw=black]    
     \tikzstyle{nonleaf}=[fill=yellow!40,text height=2mm,line width=1pt,draw=black]
@@ -94,13 +96,13 @@
     \end{scope}
 
 
-    \begin{scope}[shift={(0.9in,-0.8in)}]
+    \begin{scope}[shift={(1.5in,0in)}]
 
     \Tree [.\node[](root){...}; [.\node[nonleaf](1thecatsatdown){the cat sat down}; [.\node[nonleaf](1thecat){the cat}; \node[word](1the){the}; \node[word](1cat){cat}; ] [.\node[nonleaf](1satdown){sat down}; \node[word](1sat){sat}; \node[word](1down){down}; ] ] ]
 
     \end{scope}
 
-\end{tikzpicture}
+\end{tikzpicture}}
 \end{center}
 
 \caption{\label{fig:batching:bad}A conventional TreeRNN for two sentences.}

@@ -7,7 +7,7 @@
  \begin{tikzpicture}
     \def\dx{21pt}
     \def\dy{11pt}
-    \def\sy{13*\dy}
+    \def\sy{12*\dy}
     \def\oxb{8*\dx}
     \def\by{1*\dy}
     \def\ox{0*\oxb}
@@ -24,15 +24,13 @@
     \tikzstyle{focus1}=[fill=yellow!40,text width=25mm,align=center,text height=2mm]
     \tikzstyle{focus2}=[fill=yellow!40,text width=25mm,align=center,text height=5.5mm]
 
-    \node[label]  (sl) at (\ox-0.35*\oxb+0*\dx,\by+0.5*\dy) {buffer};
+    \node[label]  (sl) at (\ox-0.35*\oxb+0*\dx,\by+1*\dy) {buffer};
 
-    \node[label]  (1l) at (\ox+0*\dx,\sy+3*\dy) {$t=0$};
-
-    \node[focus1] (0bb) at  (\ox+0*\dx,2*\dy) {};
-    \node[word]  (0b3) at (\ox+0*\dx,\by-1*\dy) {};
-    \node[word]  (0b2) at (\ox+0*\dx,\by+0*\dy) {down};
-    \node[word]  (0b1) at (\ox+0*\dx,\by+1*\dy) {sat};
-    \node[bbox] (0bb) at  (\ox+0*\dx,\by+0.5*\dy) {};
+    \node[focus1] (0bb) at  (\ox+0*\dx,2.5*\dy) {};
+    \node[word]  (0b3) at (\ox+0*\dx,\by-0.5*\dy) {};
+    \node[word]  (0b2) at (\ox+0*\dx,\by+0.5*\dy) {down};
+    \node[word]  (0b1) at (\ox+0*\dx,\by+1.5*\dy) {sat};
+    \node[bbox] (0bb) at  (\ox+0*\dx,\by+1.0*\dy) {};
     
     \node[label]  (sl) at (\ox-0.35*\oxb+0*\dx,\sy+0.5*\dy) {stack};
     
@@ -45,18 +43,16 @@
     \node[comp] (0c) at  (\ox+0.5*\oxb,\sy-1.5*\dy) {composition};
     
     \node[tracker] (0t) at  (\ox+0*\dx,5*\dy) {tracking};
-    \node[softmax] (0sm) at  (\ox+3.25*\dx,7*\dy) {transition};
-    \node[result] (0so) at  (\ox+3.25*\dx,9*\dy) {\reduce};
+    \node[softmax] (0sm) at  (\ox+3.25*\dx,6.25*\dy) {transition};
+    \node[result] (0so) at  (\ox+3.25*\dx,8.5*\dy) {\reduce};
     
     \def\ox{1*\oxb}
 
-    \node[label]  (1l) at (\ox+0*\dx,\sy+3*\dy) {$t=1$};
-
-    \node[focus1] (1bb) at  (\ox+0*\dx,2*\dy) {};
-    \node[word]  (1b3) at (\ox+0*\dx,\by-1*\dy) {};
-    \node[word]  (1b2) at (\ox+0*\dx,\by+0*\dy) {down};
-    \node[word]  (1b1) at (\ox+0*\dx,\by+1*\dy) {sat};
-    \node[bbox] (1bb) at  (\ox+0*\dx,\by+0.5*\dy) {};
+    \node[focus1] (1bb) at  (\ox+0*\dx,2.5*\dy) {};
+    \node[word]  (1b3) at (\ox+0*\dx,\by-0.5*\dy) {};
+    \node[word]  (1b2) at (\ox+0*\dx,\by+0.5*\dy) {down};
+    \node[word]  (1b1) at (\ox+0*\dx,\by+1.5*\dy) {sat};
+    \node[bbox] (1bb) at  (\ox+0*\dx,\by+1*\dy) {};
     
     \node[focus2] (1sb) at  (\ox+0*\dx,\sy-0.5*\dy) {};
     \node[word]  (1s1) at (\ox+0*\dx,\sy-1*\dy) {the cat};
@@ -67,18 +63,16 @@
     \node[compoff] (1c) at  (\ox+0.5*\oxb,\sy-1.5*\dy) {composition};
     
     \node[tracker] (1t) at  (\ox+0*\dx,5*\dy) {tracking};
-    \node[softmax] (1sm) at  (\ox+3.25*\dx,7*\dy) {transition};
-    \node[result] (1so) at  (\ox+3.25*\dx,9*\dy) {\shift};
+    \node[softmax] (1sm) at  (\ox+3.25*\dx,6.25*\dy) {transition};
+    \node[result] (1so) at  (\ox+3.25*\dx,8.5*\dy) {\shift};
      
     \def\ox{2*\oxb}
 
-    \node[label]  (1l) at (\ox+0*\dx,\sy+3*\dy) {$t=2$};
-
-    \node[focus1] (2bb) at  (\ox+0*\dx,2*\dy) {};
-    \node[word]  (2b3) at (\ox+0*\dx,\by-1*\dy) {};
-    \node[word]  (2b2) at (\ox+0*\dx,\by+0*\dy) {};
-    \node[word]  (2b1) at (\ox+0*\dx,\by+1*\dy) {down};
-    \node[bbox] (2bb) at  (\ox+0*\dx,\by+0.5*\dy) {};
+    \node[focus1] (2bb) at  (\ox+0*\dx,2.5*\dy) {};
+    \node[word]  (2b3) at (\ox+0*\dx,\by-0.5*\dy) {};
+    \node[word]  (2b2) at (\ox+0*\dx,\by+0.5*\dy) {};
+    \node[word]  (2b1) at (\ox+0*\dx,\by+1.5*\dy) {down};
+    \node[bbox] (2bb) at  (\ox+0*\dx,\by+1*\dy) {};
     
     \node[focus2] (2sb) at  (\ox+0*\dx,\sy-0.5*\dy) {};
     \node[word]  (2s1) at (\ox+0*\dx,\sy-1*\dy) {sat};
@@ -129,45 +123,84 @@
 
   \end{tikzpicture}}
   
- \caption{The SPINN unrolled for two transitions during the processing of the sentence \word{the cat sat down}.}\label{fig:model:1d}
+ \caption{The SPINN unrolled for two transitions during the processing of the sentence \word{the cat sat down}. `Tracking', `transition', and `composition' are neural network layers.}\label{fig:model:1d}
   
 \end{subfigure}\\\\\\
 \begin{subfigure}[t]{\textwidth}
 \centering
-\scalebox{0.6}{
+\scalebox{0.47}{
+
  \begin{tikzpicture}
     \def\dx{21pt}
     \def\dy{11pt}
     \def\sy{7*\dy}
     \def\oxb{5.5*\dx}
-    \def\by{1*\dy}
-    \def\ox{0*\oxb}
+    \def\by{0pt}
+    \def\oxs{0pt}
 
-    \tikzstyle{label}=[text width=35mm,align=center,text height=2mm]    
+    \tikzstyle{label}=[text width=15mm,align=center,text height=2mm]    
     \tikzstyle{word}=[text width=35mm,align=center,text height=2mm]    
     \tikzstyle{tracker}=[fill=red!40,text width=15mm,align=center,text height=2mm]
     \tikzstyle{softmax}=[text width=40mm,align=center,text height=2mm]
     \tikzstyle{comp}=[fill=green!40,text width=20mm,align=center,text height=2mm]
     \tikzstyle{result}=[line width=1pt,draw=black,text width=15mm,align=center,text height=2mm]    
     \tikzstyle{sbox}=[line width=1pt,draw=black,text width=33mm,align=center,text height=13.3mm]
-    \tikzstyle{bbox}=[line width=1pt,draw=black,text width=33mm,align=center,text height=6.5mm]
+    \tikzstyle{bbox}=[line width=1pt,draw=black,text width=33mm,align=center,text height=13.3mm]
     \tikzstyle{focus1}=[fill=yellow!40,text width=33mm,align=center,text height=2mm]
     \tikzstyle{focus2}=[fill=yellow!40,text width=33mm,align=center,text height=5.5mm]
 
-    \def\ox{0*\oxb}
-    
-    \node[label]  (1l) at (\ox+0*\dx,\sy+3*\dy) {$t=0$};
+    \def\ox{0*\oxb+\oxs}
     
     \node[label]  (sl) at (\ox-0.65*\oxb+0*\dx,\by+0.5*\dy) {buffer};
     
+    \node[label]  (sl) at (\ox-0.65*\oxb+0*\dx,\sy+0.5*\dy) {stack};
+
+    \node[label]  (00l) at (\ox+0*\dx,\sy+3*\dy) {$t=0$};
+
+    \node[focus1] (00bb) at  (\ox+0*\dx,2*\dy) {};
+    \node[word]  (00b3) at (\ox+0*\dx,\by-1*\dy) {down};
+    \node[word]  (00b2) at (\ox+0*\dx,\by+0*\dy) {sat};
+    \node[word]  (00b1) at (\ox+0*\dx,\by+1*\dy) {cat};
+    \node[word]  (00b1) at (\ox+0*\dx,\by+2*\dy) {the};
+    \node[bbox] (00bb) at  (\ox+0*\dx,\by+0.5*\dy) {};
+        
+    \node[focus2] (00sb) at  (\ox+0*\dx,\sy-0.5*\dy) {};
+    \node[word]  (00s1) at (\ox+0*\dx,\sy-1*\dy) {};
+    \node[word]  (00s2) at (\ox+0*\dx,\sy+0*\dy) {};
+    \node[word]  (00s3) at (\ox+0*\dx,\sy+1*\dy) {};
+    \node[sbox] (00sb) at  (\ox+0*\dx,\sy+0.5*\dy) {};
+    
+    \node[result] (00so) at  (\ox+0.3*\dx,4*\dy) {\shift};
+              
+    \def\ox{1*\oxb+\oxs}
+
+    \node[label]  (0l) at (\ox+0*\dx,\sy+3*\dy) {$t=1$};
+
+    \node[focus1] (0bb) at  (\ox+0*\dx,2*\dy) {};
+    \node[word]  (00b3) at (\ox+0*\dx,\by-1*\dy) {};
+    \node[word]  (00b2) at (\ox+0*\dx,\by+0*\dy) {down};
+    \node[word]  (00b1) at (\ox+0*\dx,\by+1*\dy) {sat};
+    \node[word]  (00b1) at (\ox+0*\dx,\by+2*\dy) {cat};
+    \node[bbox] (0bb) at  (\ox+0*\dx,\by+0.5*\dy) {};
+        
+    \node[focus2] (0sb) at  (\ox+0*\dx,\sy-0.5*\dy) {};
+    \node[word]  (0s1) at (\ox+0*\dx,\sy-1*\dy) {the};
+    \node[word]  (0s2) at (\ox+0*\dx,\sy+0*\dy) {};
+    \node[word]  (0s3) at (\ox+0*\dx,\sy+1*\dy) {};
+    \node[sbox] (0sb) at  (\ox+0*\dx,\sy+0.5*\dy) {};
+    
+    \node[result] (0so) at  (\ox+0.3*\dx,4*\dy) {\shift};
+              
+    \def\ox{2*\oxb+\oxs}
+
+    \node[label]  (1l) at (\ox+0*\dx,\sy+3*\dy) {$t=2$};
+
     \node[focus1] (1bb) at  (\ox+0*\dx,2*\dy) {};
     \node[word]  (1b3) at (\ox+0*\dx,\by-1*\dy) {};
-    \node[word]  (1b2) at (\ox+0*\dx,\by+0*\dy) {down};
-    \node[word]  (1b1) at (\ox+0*\dx,\by+1*\dy) {sat};
+    \node[word]  (1b2) at (\ox+0*\dx,\by+1*\dy) {down};
+    \node[word]  (1b1) at (\ox+0*\dx,\by+2*\dy) {sat};
     \node[bbox] (1bb) at  (\ox+0*\dx,\by+0.5*\dy) {};
-    
-    \node[label]  (sl) at (\ox-0.65*\oxb+0*\dx,\sy+0.5*\dy) {stack};
-    
+        
     \node[focus2] (1sb) at  (\ox+0*\dx,\sy-0.5*\dy) {};
     \node[word]  (1s1) at (\ox+0*\dx,\sy-1*\dy) {cat};
     \node[word]  (1s2) at (\ox+0*\dx,\sy+0*\dy) {the};
@@ -176,14 +209,14 @@
     
     \node[result] (1so) at  (\ox+0.3*\dx,4*\dy) {\reduce};
               
-    \def\ox{1*\oxb}
+    \def\ox{3*\oxb+\oxs}
    
-    \node[label]  (1l) at (\ox+0*\dx,\sy+3*\dy) {$t=1$};
+    \node[label]  (1l) at (\ox+0*\dx,\sy+3*\dy) {$t=3$};
     
     \node[focus1] (2bb) at  (\ox+0*\dx,2*\dy) {};
     \node[word]  (2b3) at (\ox+0*\dx,\by-1*\dy) {};
-    \node[word]  (2b2) at (\ox+0*\dx,\by+0*\dy) {down};
-    \node[word]  (2b1) at (\ox+0*\dx,\by+1*\dy) {sat};
+    \node[word]  (2b2) at (\ox+0*\dx,\by+1*\dy) {down};
+    \node[word]  (2b1) at (\ox+0*\dx,\by+2*\dy) {sat};
     \node[bbox] (2bb) at  (\ox+0*\dx,\by+0.5*\dy) {};
     
     \node[focus2] (2sb) at  (\ox+0*\dx,\sy-0.5*\dy) {};
@@ -194,14 +227,14 @@
     
     \node[result] (2so) at  (\ox+0.3*\dx,4*\dy) {\shift};
              
-    \def\ox{2*\oxb}
+    \def\ox{4*\oxb+\oxs}
     
-    \node[label]  (1l) at (\ox+0*\dx,\sy+3*\dy) {$t=2$};
+    \node[label]  (1l) at (\ox+0*\dx,\sy+3*\dy) {$t=4$};
     
     \node[focus1] (3bb) at  (\ox+0*\dx,2*\dy) {};
     \node[word]  (3b3) at (\ox+0*\dx,\by-1*\dy) {};
-    \node[word]  (3b2) at (\ox+0*\dx,\by+0*\dy) {};
-    \node[word]  (3b1) at (\ox+0*\dx,\by+1*\dy) {down};
+    \node[word]  (3b2) at (\ox+0*\dx,\by+1*\dy) {};
+    \node[word]  (3b1) at (\ox+0*\dx,\by+2*\dy) {down};
     \node[bbox] (3bb) at  (\ox+0*\dx,\by+0.5*\dy) {};
     
     \node[focus2] (3sb) at  (\ox+0*\dx,\sy-0.5*\dy) {};
@@ -212,9 +245,9 @@
     
     \node[result] (3so) at  (\ox+0.3*\dx,4*\dy) {\shift};
 
-    \def\ox{3*\oxb}
+    \def\ox{5*\oxb+\oxs}
     
-    \node[label]  (1l) at (\ox+0*\dx,\sy+3*\dy) {$t=3$};
+    \node[label]  (1l) at (\ox+0*\dx,\sy+3*\dy) {$t=5$};
         
     \node[focus1] (4bb) at  (\ox+0*\dx,2*\dy) {};
     \node[word]  (4b3) at (\ox+0*\dx,\by-1*\dy) {};
@@ -230,9 +263,9 @@
     
     \node[result] (4so) at  (\ox+0.3*\dx,4*\dy) {\reduce};
                   
-    \def\ox{4*\oxb}
+    \def\ox{6*\oxb+\oxs}
     
-    \node[label]  (1l) at (\ox+0*\dx,\sy+3*\dy) {$t=4$};
+    \node[label]  (1l) at (\ox+0*\dx,\sy+3*\dy) {$t=6$};
     
     \node[focus1] (5bb) at  (\ox+0*\dx,2*\dy) {};
     \node[word]  (5b3) at (\ox+0*\dx,\by-1*\dy) {};
@@ -248,9 +281,9 @@
     
     \node[result] (5so) at  (\ox+0.3*\dx,4*\dy) {\reduce};
     
-    \def\ox{5*\oxb}
+    \def\ox{7*\oxb+\oxs}
 
-    \node[label]  (1l) at (\ox+0*\dx,\sy+3*\dy) {$t=5$};
+    \node[label]  (1l) at (\ox+0*\dx,\sy+3*\dy) {$t=7$};
 
     \node[focus2] (6sb) at  (\ox+0*\dx,\sy-0.5*\dy) {};
     \node[word]  (6s1) at (\ox+0*\dx,\sy-1*\dy) {(the cat) (sat down)};
@@ -262,6 +295,24 @@
                    
     \pgfsetarrowsend{latex}
     \tikzstyle{fwd} = [draw=black, line width=1pt]
+
+   \draw [fwd] (00sb) -- (00so);
+   \draw [fwd] (00bb) -- (00so);
+
+    \draw [fwd] (00sb) -- (0sb);
+    \draw [fwd] (00bb) -- (0bb);
+    \draw [fwd] (00so) -- (0sb);
+    \draw [fwd] (00so) -- (0bb);
+    \draw [fwd] (00bb) -- (0sb);
+
+   \draw [fwd] (0sb) -- (0so);
+   \draw [fwd] (0bb) -- (0so);
+
+    \draw [fwd] (0sb) -- (1sb);
+    \draw [fwd] (0bb) -- (1bb);
+    \draw [fwd] (0so) -- (1sb);
+    \draw [fwd] (0so) -- (1bb);
+    \draw [fwd] (0bb) -- (1sb);
 
    \draw [fwd] (1sb) -- (1so);
    \draw [fwd] (1bb) -- (1so);
@@ -306,10 +357,9 @@
     \draw [fwd] (5so) -- (6sb);
 
    \draw [fwd] (6sb) -- (6sm);
-
   \end{tikzpicture}}
   
  \caption{The fully unrolled SPINN for \word{the cat sat down} with some layers omitted for clarity.}\label{fig:model:1b}  
 \end{subfigure}
-\caption{\label{m1-views}Two views of the SPINN. In both views, the lower boxes represent the input buffer, and the upper boxes represent the stack. Yellow highlighting indicates which portions of these data structures are visible to the tracking LSTM and to the composition function. Thin gray arrows indicate connections which are blocked by a gating function, and so contribute no information. \todo{[SB] Distinguish functions from data (stack, ops), say that most boxes are NNs. Make sure there is a ref to this figure.}}
+\caption{\label{fig:m1-views}Two views of the SPINN. In both views, the lower boxes represent the input buffer, and the upper boxes represent the stack. Yellow highlighting indicates which portions of these data structures are visible to the tracking LSTM and to the composition function. Thin gray arrows indicate connections which are blocked by a gating function, and so contribute no information.}
 \end{figure*}
