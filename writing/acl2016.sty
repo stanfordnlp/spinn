@@ -1,9 +1,12 @@
 % File acl2015.sty
 % December 2014
 
-% This is the LaTeX style file for ACL 2015. It is nearly identical to
-% the style files for ACL 2014, EACL 2006, ACL2005, ACL 2002, ACL
-% 2001, ACL 2000, EACL 95 and EACL 99. 
+% This is the LaTeX style for ACL 2016. It contains Margaret Mitchell's
+% line number adaptations (ported by Hai Zhao and Yannick Versley).
+
+% It is nearly identical to the style files for ACL 2015,
+% ACL 2014, EACL 2006, ACL2005, ACL 2002, ACL 2001, ACL 2000,
+% EACL 95 and EACL 99. 
 %
 % Changes made include: adapt layout to A4 and centimeters, widen abstract
 
@@ -96,7 +99,7 @@
 % \usepackage{acl2015}
 % where <new height> can be something larger than 5cm
 
-\typeout{Conference Style for ACL 2015 -- released December 7, 2014}
+\typeout{Conference Style for ACL 2016 -- released January 17th, 2016}
 
 % NOTE:  Some laser printers have a serious problem printing TeX output.
 % These printing devices, commonly known as ``write-white'' laser
@@ -104,7 +107,7 @@
 % problem, a darker set of fonts must be created for these devices.
 %
 
-
+\newcommand{\Thanks}[1]{\thanks{\ #1}}
 
 % A4 modified by Eneko; again modified by Alexander for 5cm titlebox
 \setlength{\paperwidth}{21cm}   % A4
@@ -128,7 +131,244 @@
 % save space --- suggested by drstrip@sandia-2
 \def\addcontentsline#1#2#3{}
 
-% Title stuff, taken from deproc.
+\newif\ifaclfinal
+\aclfinalfalse
+\def\aclfinalcopy{\global\aclfinaltrue}
+
+%% ----- Set up hooks to repeat content on every page of the output doc, 
+%% necessary for the line numbers in the submitted version.  --MM
+%%
+%% Copied from CVPR 2015's cvpr_eso.sty, which appears to be largely copied from everyshi.sty.
+%%
+%% Original cvpr_eso.sty available at: http://www.pamitc.org/cvpr15/author_guidelines.php
+%% Original evershi.sty available at: https://www.ctan.org/pkg/everyshi
+%%
+%% Copyright (C) 2001 Martin Schr\"oder:
+%% 
+%%                         Martin Schr"oder
+%%                         Cr"usemannallee 3
+%%                         D-28213 Bremen
+%%                         Martin.Schroeder@ACM.org
+%% 
+%% This program may be redistributed and/or modified under the terms
+%% of the LaTeX Project Public License, either version 1.0 of this
+%% license, or (at your option) any later version.
+%% The latest version of this license is in
+%%    CTAN:macros/latex/base/lppl.txt.
+%% 
+%% Happy users are requested to send [Martin] a postcard. :-)
+%%
+\newcommand{\@EveryShipoutACL@Hook}{}
+\newcommand{\@EveryShipoutACL@AtNextHook}{}
+\newcommand*{\EveryShipoutACL}[1]
+   {\g@addto@macro\@EveryShipoutACL@Hook{#1}}
+\newcommand*{\AtNextShipoutACL@}[1]
+   {\g@addto@macro\@EveryShipoutACL@AtNextHook{#1}}
+\newcommand{\@EveryShipoutACL@Shipout}{%
+   \afterassignment\@EveryShipoutACL@Test
+   \global\setbox\@cclv= %
+   }
+\newcommand{\@EveryShipoutACL@Test}{%
+   \ifvoid\@cclv\relax
+      \aftergroup\@EveryShipoutACL@Output
+   \else
+      \@EveryShipoutACL@Output
+   \fi%
+   }
+\newcommand{\@EveryShipoutACL@Output}{%
+   \@EveryShipoutACL@Hook%
+   \@EveryShipoutACL@AtNextHook%
+      \gdef\@EveryShipoutACL@AtNextHook{}%
+   \@EveryShipoutACL@Org@Shipout\box\@cclv%
+   }
+\newcommand{\@EveryShipoutACL@Org@Shipout}{}
+\newcommand*{\@EveryShipoutACL@Init}{%
+   \message{ABD: EveryShipout initializing macros}%
+   \let\@EveryShipoutACL@Org@Shipout\shipout
+   \let\shipout\@EveryShipoutACL@Shipout
+   }
+\AtBeginDocument{\@EveryShipoutACL@Init}
+
+%% ----- Set up for placing additional items into the submitted version --MM
+%%
+%% Based on eso-pic.sty
+%%
+%% Original available at: https://www.ctan.org/tex-archive/macros/latex/contrib/eso-pic
+%% Copyright (C) 1998-2002 by Rolf Niepraschk <niepraschk@ptb.de>
+%% 
+%% Which may be distributed and/or modified under the conditions of
+%% the LaTeX Project Public License, either version 1.2 of this license
+%% or (at your option) any later version.  The latest version of this
+%% license is in:
+%% 
+%%    http://www.latex-project.org/lppl.txt
+%% 
+%% and version 1.2 or later is part of all distributions of LaTeX version
+%% 1999/12/01 or later.
+%%
+%% In contrast to the original, we do not include the definitions for/using:
+%% gridpicture, div[2], isMEMOIR[1], gridSetup[6][], subgridstyle{dotted}, labelfactor{}, gap{}, gridunitname{}, gridunit{}, gridlines{\thinlines}, subgridlines{\thinlines}, the {keyval} package, evenside margin, nor any definitions with 'color'.
+%%
+%% These are beyond  what is needed for the NAACL style.
+%%
+\newcommand\LenToUnit[1]{#1\@gobble}
+\newcommand\AtPageUpperLeft[1]{%
+  \begingroup
+    \@tempdima=0pt\relax\@tempdimb=\ESO@yoffsetI\relax
+    \put(\LenToUnit{\@tempdima},\LenToUnit{\@tempdimb}){#1}%
+  \endgroup
+}
+\newcommand\AtPageLowerLeft[1]{\AtPageUpperLeft{%
+  \put(0,\LenToUnit{-\paperheight}){#1}}}
+\newcommand\AtPageCenter[1]{\AtPageUpperLeft{%
+  \put(\LenToUnit{.5\paperwidth},\LenToUnit{-.5\paperheight}){#1}}}
+\newcommand\AtPageLowerCenter[1]{\AtPageUpperLeft{%
+  \put(\LenToUnit{.5\paperwidth},\LenToUnit{-\paperheight}){#1}}}%
+\newcommand\AtPageLowishCenter[1]{\AtPageUpperLeft{%
+  \put(\LenToUnit{.5\paperwidth},\LenToUnit{-.96\paperheight}){#1}}}
+\newcommand\AtTextUpperLeft[1]{%
+  \begingroup
+    \setlength\@tempdima{1in}%
+    \advance\@tempdima\oddsidemargin%
+    \@tempdimb=\ESO@yoffsetI\relax\advance\@tempdimb-1in\relax%
+    \advance\@tempdimb-\topmargin%
+    \advance\@tempdimb-\headheight\advance\@tempdimb-\headsep%
+    \put(\LenToUnit{\@tempdima},\LenToUnit{\@tempdimb}){#1}%
+  \endgroup
+}
+\newcommand\AtTextLowerLeft[1]{\AtTextUpperLeft{%
+  \put(0,\LenToUnit{-\textheight}){#1}}}
+\newcommand\AtTextCenter[1]{\AtTextUpperLeft{%
+  \put(\LenToUnit{.5\textwidth},\LenToUnit{-.5\textheight}){#1}}}
+\newcommand{\ESO@HookI}{} \newcommand{\ESO@HookII}{}
+\newcommand{\ESO@HookIII}{}
+\newcommand{\AddToShipoutPicture}{%
+  \@ifstar{\g@addto@macro\ESO@HookII}{\g@addto@macro\ESO@HookI}}
+\newcommand{\ClearShipoutPicture}{\global\let\ESO@HookI\@empty}
+\newcommand{\@ShipoutPicture}{%
+  \bgroup
+    \@tempswafalse%
+    \ifx\ESO@HookI\@empty\else\@tempswatrue\fi%
+    \ifx\ESO@HookII\@empty\else\@tempswatrue\fi%
+    \ifx\ESO@HookIII\@empty\else\@tempswatrue\fi%
+    \if@tempswa%
+      \@tempdima=1in\@tempdimb=-\@tempdima%
+      \advance\@tempdimb\ESO@yoffsetI%
+      \unitlength=1pt%
+      \global\setbox\@cclv\vbox{%
+        \vbox{\let\protect\relax
+          \pictur@(0,0)(\strip@pt\@tempdima,\strip@pt\@tempdimb)%
+            \ESO@HookIII\ESO@HookI\ESO@HookII%
+            \global\let\ESO@HookII\@empty%
+          \endpicture}%
+          \nointerlineskip%
+        \box\@cclv}%
+    \fi
+  \egroup
+}
+\EveryShipoutACL{\@ShipoutPicture}
+\newif\ifESO@dvips\ESO@dvipsfalse 
+\newif\ifESO@grid\ESO@gridfalse
+\newif\ifESO@texcoord\ESO@texcoordfalse
+\newcommand*\ESO@griddelta{}\newcommand*\ESO@griddeltaY{}
+\newcommand*\ESO@gridDelta{}\newcommand*\ESO@gridDeltaY{}
+\newcommand*\ESO@yoffsetI{}\newcommand*\ESO@yoffsetII{}
+\ifESO@texcoord
+  \def\ESO@yoffsetI{0pt}\def\ESO@yoffsetII{-\paperheight}
+  \edef\ESO@griddeltaY{-\ESO@griddelta}\edef\ESO@gridDeltaY{-\ESO@gridDelta}
+\else
+  \def\ESO@yoffsetI{\paperheight}\def\ESO@yoffsetII{0pt}
+  \edef\ESO@griddeltaY{\ESO@griddelta}\edef\ESO@gridDeltaY{\ESO@gridDelta}
+\fi
+
+
+%% ----- Submitted version markup: Page numbers, ruler, and confidentiality.  Using ideas/code from cvpr.sty 2015. --MM
+
+\font\naaclhv  = phvb at 8pt 
+
+%% Define vruler %%
+
+%\makeatletter
+\newbox\aclrulerbox
+\newcount\aclrulercount
+\newdimen\aclruleroffset
+\newdimen\cv@lineheight
+\newdimen\cv@boxheight
+\newbox\cv@tmpbox
+\newcount\cv@refno
+\newcount\cv@tot
+% NUMBER with left flushed zeros  \fillzeros[<WIDTH>]<NUMBER>
+\newcount\cv@tmpc@ \newcount\cv@tmpc
+\def\fillzeros[#1]#2{\cv@tmpc@=#2\relax\ifnum\cv@tmpc@<0\cv@tmpc@=-\cv@tmpc@\fi
+\cv@tmpc=1 %
+\loop\ifnum\cv@tmpc@<10 \else \divide\cv@tmpc@ by 10 \advance\cv@tmpc by 1 \fi
+   \ifnum\cv@tmpc@=10\relax\cv@tmpc@=11\relax\fi \ifnum\cv@tmpc@>10 \repeat
+\ifnum#2<0\advance\cv@tmpc1\relax-\fi
+\loop\ifnum\cv@tmpc<#1\relax0\advance\cv@tmpc1\relax\fi \ifnum\cv@tmpc<#1 \repeat
+\cv@tmpc@=#2\relax\ifnum\cv@tmpc@<0\cv@tmpc@=-\cv@tmpc@\fi \relax\the\cv@tmpc@}%
+% \makevruler[<SCALE>][<INITIAL_COUNT>][<STEP>][<DIGITS>][<HEIGHT>]
+\def\makevruler[#1][#2][#3][#4][#5]{\begingroup\offinterlineskip
+\textheight=#5\vbadness=10000\vfuzz=120ex\overfullrule=0pt%
+\global\setbox\aclrulerbox=\vbox to \textheight{%
+{\parskip=0pt\hfuzz=150em\cv@boxheight=\textheight
+\cv@lineheight=#1\global\aclrulercount=#2%
+\cv@tot\cv@boxheight\divide\cv@tot\cv@lineheight\advance\cv@tot2%
+\cv@refno1\vskip-\cv@lineheight\vskip1ex%
+\loop\setbox\cv@tmpbox=\hbox to0cm{{\naaclhv\hfil\fillzeros[#4]\aclrulercount}}%
+\ht\cv@tmpbox\cv@lineheight\dp\cv@tmpbox0pt\box\cv@tmpbox\break
+\advance\cv@refno1\global\advance\aclrulercount#3\relax
+\ifnum\cv@refno<\cv@tot\repeat}}\endgroup}%
+%\makeatother
+
+\def\aclpaperid{***}
+\def\confidential{ACL 2016 Submission~\aclpaperid.  Confidential review copy.  DO NOT DISTRIBUTE.}
+
+%% Page numbering, Vruler and Confidentiality %%
+% \makevruler[<SCALE>][<INITIAL_COUNT>][<STEP>][<DIGITS>][<HEIGHT>]
+\def\aclruler#1{\makevruler[14.17pt][#1][1][3][\textheight]\usebox{\aclrulerbox}}
+\def\leftoffset{-1.9cm} %original: -45pt
+\def\rightoffset{17.3cm} %original: 500pt
+\ifaclfinal\else\pagenumbering{arabic}
+\AddToShipoutPicture{%
+\ifaclfinal\else
+\AtPageLowishCenter{\thepage}
+\aclruleroffset=\textheight
+\advance\aclruleroffset4pt
+  \AtTextUpperLeft{%
+    \put(\LenToUnit{\leftoffset},\LenToUnit{-\aclruleroffset}){%left ruler
+      \aclruler{\aclrulercount}}
+    \put(\LenToUnit{\rightoffset},\LenToUnit{-\aclruleroffset}){%right ruler
+      \aclruler{\aclrulercount}}
+  }
+  \AtTextUpperLeft{%confidential
+    \put(0,\LenToUnit{1cm}){\parbox{\textwidth}{\centering\naaclhv\confidential}}
+  }
+\fi
+}
+
+%%%% ----- End settings for placing additional items into the submitted version --MM ----- %%%%
+
+%%%% ----- Begin settings for both submitted and camera-ready version ----- %%%%
+
+%% Title and Authors %%
+
+\newcommand\outauthor{
+    \begin{tabular}[t]{c}
+	\ifaclfinal 
+	     \bf\@author
+	\else 
+		% Avoiding common accidental de-anonymization issue. --MM
+     		\bf Anonymous ACL submission
+	\fi
+    \end{tabular}}
+
+% Changing the expanded titlebox for submissions to 2.5 in (rather than 6.5cm)
+% and moving it to the style sheet, rather than within the example tex file. --MM
+\ifaclfinal 
+\else 
+	\addtolength\titlebox{.25in}
+\fi
+% Mostly taken from deproc.
 \def\maketitle{\par
  \begingroup
    \def\thefootnote{\fnsymbol{footnote}}
@@ -149,8 +389,9 @@
            \hbox to \linewidth\bgroup\large \hfil\hfil
              \hbox to 0pt\bgroup\hss \begin{tabular}[t]{c}\bf}
   \hbox to \linewidth\bgroup\large \hfil\hfil
-    \hbox to 0pt\bgroup\hss \begin{tabular}[t]{c}\bf\@author 
-                            \end{tabular}\hss\egroup
+    \hbox to 0pt\bgroup\hss 
+	\outauthor
+   \hss\egroup
     \hfil\hfil\egroup}
   \vskip 0.3in plus 2fil minus 0.1in
 }}
