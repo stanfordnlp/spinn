@@ -495,14 +495,17 @@ The full SPINN model with its relatively weak internal parser performs more poor
 \end{axis}
 \end{tikzpicture}
 }
-\caption{Runtime performance results with the thin-stack GPU algorithm for tree-structured neural networks. \todo{[JG] Add some comments}}
+\caption{Runtime performance results with the thin-stack GPU algorithm.}
+\label{fig:speed}
 \end{figure}
 
-\todo{[JG] Write me! In short: We're an order of magnitude faster than plain C++ CPU TreeRNNs w/ reasonable model sizes.}
+We implemented the feedforward of the SPINN-NP-NT model (which is equivalent to a standard TreeRNN) in C++/CUDA in order to compare to the performance of a standard CPU-based TreeRNN solution \cite{irsoy2014deep}. Figure~\ref{fig:speed} compares the runtime performance of the two models computing representations on data from the Stanford Sentiment Treebank \todo{cite}. Each model is restricted to run on sentences of 30 tokens or fewer (for the SPINN model, this means we iterate over a sequence of 61 transitions). We fix the model dimensionality and word embedding dimensionality at 300 for all tests.
+
+The CPU reference model is implemented in C++ and uses a single-core Eigen linear algebra backend. The implementation is a simplified version of the TreeRNN from \citealt{irsoy2014deep}\footnote{The original code for this model is available at \url{https://github.com/oir/deep-recursive}. We plan to release our modified code.}, modified to exactly match the computation performed by our GPU model. We run the CPU performance test on a 2.20-GHz Intel Xeon processor with hyperthreading enabled. Our GPU model is implemented in C++ and CUDA, and will be released with the rest of our code. We test its performance on an NVIDIA Titan X GPU.
+
+At batch sizes of interest for test-time applications (e.g., 512 or 1024 examples), we observe a 10--20x speedup relative to the standard CPU implementation. Figure~\ref{speed} shows a substantial difference in runtime scaling as batch sizes increase which is typical of GPU computation. We hope that this improved batchable TreeRNN algorithm will enable further rapid research in tree-structured neural networks.
 
 \todo{Note that the full SPINN (i.e. Model 1) is in the same complexity class as SPINN-NP (what we're evaluating here) with very similar constants.}
-
-\vspace{10em}
 
 \subsection{Parsing performance}
 
@@ -521,7 +524,7 @@ The full SPINN model with its relatively weak internal parser performs more poor
 
 We find that:
 \begin{itemize}
-\item Our SPINN-NP-NT model precisely implements tree-structured compositionality (as in a TreeLSTM), but is capable of exploiting batched computation for dramatic \todo{[JG] Numbers} improvements in inference speed.
+\item Our SPINN-NP-NT model is exactly equivalent to a tree-structured network in what it computes, but is 10--20 times faster than a standard tree network at inference time.
 \item While the use of tree-structure alone does not offer a substantial improvement over an LSTM baseline, our base tree-sequence hybrid model (SPINN-NP) substantially outperforms that baseline, suggesting that our model is able to successfully exploit tree structure, while using sequential context information to better resolve ambiguity.
 \item It is possible to remove the dependence on an external parser from our model and replace it with a fast model-internal parser (as in the full SPINN) with only a small decrease in model performance.
 \end{itemize}
