@@ -103,7 +103,7 @@
 
 %     \author{}
     \author{
-    Samuel R.\ Bowman$^{1,2,5,}$\thanks{The first two authors contributed equally.} \\
+    Samuel R.\ Bowman$^{1,2,5,}$\thanks{~\,The first two authors contributed equally.} \\
     \texttt{\small sbowman@stanford.edu} \\
     \And
     Jon Gauthier$^{2,3,5,*}$ \\
@@ -136,7 +136,7 @@
 \newcommand{\@emptybiblabel}[1]{}
 \definecolor{black}{rgb}{0,0,0}
 \makeatother
-\usepackage[breaklinks, colorlinks, linkcolor=black, urlcolor=black, citecolor=black]{hyperref}
+\usepackage[breaklinks, colorlinks, linkcolor=black, urlcolor=black, citecolor=black, draft]{hyperref}
 
 \def\t#1{#1}
 \def\b#1{\t{\textbf{#1}}}
@@ -158,6 +158,8 @@ Tree-structured neural networks exploit valuable syntactic parse information as 
 
 A wide range of current state-of-the-art models in NLP are built around neural network components that build vector representations of sentence meaning \cite{socher2011semi,sutskever2014sequence,vinyals2015neural}. This component, the sentence encoder, is generally formulated as a learned parametric function from word vectors to sentence vectors, and this function can take a range of different forms. Common sentence encoders include sequence-based recurrent neural network models (RNNs) with Long Short-Term Memory (LSTM RNNs, \citealt{hochreiter1997long}, see Figure~\ref{fig:batching:good}), which accumulate information over the sentence sequentially, convolutional neural networks over words or characters (\citealt{kalchbrenner2014convolutional}, \todo{[SB] Cite LeCun CharCNN}), which accumulate information using filters over short local sequences of words, and tree-structured recursive neural networks (TreeRNNs \citealt{goller1996learning,socher2011semi}, see Figure~\ref{fig:batching:bad}), which propagate information up a binary parse tree structure over words. Of these, it is easy to argue that the TreeRNN is the principled choice---meaning in natural language sentences is widely believed to be constructed incrementally according to a tree structure \cite{Partee84,Janssen97}, and so a model which instantiates that tree structure should have a maximally easy time learning to construct meaning.
 
+\input{../model1_fig.tex}
+
 TreeRNNs have shown promise, but they have largely been overlooked in favor of sequence-based RNNs for practical reasons. Batched computation---performing synchronized computation across many examples at once---is a crucial enabling technology in allowing neural networks to be trained efficiently on large datasets (\question{What, if anything, can we cite here?}). Batching yields order-of-magnitude improvements in standard CPU implementations of neural network models, and substantial additional gains on GPUs. TreeRNNs build the parse structure of each sentence they process into the structure of the network itself, forcing the model to perform a different sequence of computations for each sentence, and thereby requiring that each sentence be processed one-by-one, making batched computation impossible in standard implementations. One aim of this paper is to restructure the computations involved in a TreeRNN in order to enable batching and make these large-scale evaluations possible.  In addition to their slow speed, TreeRNNs have an additional feature that makes them impractical in many settings: they can only operate on sentences that have already been processed by a syntactic parser, which slows and complicates the implementation of these models for most applications. This paper additionally aims to integrate parsing into TreeRNN processing to circumvent this issue.
 
 In spite of the unwieldiness of current standard TreeRNNs, there is still value in the idea of using syntactic parse trees to guide the construction of meaning in neural network models. Tree-structured models have shown substantial performance gains on some smaller-scale NLP tasks \cite{tai2015improved,li2015tree}, and their theoretical foundations are strong. Tree-structured compositionality is a property of natural language, and simpler sequence-based RNNs have a difficult time exploiting this property---while sequence-based models should, theoretically, be able to learn to simulate tree-structured composition, this behavior does not emerge in practice on reasonably-sized tasks \cite{bowman2015trees}. 
@@ -168,8 +170,6 @@ In this paper, we introduce the Stack-augmented Parser-Interpreter Neural Networ
 \item It supports batched computation for both parsed and unparsed sentences, supporting dramatic speedups over standard TreeRNNs.
 \item It supports a novel tree-sequence hybrid mechanism for handling local context in sentence interpretation that yields substantial gains in accuracy over either pure sequence-based models or pure tree-based models.
 \end{itemize}
-
-\input{../model1_fig.tex}
 
 \section{The shift-reduce sentence model}
 
