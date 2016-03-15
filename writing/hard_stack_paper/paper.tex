@@ -419,7 +419,7 @@ Even though NLI is framed as a relatively simple three-way classification task, 
 SNLI is a corpus of 570k human-labeled pairs of scene descriptions like the one above. We use the standard train--test split and ignore unlabeled examples, which leaves about 549k examples for training, 9,842 for development, and 9,824 for testing. SNLI labels are roughly balanced, with the most frequent label, {\it entailment}, making up 34.2\% of the test set.
 
 
-\subsection{Models evaluated}
+\subsection{Models evaluated} \todo{[SB] Condense.}
 
 We evaluate four models on the SNLI task. Each uses 300d hidden states: \todo{[SB] d or D?}
 \begin{itemize}
@@ -459,7 +459,7 @@ The full SPINN model with its relatively weak internal parser performs more poor
 \label{fig:speed}
 \end{figure}
 
-We implemented the feedforward of the SPINN-NP-NT model (which is equivalent to a standard TreeRNN) in C++/CUDA in order to compare to the performance of a standard CPU-based TreeRNN solution \cite{irsoy2014deep}. Figure~\ref{fig:speed} compares the runtime performance of the two models computing representations on data from the Stanford Sentiment Treebank \todo{cite}. Each model is restricted to run on sentences of 30 tokens or fewer (for the SPINN model, this means we iterate over a sequence of 61 transitions). We fix the model dimensionality and word embedding dimensionality at 300 for all tests.
+We implemented the feedforward of the SPINN-NP-NT model (which is equivalent to a standard TreeRNN) in C++/CUDA in order to compare to the performance of a standard CPU-based TreeRNN solution \cite{irsoy2014deep}. Figure~\ref{fig:speed} compares the runtime performance of the two models computing representations on data from the Stanford Sentiment Treebank \todo{cite}. Each model is restricted to run on sentences of 30 tokens or fewer (for the SPINN model, this means we iterate over a sequence of 61 transitions). We fix the model dimensionality and word embedding dimensionality at 300 for all tests. \todo{[JG] Explain why we implemented *just* feedforward in this style. (Something like: Theano is convenient for training but very non-optimal for our model.)}
 
 The CPU reference model is implemented in C++ and uses a single-core Eigen linear algebra backend. The implementation is a simplified version of the TreeRNN from \citealt{irsoy2014deep}\footnote{The original code for this model is available at \url{https://github.com/oir/deep-recursive}. We plan to release our modified code.}, modified to exactly match the computation performed by our GPU model. We run the CPU performance test on a 2.20-GHz Intel Xeon processor with hyperthreading enabled. Our GPU model is implemented in C++ and CUDA, and will be released with the rest of our code. We test its performance on an NVIDIA Titan X GPU.
 
