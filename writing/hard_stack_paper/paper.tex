@@ -468,9 +468,11 @@ We evaluate four models on the SNLI task. Each uses 300d hidden states:
 We compare our models against a range of baselines, including the strongest published non-neural network-based result from \cite{snli:emnlp2015}, a set of previous neural network models built around sentence encoders, and a set of models built around soft attention architectures. We should note that these attention-based models are by far the strongest published on SNLI to date, but we do not wish to compare our model with those models directly. SNLI was originally presented as an evaluation and development task for sentence encoding models, on the premise that sentence encoding models that do well on SNLI capture sentence meaning in a general sense, and are well suited to use on a range of NLP tasks. The attentional models are narrowly adapted to the sentence-pair structure of SNLI examples and cannot act as such general sentence encoders. We focus on models which do support general sentence encoding in our analysis.
 
 
-\paragraph{Results} Table~\ref{tab:results} shows our results. Our primary evaluation metric for all models is three-way classification accuracy on the SNLI test set. For the full SPINN model, we also report a measure of the agreement of its generated parses with the Stanford Parser's parses of the same data, expressed in terms of the model's accuracy in making two-way transition decisions. In addition, we report the number of trained parameters in each model as well as training set accuracy.
+\paragraph{Results} Table~\ref{tab:results} shows our results. Our primary evaluation metric for all models is three-way classification accuracy on the SNLI test set. The full SPINN model also generates parsing predictions, and we report a measure of agreement between this model's predictions and the Stanford Parser's predictions on the same data (calculated as classification accuracy over \shift~and \reduce~operations). We also report the number of trained parameters in each model and training set accuracy.
 
-We find that the bare SPINN-NP-NT model performs relatively poorly, but that the SPINN-NP with the added tracking LSTM reaches state-of-the-art accuracy among sentence encoding based models, indicating that our tree-sequence hybrid approach succeeds in combining the strengths of both approaches to encoding. The fully independent SPINN model with its relatively weak internal parser performs more poorly, but nonetheless exceeds the performance of the LSTM baseline. None of our models reached the performance of the strongest attention-based models, which were explicitly engineered for the sentence pair-based structure of the SNLI task.
+We find that the bare SPINN-NP-NT model performs relatively poorly, but that the SPINN-NP with the added tracking LSTM reaches state-of-the-art accuracy among sentence encoding based models. The success of the SPINN-NP model, which is a hybrid tree-sequence model, suggests that the tree- and sequence-based encoding methods are complementary.
+
+The full SPINN model with its relatively weak internal parser performs more poorly, but nonetheless exceeds the performance of the LSTM baseline. None of our models reached the performance of the strongest attention-based models, which were explicitly engineered for the sentence pair-based structure of the SNLI task.
 
 \subsection{Runtime performance}
 \label{sec:speed}
@@ -479,7 +481,7 @@ We find that the bare SPINN-NP-NT model performs relatively poorly, but that the
 \resizebox{\linewidth}{!}{
 \begin{tikzpicture}
 \begin{axis}[xmin=0, ymin=0, xlabel=Batch size, ylabel=Feedforward time (sec),
-			 xtick={0,256,512,1024,2048}, legend style={at={(1, 1)},anchor=north east}]
+			 xtick={0,256,512,1024,2048}, legend style={at={(1.1, 0.98)},anchor=north east}]
   \addplot table [x={Batch size}, y=CPU, col sep=tab] {runtime.csv};
   \addlegendentry{CPU \cite{irsoy2014deep}}
   \addplot table [x={Batch size}, y=GPU, col sep=tab] {runtime.csv};
