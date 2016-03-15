@@ -9,7 +9,7 @@
 \usepackage[leqno, fleqn]{amsmath}
 \usepackage{amssymb}
 \usepackage{qtree}
-\usepackage{graphicx}
+\usepackage{graphicx} 
 \usepackage{booktabs}
 \usepackage{multirow}
 \usepackage{colortbl}
@@ -101,33 +101,33 @@
 
 \title{A fast unified model for parsing and sentence understanding} 
 
-     \author{}
-%    \author{
-%    Samuel R.\ Bowman$^{1,2,5,}$\thanks{The first two authors contributed equally.} \\
-%    \texttt{\small sbowman@stanford.edu} \\
-%    \And
-%    Jon Gauthier$^{2,3,5,*}$ \\
-%    \texttt{\small jgauthie@stanford.edu} \\
-%    \And
-%    Abhinav Rastogi$^{4,5}$ \\
-%    \texttt{\small arastogi@stanford.edu} \\
-%    \AND
-%    Raghav Gupta$^{6}$ \\
-%    \texttt{\small rgupta93@stanford.edu} \\
-%    \And
-%    Christopher D.\ Manning$^{1,2,5,6}$\\
-%    \texttt{\small manning@stanford.edu}\\
-%    \And
-%    Christopher Potts$^{1}$\\
-%    \texttt{\small cgpotts@stanford.edu}
-%    \AND\\[-3ex]
-%    {$^{1}$Stanford Linguistics\quad
-%    $^{2}$Stanford NLP Group\quad
-%    $^{3}$Stanford Symbolic Systems}\\
-%    {$^{4}$Stanford Electrical Engineering\quad
-%    $^{5}$Stanford AI Lab\quad
-%    $^{6}$Stanford Computer Science}
-%    }
+%     \author{}
+    \author{
+    Samuel R.\ Bowman$^{1,2,5,}$\thanks{The first two authors contributed equally.} \\
+    \texttt{\small sbowman@stanford.edu} \\
+    \And
+    Jon Gauthier$^{2,3,5,*}$ \\
+    \texttt{\small jgauthie@stanford.edu} \\
+    \And
+    Abhinav Rastogi$^{4,5}$ \\
+    \texttt{\small arastogi@stanford.edu} \\
+    \AND
+    Raghav Gupta$^{6}$ \\
+    \texttt{\small rgupta93@stanford.edu} \\
+    \And
+    Christopher D.\ Manning$^{1,2,5,6}$\\
+    \texttt{\small manning@stanford.edu}\\
+    \And
+    Christopher Potts$^{1}$\\
+    \texttt{\small cgpotts@stanford.edu}
+    \AND\\[-3ex]
+    {$^{1}$Stanford Linguistics\quad
+    $^{2}$Stanford NLP Group\quad
+    $^{3}$Stanford Symbolic Systems}\\
+    {$^{4}$Stanford Electrical Engineering\quad
+    $^{5}$Stanford AI Lab\quad
+    $^{6}$Stanford Computer Science}
+    }
 
 \date{}
 
@@ -148,7 +148,7 @@
 \maketitle
 \begin{abstract}
 
-Tree-structured neural networks exploit valuable syntactic parse information as they interpret the meanings of sentences. However, they suffer two key technical problems: they can only operate on parsed sentences and do not directly support batched computation, making them slow and unwieldy for large-scale NLP tasks. We address these issues by introducing the Stack-augmented Parser-Interpreter Neural Network (SPINN), which combines parsing and interpretation within a single model by integrating tree-structured sentence interpretation into the linear sequential structure of a transition-based parser. This model  supports batched computation, and its integrated parser allows it to operate on unparsed data with nearly no loss of accuracy. We evaluate it on the Stanford NLI entailment task, show that it outperforms other sentence encoding models, and show that it can be integrated effectively with soft attention for sentence pair tasks like entailment for further gains in performance.
+Tree-structured neural networks exploit valuable syntactic parse information as they interpret the meanings of sentences. However, they suffer two key technical problems: they can only operate on parsed sentences and do not directly support batched computation, making them slow and unwieldy for large-scale NLP tasks. We address these issues by introducing the Stack-augmented Parser-Interpreter Neural Network (SPINN), which combines parsing and interpretation within a single model by integrating tree-structured sentence interpretation into the linear sequential structure of a transition-based parser. This model  supports batched computation, and its integrated parser allows it to operate on unparsed data with nearly no loss of accuracy. We evaluate it on the Stanford NLI entailment task and show that it significantly outperforms other sentence encoding models.
 
 \end{abstract}
 
@@ -156,9 +156,9 @@ Tree-structured neural networks exploit valuable syntactic parse information as 
 
 \input{batching_fig.tex}
 
-A wide range of current state-of-the-art models in NLP are built around neural network components that build vector representations of sentence meaning \cite{socher2011semi,sutskever2014sequence,vinyals2015neural}. This component, the sentence encoder, is generally formulated as a learned parametric function from word vectors to sentence vectors, and this function can take a range of different forms. Common sentence encoders include sequence-based recurrent neural network models (RNNs) with Long Short-Term Memory (\citealt{hochreiter1997long}, see Figure~\ref{fig:batching:good}), which accumulate information over the sentence sequentially, convolutional neural networks over words or characters \cite{kalchbrenner2014convolutional} \todo{Cite LeCun CharConvNet}, which pool information over short localsequences of words, and tree-structured recursive neural networks (TreeRNNs \citealt{goller1996learning,socher2011semi}, see Figure~\ref{fig:batching:bad}), which propagate information up a binary tree structure over the words. Of these, there are tidy theoretical arguments suggesting that the TreeRNN is the principled choice: meaning in natural language sentences is widely believed to be constructed incrementally according to a tree-structure \cite{Partee84,Janssen97}, and so a model which instantiates that tree structure should have a maximally easy time recovering the process by which meaning is constructed.
+A wide range of current state-of-the-art models in NLP are built around neural network components that build vector representations of sentence meaning \cite{socher2011semi,sutskever2014sequence,vinyals2015neural}. This component, the sentence encoder, is generally formulated as a learned parametric function from word vectors to sentence vectors, and this function can take a range of different forms. Common sentence encoders include sequence-based recurrent neural network models (RNNs) with Long Short-Term Memory (LSTM RNNs, \citealt{hochreiter1997long}, see Figure~\ref{fig:batching:good}), which accumulate information over the sentence sequentially, convolutional neural networks over words or characters (\citealt{kalchbrenner2014convolutional}, \todo{[SB] Cite LeCun CharCNN}), which accumulate information using filters over short local sequences of words, and tree-structured recursive neural networks (TreeRNNs \citealt{goller1996learning,socher2011semi}, see Figure~\ref{fig:batching:bad}), which propagate information up a binary parse tree structure over words. Of these, it is easy to argue that the TreeRNN is the principled choice---meaning in natural language sentences is widely believed to be constructed incrementally according to a tree structure \cite{Partee84,Janssen97}, and so a model which instantiates that tree structure should have a maximally easy time learning to construct meaning.
 
-In practice, TreeRNNs have shown promise, but they have largely been overlooked in favor of sequence-based RNNs for practical reasons. Batched computation--performing synchronized computation across many examples at once--is a crucial enabling technology in allowing neural networks to be trained efficiently on large datasets \question{What, if anything, can we cite here?}. Batching yields order-of-magnitude improvements in standard CPU implementation, and substantial additional gains on GPUs. TreeRNNs build the parse structure of each sentence they process into the structure of the network itself, forcing the model to perform a different sequence of computations for each sentence, and thereby requiring that each sentence be processed one-by-one, making batched computation impossible. One aim of this paper is to make these large-scale evaluations possible. Beyond even this large handicap, TreeRNNs can only operate on sentences that have already been processed by a syntactic parser, which slows and complicates the implementation of these models for most applications.
+TreeRNNs have shown promise, but they have largely been overlooked in favor of sequence-based RNNs for practical reasons. Batched computation---performing synchronized computation across many examples at once---is a crucial enabling technology in allowing neural networks to be trained efficiently on large datasets (\question{What, if anything, can we cite here?}). Batching yields order-of-magnitude improvements in standard CPU implementations of neural network models, and substantial additional gains on GPUs. TreeRNNs build the parse structure of each sentence they process into the structure of the network itself, forcing the model to perform a different sequence of computations for each sentence, and thereby requiring that each sentence be processed one-by-one, making batched computation impossible in standard implementations. One aim of this paper is to restructure the computations involved in a TreeRNN in order to enable batching and make these large-scale evaluations possible.  In addition to their slow speed, TreeRNNs have an additional feature that makes them impractical in many settings: they can only operate on sentences that have already been processed by a syntactic parser, which slows and complicates the implementation of these models for most applications. This paper additionally aims to integrate parsing into TreeRNN processing to circumvent this issue.
 
 In spite of the unwieldiness of current standard TreeRNNs, there is still value in the idea of using syntactic parse trees to guide the construction of meaning in neural network models. Tree-structured models have shown substantial performance gains on some smaller-scale NLP tasks \cite{tai2015improved,li2015tree}, and their theoretical foundations are strong. Tree-structured compositionality is a property of natural language, and simpler sequence-based RNNs have a difficult time exploiting this property---while sequence-based models should, theoretically, be able to learn to simulate tree-structured composition, this behavior does not emerge in practice on reasonably-sized tasks \cite{bowman2015trees}. 
 
@@ -270,7 +270,11 @@ Technically, the tracking LSTM takes three vectors as inputs at each step: the t
 \paragraph{Tracking left context for parsing} The decision function which determines which transitions (and thereby, which parses) the SPINN will use needs to take as its input some representation of the current state of the model. Because the tracking LSTM directly takes the buffer top as input, it can directly inform that function of what word is under consideration for a possible \shift. Because the tracking LSTM sees the top of the stack at every step, and information only enters the stack by being at the top at some step, the tracking LSTM is able to supply that function with a summary of the state of the stack without having to iterate over the full stack at each step.
 
 \paragraph{Tracking left context for interpretation} Lexical ambiguity is omnipresent in natural language. Most words have multiple senses or meanings, and it is generally necessary to use the context in which a word occurs to determine which of its senses or meanings is meant in a given sentence. Simpler sequence-based sentence encoding models like the standard LSTM RNN have an advantage here: when a sequence-based model first processes a word (first incorporates it into a partial sentence representation), the model has access to a state vector that summarizes all of the words to the left of the current word, and that state vector can serve as a crude but effective form of context to help with disambiguation. In contrast, when standard tree-structured models first process a word, they only have access to the constituent that the word is merging with, which is strictly less than the sequence model has access to, and is often just a single additional word. Feeding a context representation from the tracking LSTM into the composition function is a simple and efficient way to mitigate this disadvantage of tree-structured models.
-\todo{Include figure of post-order traversal sequence made by the tracking LSTM?}
+
+\todo{[JG] Include figure of post-order traversal sequence made by the tracking LSTM?}
+\todo{[SB] Say more about joint learning of phrase representations for the two objectives.}
+
+\paragraph{The full objective function} \todo{[SB] Fill out. In short, there are two weighted terms in the objective: a semantic term and a syntactic term.}
 
 \subsection{Parsing: Predicting transitions from the tracking state}
 
@@ -322,11 +326,11 @@ Cropping necessarily discards information, but if done properly, it is nonethele
 
 \paragraph{Optimization and hyperparameters}
 
-We use the RMSProp optimizer (\todo{Cite.}) with a tuned starting learning rate that decays by a factor of 0.75 every 10k steps. We apply both dropout \cite{srivastava2014dropout} and batch normalization \cite{2015SIoffeCSzegedy} to the word embeddings in the buffer (after the linear projection is applied) and to the feature vectors that serve as the inputs and outputs to the MLP that precedes the final entailment classifier. In addition, we apply an L2 regularization penalty to all parameters.
+We use the RMSProp optimizer (\todo{[SB] Cite.}) with a tuned starting learning rate that decays by a factor of 0.75 every 10k steps. We apply both dropout \cite{srivastava2014dropout} and batch normalization \cite{2015SIoffeCSzegedy} to the word embeddings in the buffer (after the linear projection is applied) and to the feature vectors that serve as the inputs and outputs to the MLP that precedes the final entailment classifier. In addition, we apply an L2 regularization penalty to all parameters.
 
-We used random search to tune many of the hyperparameters, including the learning rate, the dropout rate, the L2 regularization weight, the hidden dimension of the tracking LSTM and the number of layers in the MLP \todo{[SB] Report the ranges searched for each parameter and the number of runs for each results.}
+We used random search to tune many of the hyperparameters, including the learning rate, the dropout rate, the L2 regularization weight, the hidden dimension of the tracking LSTM and the number of layers in the MLP \todo{[SB] Report the ranges searched for each parameter and the number of runs for each results. Some of this can go in an appendix.}
 
-We trained each model for 250k steps in each run, using a minibatch size of 64 for each step. We tracked each model's performance on the development set during training and saving parameters when this performance reached a new peak. We used early stopping, evaluating on the test set using the parameters that performed best on the development set.
+We trained each model for 250k steps in each run, using a minibatch size of 32 for each step. We tracked each model's performance on the development set during training and saving parameters when this performance reached a new peak. We used early stopping, evaluating on the test set using the parameters that performed best on the development set.
 
 \paragraph{Software infrastructure} We will make Theano code available.
 
@@ -472,6 +476,8 @@ We compare our models against a range of baselines, including the strongest publ
 
 We find that the bare SPINN-NP-NT model performs relatively poorly, but that the SPINN-NP with the added tracking LSTM reaches state-of-the-art accuracy among sentence encoding based models, indicating that our tree-sequence hybrid approach succeeds in combining the strengths of both approaches to encoding. The fully independent SPINN model with its relatively weak internal parser performs more poorly, but nonetheless exceeds the performance of the LSTM baseline. None of our models reached the performance of the strongest attention-based models, which were explicitly engineered for the sentence pair-based structure of the SNLI task.
 
+\todo{[SB] Discuss relationship between our model and the TBCNN.}
+
 \subsection{Runtime performance}
 \label{sec:speed}
 
@@ -528,7 +534,7 @@ For a more ambitious goal, we expect that it should be possible to implement a v
 %    
 %    Some of the Tesla K40(s) used for this research was/were donated by the NVIDIA Corporation.
 %    \todo{[CM,CP] Acknowledge other grants.}
-
+ 
 \bibliographystyle{../acl}
 \bibliography{../MLSemantics}
 \todo{[SB] Make bibliography style uniform.}
