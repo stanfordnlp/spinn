@@ -106,6 +106,7 @@ Tree-structured neural networks exploit valuable syntactic parse information as 
 
 \input{batching_fig.tex}
 \input{../model1_fig.tex}
+\todo{[SB,JG,AR,RG] Trim mercilessly whenever you see anything redundant.}
 
 A wide range of current state-of-the-art models in NLP are built around neural network components that build vector representations of sentence meaning \citep{socher2011semi,sutskever2014sequence}. This component, the sentence encoder, is generally formulated as a learned parametric function from a sequence of word vector to a sentence vector, and this function can take a range of different forms. Common sentence encoders include sequence-based recurrent neural network models (RNNs) with Long Short-Term Memory \citep[LSTM,][see Figure~\ref{fig:batching:good}]{hochreiter1997long}, which accumulate information over the sentence sequentially, convolutional neural networks over words or characters \citep{kalchbrenner2014convolutional,DBLP:journals/corr/ZhangZL15}, which accumulate information using filters over short local sequences of words, and tree-structured recursive neural networks \citep[TreeRNNs,][see Figure~\ref{fig:batching:bad}]{goller1996learning,socher2011semi}, which propagate information up a binary parse tree structure over words. 
 
@@ -124,7 +125,7 @@ We evaluate the SPINN on the Stanford Natural Language Inference sentence unders
 
 There has been a fairly long history of work on building neural-network based parsers that use the core operations and data structures from transition-based parsing, of which shift-reduce parsing is a version \citep{henderson2004discriminative,emami2005neural,titov2010latent,chen2014,buys2generative,dyer-EtAl:2015:ACL-IJCNLP,kiperwasser2016easy}. In addition, there has been recent work \citep{zhang2016top,dyer2016rnn} proposing models designed primarily for generative language modeling tasks that use these structures as well. To our knowledge, the SPINN is the first model to use these structures for the purpose of sentence interpretation, rather than parsing or generation.
 
-\citet{socher2011dynamic} presents a version of the TreeRNN model which is capable of operating over unparsed inputs. However, this method is unsupervised, limiting its performance, and it requires an expensive search process at test time. Our model presents an alternative approach to combining interpretation and parsing that supports supervised training for the parsing component, and that is dramatically faster than any previous tree-structured model. 
+\citet{socher2011semi} presents a version of the TreeRNN model which is capable of operating over unparsed inputs. However, this method is unsupervised, limiting its performance, and it requires an expensive search process at test time. Our model presents an alternative approach to combining interpretation and parsing that supports supervised training for the parsing component, and that is dramatically faster than any previous tree-structured model. 
 
 \section{Our model: The SPINN}
 
@@ -339,34 +340,34 @@ Lexicalized classifier \citep{snli:emnlp2015}
 \midrule
 \multicolumn{5}{c}{Previous sentence encoder-based NN results}\\
 \midrule
-100d LSTM encoders \citep{snli:emnlp2015}
+100D LSTM encoders \citep{snli:emnlp2015}
                         & 221k               & --               &   84.8   &   77.6      \\
-1024d pretrained GRU encoders \citep{DBLP:journals/corr/VendrovKFU15}
+1024D pretrained GRU encoders \citep{DBLP:journals/corr/VendrovKFU15}
                         & 15m                & --              &   98.8   &   81.4       \\
-300d Tree-based CNN encoders \citep{mou2015recognizing}
+300D Tree-based CNN encoders \citep{mou2015recognizing}
                         & 3.5m                & --             &   83.4   &   82.1       \\
 \midrule
 \multicolumn{5}{c}{Our results}\\
 \midrule
-300d LSTM RNN encoders          & 3.0m                  & --                &   83.9      &   80.6       \\
-300d SPINN-NP-NT encoders
+300D LSTM RNN encoders          & 3.0m                  & --                &   83.9      &   80.6       \\
+300D SPINN-NP-NT encoders
                         & 3.4m                  & --                &   84.4      &   80.9       \\
-300d SPINN-NP encoders
+300D SPINN-NP encoders
                         & 3.7m                  & --                &   89.2      &   \underline{83.2}       \\
-\result{300d SPINN encoders }
+\result{300D SPINN encoders }
                         & ??                  & 92.2+dv            &   ?    &   83.?      \\          
-% \result{300d SPINN-NP, sequence-based attn.   }     
+% \result{300D SPINN-NP, sequence-based attn.   }     
 %                         & ?                  & --                &   ?      &   86.3dv         \\
-% \result{300d SPINN-NP, tree-based attn. }           
+% \result{300D SPINN-NP, tree-based attn. }           
 %                         & ?                  & --                &   ?      &   \textbf{?}\\
 \midrule
 \multicolumn{5}{c}{Other previous NN results}\\
 \midrule
-100d LSTM w/ word-by-word attention \citep{rocktaschel2015reasoning}
+100D LSTM w/ word-by-word attention \citep{rocktaschel2015reasoning}
                         & 252k               & --              &   85.3   &   83.5       \\
-300d mLSTM word-by-word attention model \citep{DBLP:journals/corr/WangJ15b}
+300D mLSTM word-by-word attention model \citep{DBLP:journals/corr/WangJ15b}
                         & 1.9m               & --             &   92.0   &   86.1      \\
-300d LSTMN with deep attention fusion \citep{cheng2016long}
+300D LSTMN with deep attention fusion \citep{cheng2016long}
                         & 1.4m               & --                &   92.3   &   \textbf{89.1}      \\
     \bottomrule
   \end{tabular}
@@ -376,9 +377,9 @@ Lexicalized classifier \citep{snli:emnlp2015}
 
 \subsection{Natural language inference and SNLI}
 
-We evaluate the SPINN on the task of natural language inference \citep[NLI, also known as recognizing textual entailment, or RTE][]{dagan2006pascal,MacCartney09}. NLI is a sentence pair classification task, in which a model reads two sentences (a premise and a hypothesis), and outputs a judgment of {\it entailment}, {\it contradiction}, or {\it neutral}, reflecting the relationship between the meanings of the two sentences, as in this example from the Stanford NLI corpus \citet[SNLI][]{snli:emnlp2015}), which we use for training and evaluation: 
+We evaluate the SPINN on the task of natural language inference \citep[NLI, also known as recognizing textual entailment, or RTE][]{dagan2006pascal,MacCartney09}. NLI is a sentence pair classification task, in which a model reads two sentences (a premise and a hypothesis), and outputs a judgment of {\it entailment}, {\it contradiction}, or {\it neutral}, reflecting the relationship between the meanings of the two sentences, as in this example from the Stanford NLI corpus \citep[SNLI][]{snli:emnlp2015}, which we use for training and evaluation: 
 
-\begin{quote}
+\begin{quote}\small 
 Premise: {\it Girl in a red coat, blue head wrap and jeans is making a snow angel.}
 
 Hypothesis: {\it A girl outside plays in the snow.}
@@ -391,26 +392,23 @@ Even though NLI is framed as a relatively simple three-way classification task, 
 SNLI is a corpus of 570k human-labeled pairs of scene descriptions like the one above. We use the standard train--test split and ignore unlabeled examples, which leaves about 549k examples for training, 9,842 for development, and 9,824 for testing. SNLI labels are roughly balanced, with the most frequent label, {\it entailment}, making up 34.2\% of the test set.
 
 
-\subsection{Models evaluated} \todo{[SB] Condense.}
+\subsection{Models evaluated}
 
-We evaluate four models on the SNLI task. Each uses 300d hidden states: \todo{[SB] d or D?}
+We evaluate four models on the SNLI task. Each uses 300D hidden states:
 \begin{itemize}
 \item A baseline LSTM model (similar to that of \citet{snli:emnlp2015}) that uses the same classifier architecture as our models, but encodes sentences using a single layer LSTM-RNN sequence model.
-\item The minimal SPINN-NP-NT (\textit{no parsing, no tracking}) model, which uses transitions from an external parser, and has no tracking LSTM to inform semantic composition. This model is equivalent to a TreeLSTM \citep{tai2015improved}.
-\item The SPINN-NP model, which includes a tracking LSTM which guides composition, making it a hybrid tree-sequence model.
-\item The full SPINN model, which makes its own parsing decisions, and does not depend on an external parser at test time, making it slightly weaker but a practical choice in applied settings.
+\item The minimal SPINN-NP-NT (\textit{no parsing, no tracking}) model, which uses transitions from an external parser and has no tracking LSTM to inform semantic composition. This model is equivalent to a TreeLSTM \citep{tai2015improved}.
+\item The SPINN-NP model, which adds the tracking LSTM to guide composition, making it a hybrid tree-sequence model.
+\item The full SPINN model, which makes its own parsing decisions, and does not depend on an external parser at test time.
 \end{itemize}
 
-We compare our models against a range of baselines, including the strongest published non-neural network-based result from \citep{snli:emnlp2015}, a set of previous neural network models built around sentence encoders, and a set of models built around soft attention architectures. We should note that these attention-based models are by far the strongest published on SNLI to date, but we do not wish to compare our model with those models directly. \todo{[SB] But we do. Rephrase. Move before naming of models.} SNLI was originally presented as an evaluation and development task for sentence encoding models, on the premise that sentence encoding models that do well on SNLI capture sentence meaning in a general sense, and are well suited to use on a range of NLP tasks. The attentional models are narrowly adapted to the sentence-pair structure of SNLI examples and cannot act as such general sentence encoders. We focus on models which do support general sentence encoding in our analysis.
+We compare our models against a range of baselines, including the strongest published non-neural network-based result from \citep{snli:emnlp2015}, a set of previous neural network models built around sentence encoders, and a set of models built around soft attention architectures. We should note that these attention-based models are by far the strongest published on SNLI to date, but these are not necessarily comparable to ours: SNLI was originally presented as an evaluation and development task for sentence encoding models, on the premise that sentence encoding models that do well on SNLI capture sentence meaning in a general sense, and are well suited to use on a range of NLP tasks. The attentional models are specifically adapted to the sentence-pair structure of SNLI examples and cannot act as such general sentence encoders. We focus on models which do support general sentence encoding in our evaluation.
 
+\paragraph{Results} Table~\ref{tab:results} shows our results. Our primary evaluation metric for all models is three-way classification accuracy on the SNLI test set. The full SPINN model also generates parsing predictions, and we report a measure of agreement between this model's predictions and the predictions associated with the Stanford PCFG Parser parses included with SNLI (calculated as classification accuracy over \shift~and \reduce~operations). We also report the number of trained parameters in each model and training set accuracy.
 
-\paragraph{Results} Table~\ref{tab:results} shows our results. Our primary evaluation metric for all models is three-way classification accuracy on the SNLI test set. The full SPINN model also generates parsing predictions, and we report a measure of agreement \todo{[SB] Clarify.} between this model's predictions and the Stanford Parser's predictions on the same data (calculated as classification accuracy over \shift~and \reduce~operations) \todo{[SB] Which Stanford parser.}. We also report the number of trained parameters in each model and training set accuracy.
+We find that the bare SPINN-NP-NT model performs little better than the RNN baseline, but that the SPINN-NP with the added tracking LSTM reaches state-of-the-art accuracy among sentence encoding based models. The success of the SPINN-NP model, which is a hybrid tree-sequence model, suggests that the tree- and sequence-based encoding methods are complementary. The full SPINN model with its relatively weak internal parser performs slightly less well, but nonetheless exceeds the performance of the LSTM baseline. None of our models reached the performance of the strongest attention-based models, which were explicitly engineered for the sentence pair-based structure of the SNLI task.
 
-We find that the bare SPINN-NP-NT model performs little better than the RNN baseline, but that the SPINN-NP with the added tracking LSTM reaches state-of-the-art accuracy among sentence encoding based models. The success of the SPINN-NP model, which is a hybrid tree-sequence model, suggests that the tree- and sequence-based encoding methods are complementary.
-
-The full SPINN model with its relatively weak internal parser performs slightly less well, but nonetheless exceeds the performance of the LSTM baseline. None of our models reached the performance of the strongest attention-based models, which were explicitly engineered for the sentence pair-based structure of the SNLI task.
-
-\todo{[SB] Discuss relationship between our model and the TBCNN. Add significance numbers.}
+Both the SPINN-NP and the full SPINN outperform all previous sentence encoding models by a significant margin. Most notably our modes outperform the TBCNN of \citet{mou2015recognizing}, which also uses tree-structured composition for local feature extraction, but uses simpler pooling techniques to build sentence features in the interest of efficiency. Our results show that a model that uses tree-structured composition fully (SPINN) outperforms one which uses it only partially (TBCNN), which in turn outperforms one which does not use it at all (LSTM RNN).
 
 \subsection{Runtime performance}
 \label{sec:speed}
@@ -427,7 +425,7 @@ The full SPINN model with its relatively weak internal parser performs slightly 
 \end{axis}
 \end{tikzpicture}
 }
-\caption{Runtime performance results with the thin-stack GPU algorithm.}
+\caption{Runtime performance results with the thin-stack GPU algorithm. \todo{[JG] Shrink a bit.}}
 \label{fig:speed}
 \end{figure}
 
@@ -439,9 +437,9 @@ The CPU reference model is implemented in C++ and uses a single-core Eigen linea
 
 At batch sizes of interest for test-time applications (e.g., 512 or 1024 examples), we observe a 10--20x speedup relative to the standard CPU implementation. Figure~\ref{fig:speed} shows a substantial difference in runtime scaling as batch sizes increase, which is typical of GPU computation. We hope that this improved batchable TreeRNN algorithm will enable further rapid research in tree-structured neural networks.
 
-\todo{Note that the full SPINN (i.e. Model 1) is in the same complexity class as SPINN-NP (what we're evaluating here) with very similar constants.}
+\todo{[JG] Note that the full SPINN (i.e. Model 1) is in the same complexity class as SPINN-NP (what we're evaluating here) with very similar constants.}
 
-\subsection{Parsing performance}
+\paragraph{Parsing performance}
 
 \todo{[AR] Fill in some details here.}
 \todo{[SB] Read AR's report and work out what to include.}
@@ -463,13 +461,11 @@ We find that:
 \item It is possible to remove the dependence on an external parser from our model and replace it with a fast model-internal parser (as in the full SPINN) with only a small decrease in model performance.
 \end{itemize}
 
-\paragraph{Future work} Because this paper aims to introduce a general purpose model for sentence encoding, we did not pursue the use of soft attention, despite its demonstrated effectiveness on the SNLI task. However, the choice of whether to use soft attention and the choice of what representations to perform attention over are orthogonal \todo{[SB] Rephrase prev clause.}, and we expect that it should be possible to productively combine our model with soft attention to yield state-of-the-art performance.
+\paragraph{Future work} Because this paper aims to introduce a general purpose model for sentence encoding, we did not pursue the use of soft attention, despite its demonstrated effectiveness on the SNLI task. However, we expect that it should be possible to productively combine our model with soft attention, following \citet{cheng2016long}, to yield state-of-the-art performance.
 
-The tracking LSTM that we incorporated into the SPINN uses only simple, quick-to-compute features drawn from the head of the buffer and the head of the stack. It is plausible that giving the tracking LSTM access to more information from the buffer and stack at each step would allow it to better represent the context of each tree node, including information about that nodes neighbors \todo{[SB] Rewrite.} in the sentence string and its likely position in the final tree, and that that context information could support both better parsing and better sentence encoding. One promising way to pursue this goal would be to encode the full contents of the stack and buffer at each time step following the method used by \citet{dyer-EtAl:2015:ACL-IJCNLP} for parsing.
+The tracking LSTM that we incorporated into the SPINN uses only simple, quick-to-compute features drawn from the head of the buffer and the head of the stack. It is plausible that giving the tracking LSTM access to more information from the buffer and stack at each step would allow it to better represent the context at each tree node, yielding both better parsing and better sentence encoding. One promising way to pursue this goal would be to encode the full contents of the stack and buffer at each time step following the method used by \citet{dyer-EtAl:2015:ACL-IJCNLP}.
 
 For a more ambitious goal, we expect that it should be possible to implement a variant of the SPINN on top of a modified stack data structure with differentiable \textsc{push} and \textsc{pop} operations (possibly following \citet{grefenstette2015learning,joulin2015inferring}). This would make it possible for the model to learn to parse using guidance from the semantic representation objective, essentially allowing learn to produce parses that are, in aggregate, better suited to supporting semantic interpretation than those supplied in the training data. 
-
-\todo{[SB] Fix run-ons here.}
 
 %    \subsubsection*{Acknowledgments}
 %    
@@ -478,10 +474,8 @@ For a more ambitious goal, we expect that it should be possible to implement a v
  
 \bibliographystyle{../acl_natbib}
 \bibliography{../MLSemantics}
-\todo{[SB] Make bibliography style uniform, esp BatchNorm.}
-
  
-\begin{table*}[ht]\small
+\begin{table*}\small
 \begin{center}
 \begin{tabular}{lrlrrrr}
 \toprule
