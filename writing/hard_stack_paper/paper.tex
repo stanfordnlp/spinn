@@ -454,9 +454,9 @@ At batch sizes of interest for test-time applications (e.g., 512 or 1024 example
 
 \section{Conclusions and future work}
 
-We find that:
+This paper shows that:
 \begin{itemize}
-\item Our SPINN-NP-NT model is exactly equivalent to a tree-structured network in what it computes, but is 10--20 times faster than a standard tree network at inference time.
+\item The SPINN-NP-NT model is exactly equivalent to a tree-structured network in what it computes, but is 10--20 times faster than a standard tree network at inference time.
 \item While the use of tree-structure alone does not offer a substantial improvement over an LSTM baseline, our base tree-sequence hybrid model (SPINN-NP) substantially outperforms that baseline, suggesting that our model is able to successfully exploit tree structure, while using sequential context information to better resolve ambiguity.
 \item It is possible to remove the dependence on an external parser from our model and replace it with a fast model-internal parser (as in the full SPINN) with only a small decrease in model performance.
 \end{itemize}
