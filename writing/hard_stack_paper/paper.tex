@@ -110,9 +110,9 @@ Tree-structured neural networks exploit valuable syntactic parse information as 
 
 A wide range of current state-of-the-art models in NLP are built around neural network components that build vector representations of sentence meaning \citep{socher2011semi,sutskever2014sequence}. This component, the sentence encoder, is generally formulated as a learned parametric function from a sequence of word vector to a sentence vector, and this function can take a range of different forms. Common sentence encoders include sequence-based recurrent neural network models (RNNs) with Long Short-Term Memory \citep[LSTM,][see Figure~\ref{fig:batching:good}]{hochreiter1997long}, which accumulate information over the sentence sequentially, convolutional neural networks over words or characters \citep{kalchbrenner2014convolutional,DBLP:journals/corr/ZhangZL15}, which accumulate information using filters over short local sequences of words, and tree-structured recursive neural networks \citep[TreeRNNs,][see Figure~\ref{fig:batching:bad}]{goller1996learning,socher2011semi}, which propagate information up a binary parse tree structure over words. 
 
-Of these, the TreeRNN is the principled choice, since meaning in natural language sentences constructed incrementally according to a tree structure \citep{Partee84,Janssen97}. However, while these models have shown promise \citep{tai2015improved,li2015tree,bowman2015trees}, they have largely been overlooked in favor of sequence-based RNNs because of their incompatibility with batched computation and their reliance on external parsers.  Batched computation---performing synchronized computation across many examples at once---yields order-of-magnitude improvements in model run time, and is a crucial enabling technology in allowing neural networks to be trained efficiently on large datasets. Because TreeRNNs use a different model structure for each sentence, batched computation is impossible in standard implementations. In addition, standard TreeRNN models can only operate on sentences that have already been processed by a syntactic parser, which slows and complicates the use of these models at test time for most applications.
+Of these, the TreeRNN is the principled choice, since meaning in natural language sentences constructed incrementally according to a tree structure \citep[][i.a.]{Szabolcsi:2009}. However, while these models have shown promise \citep{tai2015improved,li2015tree,bowman2015trees}, they have largely been overlooked in favor of sequence-based RNNs because of their incompatibility with batched computation and their reliance on external parsers.  Batched computation---performing synchronized computation across many examples at once---yields order-of-magnitude improvements in model run time, and is a crucial enabling technology in allowing neural networks to be trained efficiently on large datasets. Because TreeRNNs use a different model structure for each sentence, batched computation is impossible in standard implementations. In addition, standard TreeRNN models can only operate on sentences that have already been processed by a syntactic parser, which slows and complicates the use of these models at test time for most applications.
 
-This paper introduces a new model to address both these issues: the Stack-augmented Parser-Interpreter Neural Network, or SPINN, shown in Figure~\ref{fig:m1-views}. SPINN executes the computations of a tree-structured model in a linearized sequence of operations, and can incorporate a neural network parser that determines the overall tree structure on-the-fly. This design improves upon the TreeRNN architecture in three ways: At test time, it can simultaneously parse and interpret unparsed sentences, removing the dependence on an external parser. In addition, it supports batched computation for both parsed and unparsed sentences, supporting dramatic speedups over standard TreeRNNs. Finally, it supports a novel tree-sequence hybrid mechanism for handling local context in sentence interpretation that yields substantial gains in accuracy over either pure sequence-based models or pure tree-based models.
+This paper introduces a new model to address both these issues: the Stack-augmented Parser-Interpreter Neural Network, or SPINN, shown in Figure~\ref{fig:m1-views}. SPINN executes the computations of a tree-structured model in a linearized sequence of operations, and can incorporate a neural network parser that determines the overall tree structure on-the-fly. This design improves upon the TreeRNN architecture in three ways: At test time, it can simultaneously parse and interpret unparsed sentences, removing the dependence on an external parser. In addition, it supports batched computation for both parsed and unparsed sentences, supporting dramatic speedups over standard TreeRNNs. Finally, it supports a novel tree-sequence hybrid mechanism for handling local context in sentence interpretation that yields substantial gains in accuracy over either pure sequence-based models or pure tree-based models. \todo{[SB] Weaken parsing claim.}
 
 We evaluate SPINN on the Stanford Natural Language Inference entailment task \citep[SNLI,][]{snli:emnlp2015}, and find that it significantly outperforms other sentence encoding-based models, and that it yields speed increases of over 10x over a standard TreeRNN implementation.
 
@@ -120,7 +120,7 @@ We evaluate SPINN on the Stanford Natural Language Inference entailment task \ci
 
 There has been a fairly long history of work on building neural-network based parsers that use the core operations and data structures from transition-based parsing, of which shift-reduce parsing is a version \citep{henderson2004discriminative,emami2005neural,titov2010latent,chen2014,buys2generative,dyer-EtAl:2015:ACL-IJCNLP,kiperwasser2016easy}. In addition, there has been recent work \citep{zhang2016top,dyer2016rnn} proposing models designed primarily for generative language modeling tasks that use these structures as well. To our knowledge, SPINN is the first model to use these structures for the purpose of sentence interpretation, rather than parsing or generation.
 
-\citet{socher2011semi} presents a version of the TreeRNN model which is capable of operating over unparsed inputs. However, this method is unsupervised, limiting its performance, and it requires an expensive search process at test time. Our model presents an alternative approach to combining interpretation and parsing that supports supervised training for the parsing component, and that is dramatically faster than any previous tree-structured model. 
+\citet{socher2011semi} and \citet{socher2011parsing} present versions of the TreeRNN model which are capable of operating over unparsed inputs. However, these methods require an expensive search process at test time. Our model presents an alternative approach to combining interpretation and parsing that supports supervised training for the parsing component, and that is dramatically faster than any previous tree-structured model. 
 
 \section{Our model: SPINN}
 
@@ -158,11 +158,12 @@ The TreeLSTM composition function generalizes the LSTM neural network layer to t
     {\sigma}
     {\text{tanh}}
 \left(
-W_{\text{iffo}}
+W_{\text{comp}}
 \colvec{3}
     {\vec{h}_s^1}
     {\vec{h}_s^2}
     {\vec{e}}
++ \vec{b}_{\text{comp}}
 \right) \label{eqn:lstm1}
 \\
 \vec{c} = \vec{f}_l \odot \vec{c}_s^{\,2} + \vec{f}_r \odot \vec{c}_s^{\,1} + \vec{i} \odot \vec{g}  
@@ -182,7 +183,7 @@ We use word representations based on the standard 300-dimensional vector package
 \colvec{2}
     {\vec{h}}
     {\vec{c}}
-= W_{\text{wd}} \vec{x}_{\text{GloVe}}
+= W_{\text{wd}} \vec{x}_{\text{GloVe}} + \vec{b}_{\text{wd}}
 \end{equation}
 
 \paragraph{Creating a sentence pair classifier} \label{sec:classifier}
@@ -212,7 +213,7 @@ It would be straightforward to augment SPINN to support the use of some amount o
 
 For SPINN to be able to operate on unparsed inputs, it needs to be able to produce its own transition sequence $\mathbf t$ rather than relying on an external parser to supply this as part of the input. To do this, the model predicts $t_t$ at each step using a simple two-way softmax classifier over tracking LSTM features:
 \begin{equation}
-\vec{p}_{\text{t}} = \text{softmax}(W_{\text{transition}}\vec{h}_{\text{tracking}})
+\vec{p}_{\text{t}} = \text{softmax}(W_{\text{trans}}\vec{h}_{\text{tracking}} + \vec{b}_{\text{trans}})
 \end{equation}
 In the full SPINN model, we follow whichever transition (i.e., \shift~or \reduce) has a higher predicted probability in this distribution. This prediction function is trained to mimic the decisions of an external parser. In particular, we use the transition sequences corresponding to Stanford PCFG Parser constituency parses included with SNLI.
 
@@ -319,7 +320,7 @@ Lexicalized classifier \citep{snli:emnlp2015}
 \multicolumn{5}{c}{Our results}\\
 \midrule
 \textbf{300D LSTM RNN encoders}          & 3.0m                  & --                &   83.9      &   80.6       \\
-\textbf{300D SPINN-PI-NT encoders}
+\textbf{300D SPINN-PI-NT (parsed input, no ...) encoders}
                         & 3.4m                  & --                &   84.4      &   80.9       \\
 \textbf{300D SPINN-PI encoders}
                         & 3.7m                  & --                &   89.2      &   \underline{83.2}       \\
@@ -340,7 +341,7 @@ Lexicalized classifier \citep{snli:emnlp2015}
                         & 1.4m               & --                &   92.3   &   \textbf{89.1}      \\
     \bottomrule
   \end{tabular}
-\caption{\protect\label{tab:results}Results on SNLI 3-way inference classification. Params. is the approximate number of trained parameters (excluding word embeddings for models where they are trained). Trans. acc. is the model's accuracy in predicting parsing transitions. Train and test are SNLI classification accuracy.} 
+\caption{\protect\label{tab:results}Results on SNLI 3-way inference classification. Params. is the approximate number of trained parameters (excluding word embeddings for models where they are trained). Trans. acc. is the model's accuracy in predicting parsing transitions. Train and test are SNLI classification accuracy. \todo{Move attention results to footnote.}} 
 \end{table*}
 
 
@@ -404,9 +405,7 @@ Figure~\ref{fig:speed} compares the runtime performance of the two models comput
 
 \section{Discussion}
 
-\question{What kind of error analysis would be interesting for this model?}
-
-\result{[SB] Compare the types of errors in the different runs.}
+\result{[SB] Compare the types of errors in the different runs and cherry pick interesting examples/tenancies; measure frequency of broken parses.}
 
 \vspace{10em}
 
