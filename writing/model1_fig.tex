@@ -123,7 +123,7 @@
 
   \end{tikzpicture}}
   
- \caption{The SPINN unrolled for two transitions during the processing of the sentence \word{the cat sat down}. `Tracking', `transition', and `composition' are neural network layers. Gray arrows indicate connections which are blocked by a gating function, and so contribute no information.}\label{fig:model:1d}
+ \caption{The SPINN unrolled for two transitions during the processing of the sentence \word{the cat sat down}. `Tracking', `transition', and `composition' are neural network layers. Gray arrows indicate connections which are blocked by a gating function.}\label{fig:model:1d}
   
 \end{subfigure}\\\\\\
 \begin{subfigure}[t]{\textwidth}
@@ -283,7 +283,7 @@
     
     \def\ox{7*\oxb+\oxs}
 
-    \node[label]  (1l) at (\ox+0*\dx,\sy+3*\dy) {$t=7$};
+    \node[label,text width=25mm]  (1l) at (\ox+0*\dx,\sy+3*\dy) {$t=7=T$};
 
     \node[focus2] (6sb) at  (\ox+0*\dx,\sy-0.5*\dy) {};
     \node[word]  (6s1) at (\ox+0*\dx,\sy-1*\dy) {(the cat) (sat down)};
@@ -359,7 +359,7 @@
    \draw [fwd] (6sb) -- (6sm);
   \end{tikzpicture}}
   
- \caption{The fully unrolled SPINN for \word{the cat sat down} with some layers omitted for clarity.}\label{fig:model:1b}  
+ \caption{The fully unrolled SPINN for \word{the cat sat down}, with neural network layers omitted for clarity.}\label{fig:model:1b}  
 \end{subfigure}
-\caption{\label{fig:m1-views}Two views of the SPINN. In both views, the lower boxes represent the input buffer, and the upper boxes represent the stack. Yellow highlighting indicates which portions of these data structures are visible to the tracking LSTM and to the composition function.}
+\caption{\label{fig:m1-views}Two views of the SPINN.}
 \end{figure*}
