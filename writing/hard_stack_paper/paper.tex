@@ -64,33 +64,33 @@
 
 \title{A fast unified model for parsing and sentence understanding} 
 
-%     \author{}
-    \author{
-    Samuel R.\ Bowman$^{1,2,5,}$\thanks{~\,The first two authors contributed equally.} \\
-    \texttt{\small sbowman@stanford.edu} \\
-    \And
-    Jon Gauthier$^{2,3,5,*}$ \\
-    \texttt{\small jgauthie@stanford.edu} \\
-    \And
-    Abhinav Rastogi$^{4,5}$ \\
-    \texttt{\small arastogi@stanford.edu} \\
-    \AND
-    Raghav Gupta$^{6}$ \\
-    \texttt{\small rgupta93@stanford.edu} \\
-    \And
-    Christopher D.\ Manning$^{1,2,5,6}$\\
-    \texttt{\small manning@stanford.edu}\\
-    \And
-    Christopher Potts$^{1}$\\
-    \texttt{\small cgpotts@stanford.edu}
-    \AND\\[-3ex]
-    {$^{1}$Stanford Linguistics\quad
-    $^{2}$Stanford NLP Group\quad
-    $^{3}$Stanford Symbolic Systems}\\
-    {$^{4}$Stanford Electrical Engineering\quad
-    $^{5}$Stanford AI Lab\quad
-    $^{6}$Stanford Computer Science}
-    }
+     \author{}
+%    \author{
+%    Samuel R.\ Bowman$^{1,2,5,}$\thanks{~\,The first two authors contributed equally.} \\
+%    \texttt{\small sbowman@stanford.edu} \\
+%    \And
+%    Jon Gauthier$^{2,3,5,*}$ \\
+%    \texttt{\small jgauthie@stanford.edu} \\
+%    \And
+%    Abhinav Rastogi$^{4,5}$ \\
+%    \texttt{\small arastogi@stanford.edu} \\
+%    \AND
+%    Raghav Gupta$^{6}$ \\
+%    \texttt{\small rgupta93@stanford.edu} \\
+%    \And
+%    Christopher D.\ Manning$^{1,2,5,6}$\\
+%    \texttt{\small manning@stanford.edu}\\
+%    \And
+%    Christopher Potts$^{1}$\\
+%    \texttt{\small cgpotts@stanford.edu}
+%    \AND\\[-3ex]
+%    {$^{1}$Stanford Linguistics\quad
+%    $^{2}$Stanford NLP Group\quad
+%    $^{3}$Stanford Symbolic Systems}\\
+%    {$^{4}$Stanford Electrical Engineering\quad
+%    $^{5}$Stanford AI Lab\quad
+%    $^{6}$Stanford Computer Science}
+%    }
 
 \date{}
 
@@ -130,7 +130,7 @@ There has been a fairly long history of work on building neural-network based pa
 
 \subsection{Shift-reduce parsing}
 
-The SPINN is inspired by the shift-reduce parsing formalism \citep{aho1986compilers} \todo{[SB] Switch to 1976 paper.}, which builds a tree structure over a sequence (e.g. a natural language sentence) by a single left-to-right scan over the tokens of the sequence. Shift-reduce parsing is frequently used in natural language parsing \citep[e.g.][]{nivre2003efficient}.
+The SPINN is inspired by the shift-reduce parsing formalism \citep{aho1972theory}, which builds a tree structure over a sequence (e.g. a natural language sentence) by a single left-to-right scan over the tokens of the sequence. Shift-reduce parsing is frequently used in natural language parsing \citep[e.g.][]{nivre2003efficient}.
 
 A shift-reduce parser accepts a sequence of input tokens $\mathbf x = (x_1, \dots, x_N)$ and transitions $\mathbf t = (t_1, \dots, t_T)$, where each $t_i \in \{\shift, \reduce\}$ specifies a \shift~or \reduce~transition (described below). In general a parser may also generate these predictions on-the-fly as it reads the tokens. It reads left-to-right over the input transition sequence, combining the input tokens $\mathbf x$ incrementally into a tree structure. For any binary-branching tree structure over $N$ words, this requires $T = 2N - 1$ transitions.
 
@@ -145,14 +145,14 @@ The parser uses two auxiliary data structures, a stack $S$ of partially complete
 The core SPINN model implements a sequential shift-reduce parser which operates over sentences. It is designed to produce a vector representation of the sentence as output, as opposed to a tree as in standard shift-reduce parsing. This relies on two key modifications to the shift-reduce algorithm:
 \begin{itemize}
 \item The parser's intermediate representations, including the representations of partial tree structures on the stack, are fixed-length vectors.
-\item The \reduce~operation combines two such representations of trees on the stack into a larger tree using a neural network.
+\item The \reduce~operation combines two such representations of trees on the stack into a larger tree using a version of the TreeLSTM neural network layer \citep{tai2015improved}.
 \end{itemize}
 
 This subsection describes the core functions and representations of the SPINN. We begin with the most basic model, SPINN-NP (for \textit{no parser}), which processes input sentences using parses provided by some external parser.
 
 \paragraph{Word representations}
 
-The buffer is populated with the words in each sentence before the first step of computation. We use word representations from the standard 300-dimensional vector package provided with GloVe \citep{pennington2014glove}. We do not update these representations during training. Instead, we use a learned linear transformation to transform the representation of each input word $\vec{x}$ into a pair of vectors $\langle \vec{h}, \vec{c}\rangle$ that are stored side-by-side in the buffer and used as inputs to a TreeLSTM composition function:
+The buffer is populated with the words in each sentence before the first step of computation. We use word representations from the standard 300-dimensional vector package provided with GloVe \citep{pennington2014glove}. We do not update these representations during training. Instead, we use a learned linear transformation to transform the representation of each input word $\vec{x}$ into a pair of vectors $\langle \vec{h}, \vec{c}\rangle$ that are stored side-by-side in the buffer and used as inputs to the TreeLSTM composition function:
 
 \begin{equation}
 \colvec{2}
@@ -162,14 +162,10 @@ The buffer is populated with the words in each sentence before the first step of
 \end{equation}
 
 
-\paragraph{The stack and buffer}
-
-In the SPINN, each element of the stack and each element of the buffer contains a pair $\langle \vec{h}, \vec{c}\rangle$, which together represent some word or nonterminal node in the parse tree of the sentence. \todo{[SB] Clarify that this is needed because of the TreeLSTM fn.}
-
 \paragraph{The composition function}
 When a \reduce~operation is performed, vector representations of two tree nodes are popped off of the head of the stack and fed into a {\ii composition function}, which is a neural network function that produces a representation for a new tree node that is the parent of the two popped nodes. This new node is then pushed on to the stack.
 
-Our composition function is based on the TreeLSTM of \citet{tai2015improved}. The TreeLSTM generalizes the LSTM neural network layer to tree- rather than sequence-based inputs; it shares the idea of representing intermediate states in a computation using a vector pair $\langle \vec{h}, \vec{c}\rangle$, of which the latter vector is meant to serve as a slower-changing memory component.  It is formulated as:
+Our composition is a version of the TreeLSTM of \citet{tai2015improved}. The TreeLSTM layer, which generalizes the LSTM neural network layer to tree- rather than sequence-based inputs, and it shares with the LSTM the idea of representing intermediate states as a pair of a fast-changing state representation $\vec{h}$ and a slower-changing memory representation $\vec{c}$. It is formulated as:
 
 \begin{gather}
 \colvec{4}
@@ -183,7 +179,7 @@ W_{\text{iffo}}
     {\vec{h}_s^1}
     {\vec{h}_s^2}
     {\vec{e}}
-\right)
+\right) \label{eqn:lstm1}
 \\
 \vec{g}
 = \tanh\left(
@@ -192,14 +188,18 @@ W_{g}
     {\vec{h}_s^1}
     {\vec{h}_s^2}
     {\vec{e}}
-\right)
+\right) \label{eqn:lstm2}
 \\
 \vec{c} = \vec{f}_l \odot \vec{c}_s^{\,2} + \vec{f}_r \odot \vec{c}_s^{\,1} + \vec{i} \odot \vec{g}  
 \\
 \vec{h} = \vec{o} \odot \vec{c}
 \end{gather}
 
-The results of this function are the pair $\langle\vec{h}, \vec{c}\rangle$, which are placed back on the stack. The two input tree nodes popped off the stack are represented as the pairs $\langle\vec{h}^1_s, \vec{c}^{\,1}_s\rangle$ and $\langle\vec{h}^2_s, \vec{c}^{\,2}_s\rangle$. In addition, $\vec{e}$ is an optional input argument which is either the empty vector or a vector from an external source like the tracking LSTM (see below \todo{[SB] Ref.}). $\odot$ denotes the elementwise product. Each vector-valued variable listed here is of the same dimension $D$ except $\vec{e}$, which is of the independent dimension $D_t$.
+The results of this function are the pair $\langle\vec{h}, \vec{c}\rangle$, which are placed back on the stack. The two input tree nodes popped off the stack are represented as the pairs $\langle\vec{h}^1_s, \vec{c}^{\,1}_s\rangle$ and $\langle\vec{h}^2_s, \vec{c}^{\,2}_s\rangle$. In addition, $\vec{e}$ is an optional input argument which is either the empty vector or a vector from an external source like the tracking LSTM (see Section~\ref{sec:tracking}). $\odot$ denotes the elementwise product. Each vector-valued variable listed here is of the same dimension $D$ except $\vec{e}$, which is of the independent dimension $D_t$.
+
+\paragraph{The contents of the stack and buffer}
+
+The stack and the buffer can be represented as lists of $N$ elements each (for sentences of up to $N$ words), with two $D$-dimensional vectors $\vec{h}$ and $\vec{c}$ constituting each element.
 
 \paragraph{Creating a sentence pair classifier}
 
@@ -214,19 +214,19 @@ This paper evaluates the SPINN on a sentence pair classification task. To classi
     {\vec{h}_{\text{premise}} \odot \vec{h}_{\text{hypothesis}}}
 \end{equation}
 
-This feature vector is then passed to a series of two (\todo{[SB] Update number}) ReLU neural network layers (following \citet{snli:emnlp2015}), then passed into a linear transformation, and then finally passed to a softmax layer, which yields a distribution among the three labels. The model is trained in part using a cross-entropy objective over this distribution.
+Following \citep{snli:emnlp2015}, this feature vector is then passed to a series of ReLU neural network layers (the number of layers is a tuned hyperparameter), then passed into a linear transformation, and then finally passed to a softmax layer, which yields a distribution among the three labels. The model is trained in part using a cross-entropy objective over this distribution.
 
-\subsection{The tracking LSTM}
+\subsection{The tracking LSTM}\label{sec:tracking}
 
-While it is possible to use the model that we have described thus far as a sentence encoder, at least when an external parser is available to supply \shift~and \reduce~instructions (and we do evaluate such a model), our full model includes an additional component: the tracking LSTM. (\todo{[SB] Update framing of prev sentence.}) The tracking LSTM is a simple low-dimensional sequence-based LSTM RNN that operates in tandem with the model, taking inputs from the buffer and stack at each step. It is meant to maintain a low-resolution summary of the portion of the sentence that has been processed so far, and it is used for two purposes: it supplies feature representations to the transition decision function, which allows the model to stand alone as a parser, and it additionally supplies a secondary input $\vec{e}$ (\todo{[SB] Refer to eq no. here and below.}) to the composition function, allowing context information to leak into the construction of sentence meaning, and forming what is effectively a tree-sequence hybrid model.
+In addition to the stack, the buffer, and the composition function, our full model includes an additional component: the tracking LSTM. The tracking LSTM is a simple low-dimensional sequence-based LSTM RNN that operates in tandem with the model, taking inputs from the buffer and stack at each step. It is meant to maintain a low-resolution summary of the portion of the sentence that has been processed so far, and it is used for two purposes: it supplies feature representations to the transition decision function, which allows the model to stand alone as a parser, and it additionally supplies a secondary input $\vec{e}$ (see Equations~\ref{eqn:lstm1}--\ref{eqn:lstm2}) to the composition function, allowing context information to leak into the construction of sentence meaning, and forming what is effectively a tree-sequence hybrid model.
 
-Technically, the tracking LSTM takes three vectors as inputs at each step: the top element of the buffer $\vec{h}_b^1$, which would be moved in a \shift~operation, and the top two elements of the stack $\vec{h}_s^1$ and $\vec{h}_s^2$ which would be composed in a \reduce~operation. Its output hidden state at each step is used as the external input to the TreeLSTM composition function for that step and as the sole input to the transition prediction function. \todo{[SB] Trim.}
+The tracking LSTM takes three vectors as inputs at each step (highlighted in yellow in Figure~\ref{fig:m1-views}): the top element of the buffer $\vec{h}_b^1$, which would be moved in a \shift~operation, and the top two elements of the stack $\vec{h}_s^1$ and $\vec{h}_s^2$ which would be composed in a \reduce~operation.
 
-\todo{[SB] Good point to reference fig 2a?}
+\paragraph{Tracking left context for parsing} The decision function which determines which transitions (and thereby, which parses) the SPINN will use needs to take as its input some representation of the current state of the model. We use the hidden state of the tracking LSTM as that input. The tracking LSTM's limited access to the buffer makes this fast to compute, but somewhat more limited than the rich feature sets used in state-of-the-art parsers.
 
-\paragraph{Tracking left context for parsing} The decision function which determines which transitions (and thereby, which parses) the SPINN will use needs to take as its input some representation of the current state of the model. Because the tracking LSTM directly takes the buffer top as input, it can directly inform that function of what word is under consideration for a possible \shift. Because the tracking LSTM sees the top of the stack at every step, and information only enters the stack by being at the top at some step, the tracking LSTM is able to supply that function with a summary of the state of the stack without having to iterate over the full stack at each step.
+\paragraph{Tracking left context for interpretation} Lexical ambiguity is ubiquitous in natural language. Most words have multiple senses or meanings, and it is generally necessary to use the context in which a word occurs to determine which of its senses or meanings is meant in a given sentence. Simpler sequence-based sentence encoding models like the standard LSTM RNN have an advantage here: when a sequence-based model first processes a word, it has direct access to a state vector that summarizes the left context of that word, which provides some cues for disambiguation. In contrast, when standard tree-structured models first process a word, they only have access to the constituent that the word is merging with, which is often just a single additional word. Feeding a context representation from the tracking LSTM into the composition function is a simple and efficient way to mitigate this disadvantage of tree-structured models. 
 
-\paragraph{Tracking left context for interpretation} \todo{[SB] Trim.} Lexical ambiguity is omnipresent in natural language. Most words have multiple senses or meanings, and it is generally necessary to use the context in which a word occurs to determine which of its senses or meanings is meant in a given sentence. Simpler sequence-based sentence encoding models like the standard LSTM RNN have an advantage here: when a sequence-based model first processes a word (first incorporates it into a partial sentence representation), the model has access to a state vector that summarizes all of the words to the left of the current word, and that state vector can serve as a crude but effective form of context to help with disambiguation. In contrast, when standard tree-structured models first process a word, they only have access to the constituent that the word is merging with, which is strictly less than the sequence model has access to, and is often just a single additional word. Feeding a context representation from the tracking LSTM into the composition function is a simple and efficient way to mitigate this disadvantage of tree-structured models. \todo{[SB] Mention that humans can do incremental parsing with left context only.}
+It would be straightforward to augment the SPINN to support the use of some amount of right context as well, but this would add complexity to the model that we think is largely unnecessary: humans are very effective at understanding the beginnings of sentences before having seen or heard the ends, suggesting that it is possible to get by without the unavailable right context.
 
 \todo{[JG] Include figure of post-order traversal sequence made by the tracking LSTM?}
 
@@ -245,54 +245,38 @@ where $t^*$ is the correct transition specified by the gold parse, and $\vec{p}[
 
 At training time, the model follows the transitions corresponding to the gold parse. At test time, a transition is chosen at each step by taking a hard max over the output of this function. We did not find the technique of scheduled sampling \citep{bengio2015scheduled}, or allowing the model to use its own transition decisions in some instances at training time, to be helpful.
 
-\todo{[SB] Mention that our features are weaker than those in competitive parsers.}
-
 \subsection{Implementing the SPINN}
 
-\paragraph{The full objective function} \todo{[SB] Fill out. In short, there are two weighted terms in the objective: a semantic term and a syntactic term.}
+\paragraph{The full objective function} Our objective function combines a cross-entropy objective $\mathcal{L}_{\text{s}}$ for the SNLI classification task, a cross-entropy objective $\{\mathcal{L}_p^t, \mathcal{L}_h^t\}$ for each parsing decision for each of the sentence and the hypothesis sentence at each step $t$, and an L2 regularization term on the trained parameters. The terms are weighted using the tuned hyperparameters $\alpha$ and $\lambda$:
 
-\todo{[SB] Say more about joint learning of phrase representations for the two objectives.}
+\begin{equation}
+\begin{split}
+\mathcal{L}_{\text{m}} = &\mathcal{L}_{\text{s}} + \alpha \sum_{t=0}^{T-1} (\mathcal{L}_{\text{p}}^{t} + \mathcal{L}_{\text{h}}^{t}) + \lambda \|\theta\|^2_2
+\end{split}
+\end{equation}
 
-\paragraph{The size of the stack}
-The size of the stack should be $N$ for sentences of $N$ words, in case the first \reduce~operation merges the final two words. The size of the buffer should be $N$. \todo{[SB] Height, not storage size.}
+\paragraph{Preparing the data} At training time, the SPINN requires both a transition sequences $\mathbf t$  and a token sequence $\mathbf x$ as its inputs for each sentence. The token sequence is simply the words in the sentence in order. $\mathbf t$ can be obtained from any constituency parse for the sentence by first converting that parse into an unlabeled binary parse, then linearizing it (with the usual in-order traversal), then taking each word token as a \shift~transition and each `)' as a \reduce~transition, as here:
 
-\paragraph{Converting parses to transition sequences}
-\todo{[SB] Remove all Model N references.}
+\vspace{0.5em}
+{\noindent\small
+{\bf Unlabeled binary parse:} ( ( the cat ) ( sat down ) ) $\Rightarrow$\\
+{$\mathbf t$}: \shift, \shift, \reduce, \shift, \shift, \reduce, \reduce\\
+{$\mathbf x$}: the, cat, sat, down
+}
 
-For model 0, training data can be prepared by linearizing the provided parse, then deleting left brackets and replacing right brackets with \reduce~instructions. That is demonstrated here with the example sentence \ii{the cat sat down}:
+\paragraph{Handling variable sentence lengths} For any sentence model to be trained with batched computation, it is necessary to pad or crop sentences to a fixed length. We fix this length at $N = 25$ words, longer than about 98\% of sentences in SNLI. Transition sequences $\mathbf t$ are cropped at the left or padded at the left with \shift s. Token sequences $\mathbf x$ are then cropped or padded with empty tokens at the left to match the number of \shift s added or removed from $\mathbf t$, and can then be padded with empty tokens at the right to meet the desired length $N$.
 
-\begin{quote}\small
-( ( the cat ) ( sat down ) )$\Rightarrow$\\
-the cat \reduce~sat down \reduce~\reduce
-\end{quote}
+\paragraph{Optimization, initialization, and hyperparameters}
 
-The input for models 1--4 is simply the word sequence from the parse. The syntactic supervision labels for models 1--3 are simply a binarized version of the Model 0 inputs:
+We use the RMSProp optimizer \citep{tieleman2012lecture} with a tuned starting learning rate that decays by a factor of 0.75 every 10k steps. We apply both dropout \citep{srivastava2014dropout} and batch normalization \citep{2015SIoffeCSzegedy} to the word embeddings in the buffer (after the linear projection is applied) and to the feature vectors that serve as the inputs and outputs to the MLP that precedes the final entailment classifier.
 
-\begin{quote}\small
-( ( the cat ) ( sat down ) )$\Rightarrow$ \\
-stack: $\langle$the, cat$\rangle$\\
-buffer: $\langle$sat, down$\rangle$\\
-ops: \reduce~\shift~\shift~\reduce~\reduce
-\end{quote}
+We initialize the model parameters using the nonparametric strategy of \citet{DBLP:journals/corr/HeZR015}, with the exception of the softmax classifier layers, which we initialize uniformly from $[-0.005, 0.005]$.
 
-\paragraph{Handling variable sentence lengths}
-
-\todo{[SB] Trim this section. Just say that it can be done.}
-To efficiently implement batched computation, we must stipulate a fixed number of transitions (50) that the model can perform before producing an output. Sentences whose transition sequences are shorter than this length are padded, and sentences whose transition sequences are longer than this length are cropped. 
-
-Padding, if done properly, should not impact the output of the model significantly:\footnote{The tracking LSTM can cause a slight dependence of the final representation on unrolling length. Because of this, we always train and test the model with a fixed unrolling length.} a model with the fixed parameters should produce the same representation for a 10-word sentence whether it is unrolled for 19 transitions (the minimum to avoid cropping) or 100.
-
-Cropping necessarily discards information, but if done properly, it is nonetheless possible to learn good representations for cropped sentences. When a transition sequence is cropped, the number of removed \shift~transitions is tracked, and an equal number of word tokens is removed from the tail (left) end of the buffer. This makes it possible for a transition sequence to begin with a \reduce~transition, or to otherwise use a \reduce~transition on a stack that does not have two elements to merge. In this instance, we simply feed the composition function one or more zero vectors, which represent nonexistent stack elements. If the composition learns to interpret these zero vectors properly, they can be taken to be unknown or incomplete nodes in an otherwise complete tree that is constructed according to the intended parse structure. \todo{[SB] Make a figure showing the results of cropping if there's room.}
-
-\paragraph{Optimization and hyperparameters}
-
-We use the RMSProp optimizer (\todo{[SB] Cite.}) with a tuned starting learning rate that decays by a factor of 0.75 every 10k steps. We apply both dropout \citep{srivastava2014dropout} and batch normalization \citep{2015SIoffeCSzegedy} to the word embeddings in the buffer (after the linear projection is applied) and to the feature vectors that serve as the inputs and outputs to the MLP that precedes the final entailment classifier. In addition, we apply an L2 regularization penalty to all parameters.
-
-We used random search to tune many of the hyperparameters, including the learning rate, the dropout rate, the L2 regularization weight, the hidden dimension of the tracking LSTM and the number of layers in the MLP \todo{[SB] Report the ranges searched for each parameter and the number of runs for each results. Some of this can go in an appendix.}
+We use random search to tune the hyperparameters of the model, setting the ranges for search for each hyperparameter heuristically (and validating the reasonableness of the ranges on the development set), and than launching eight copies of each experiment each with newly sampled hyperparameters from those ranges. An appendix shows the precise values used on the strongest models.
 
 We trained each model for 250k steps in each run, using a batch size of 32 for each step. We tracked each model's performance on the development set during training and saving parameters when this performance reached a new peak. We used early stopping, evaluating on the test set using the parameters that performed best on the development set.
 
-\paragraph{Software infrastructure} We will make Theano code available.
+\paragraph{Software infrastructure} We will make source code available.
 
 \subsection{Efficient stack representation}
 
@@ -336,19 +320,9 @@ This stack representation requires substantially less space. It stores each elem
 \label{tbl:thin-stack}
 \end{table}
 
-\subsection{TreeRNN-equivalence and efficiency}
+\subsection{TreeRNN-equivalence}
 
-\todo{[SB] Make equivalence claim more explicit. Clean up bullets.}
-
-In its bare form, before the addition of the tracking LSTM, the SPINN (or, SPINN-NP-NT, for \textit{no parsing, no tracking}) computes precisely the same functions as a conventional tree-structured neural network model, and has the same learning dynamics: the representation of each sentence consists of the representation of the words, combined recursively using a TreeRNN composition function (in our case, the TreeLSTM function). While it adds no expressive power on its own, this design improves upon the standard TreeRNN implementation in three ways:
-
-\begin{itemize}
-\item It provides a straightforward strategy for implementing tree-structured composition which allows for batched computation, and provides near-optimal run times on typical computer systems. While our design includes some wasted computation induced by the full application of the composition function at every step, this is made up for by avoiding most of the (potentially expensive) scattered memory access that would be needed for batched computation strategies that more closely mimic the standard tree-based architecture. \todo{[SB] Clarify.}
-
-\item It provides a simple mechanism for integrating the use of left-context into tree-structured models through the tracking LSTM, providing a fast mechanism to help these models handle lexical ambiguity.
-
-\item It opens the door to tight integration between parsing and sentence interpretation, including the possibility of joint learning, or even of learning a parser trained entirely on a sentence classification or interpretation objective.
-\end{itemize}
+In its bare form, before the addition of the tracking LSTM, the SPINN (or, SPINN-NP-NT, for \textit{no parsing, no tracking}) is precisely equivalent to a conventional tree-structured neural network model in the function that it computes, and it therefore also has the same learning dynamics. In both, the representation of each sentence consists of the representation of the words, combined recursively using a TreeRNN composition function (in our case, the TreeLSTM function).
 
 \section{Experiments}
 
@@ -401,9 +375,8 @@ Lexicalized classifier \citep{snli:emnlp2015}
 
 
 \subsection{Natural language inference and SNLI}
-\todo{[SB] Move up.}
 
-We evaluate the SPINN on the task of natural language inference (NLI) \todo{[SB] Cite.}, also known as recognizing textual entailment (RTE). NLI is a sentence pair classification task, in which a model reads two sentences (a premise and a hypothesis), and outputs a judgment of {\it entailment}, {\it contradiction}, or {\it neutral}, reflecting the relationship between the meanings of the two sentences, as in this example from the Stanford NLI corpus (SNLI, \citet{snli:emnlp2015}), which we use for training and evaluation: 
+We evaluate the SPINN on the task of natural language inference \citep[NLI, also known as recognizing textual entailment, or RTE][]{dagan2006pascal,MacCartney09}. NLI is a sentence pair classification task, in which a model reads two sentences (a premise and a hypothesis), and outputs a judgment of {\it entailment}, {\it contradiction}, or {\it neutral}, reflecting the relationship between the meanings of the two sentences, as in this example from the Stanford NLI corpus \citet[SNLI][]{snli:emnlp2015}), which we use for training and evaluation: 
 
 \begin{quote}
 Premise: {\it Girl in a red coat, blue head wrap and jeans is making a snow angel.}
@@ -506,5 +479,35 @@ For a more ambitious goal, we expect that it should be possible to implement a v
 \bibliographystyle{../acl_natbib}
 \bibliography{../MLSemantics}
 \todo{[SB] Make bibliography style uniform, esp BatchNorm.}
+
+ 
+\begin{table*}[ht]\small
+\begin{center}
+\begin{tabular}{lrlrrrr}
+\toprule
+Param.     & Range & Strategy        & RNN       & SPINN-NP-NT   & SPINN-NP  & SPINN \\
+\midrule
+Initial LR & 0.0002--0.02 & \textsc{log} & 0.005  & 0.0003 & 0.007  & SPINN\\
+L2 regularization $\lambda$ & 8e-7--3e-5   & \textsc{log} & 4e-6  & 3e-6   & 2e-5  & SPINN\\
+Transition cost $\alpha$  & 0.5--4.0 & \textsc{lin} & N/A & N/A & N/A  & SPINN\\
+Embedding transformation dropout keep rate & 80\%--95\% & \textsc{lin} & N/A & 83\% & 92\%  & SPINN\\
+Classifier MLP dropout keep rate & 80\%--95\% & \textsc{lin} & 94\%  & 94\%   & 93\%  & SPINN\\
+Tracking LSTM size $D_t$ & 24--128 & \textsc{log} & N/A & N/A & 61  & SPINN\\
+Classifier MLP layers & 1--3 & \textsc{lin} & 2 & 2 & 2 & SPINN\\
+\bottomrule
+\end{tabular}
+\end{center}
+ 
+\caption{
+\label{tab:hyperparams}
+Hyperparameter ranges and values. \ii{Range} shows the hyperparameter ranges explored during random search. \ii{Strategy} indicates whether sampling from the range was uniform, or log--uniform. \result{[SB] Full model hyperparams.}
+}
+\end{table*}
+
+\appendix
+\section{Hyperparameters}
+
+Table \ref{tab:hyperparams} shows the hyperparameters used in the best run of each model.
+
 
 \end{document}

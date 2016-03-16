@@ -9,7 +9,7 @@
     \def\dy{11pt}
     \def\sy{12*\dy}
     \def\oxb{8*\dx}
-    \def\by{1*\dy}
+    \def\by{0pt}
     \def\ox{0*\oxb}
 
     \tikzstyle{label}=[text width=35mm,align=center,text height=2mm]    
@@ -20,7 +20,7 @@
     \tikzstyle{compoff}=[fill=green!10!black!10,text width=20mm,align=center,text height=2mm]
     \tikzstyle{result}=[line width=1pt,draw=black,text width=15mm,align=center,text height=2mm]    
     \tikzstyle{sbox}=[line width=1pt,draw=black,text width=25mm,align=center,text height=13.3mm]
-    \tikzstyle{bbox}=[line width=1pt,draw=black,text width=25mm,align=center,text height=6.5mm]
+    \tikzstyle{bbox}=[line width=1pt,draw=black,text width=25mm,align=center,text height=13.3mm]
     \tikzstyle{focus1}=[fill=yellow!40,text width=25mm,align=center,text height=2mm]
     \tikzstyle{focus2}=[fill=yellow!40,text width=25mm,align=center,text height=5.5mm]
 
@@ -28,8 +28,8 @@
 
     \node[focus1] (0bb) at  (\ox+0*\dx,2.5*\dy) {};
     \node[word]  (0b3) at (\ox+0*\dx,\by-0.5*\dy) {};
-    \node[word]  (0b2) at (\ox+0*\dx,\by+0.5*\dy) {down};
-    \node[word]  (0b1) at (\ox+0*\dx,\by+1.5*\dy) {sat};
+    \node[word]  (0b2) at (\ox+0*\dx,\by+1.5*\dy) {down};
+    \node[word]  (0b1) at (\ox+0*\dx,\by+2.5*\dy) {sat};
     \node[bbox] (0bb) at  (\ox+0*\dx,\by+1.0*\dy) {};
     
     \node[label]  (sl) at (\ox-0.35*\oxb+0*\dx,\sy+0.5*\dy) {stack};
@@ -50,8 +50,8 @@
 
     \node[focus1] (1bb) at  (\ox+0*\dx,2.5*\dy) {};
     \node[word]  (1b3) at (\ox+0*\dx,\by-0.5*\dy) {};
-    \node[word]  (1b2) at (\ox+0*\dx,\by+0.5*\dy) {down};
-    \node[word]  (1b1) at (\ox+0*\dx,\by+1.5*\dy) {sat};
+    \node[word]  (1b2) at (\ox+0*\dx,\by+1.5*\dy) {down};
+    \node[word]  (1b1) at (\ox+0*\dx,\by+2.5*\dy) {sat};
     \node[bbox] (1bb) at  (\ox+0*\dx,\by+1*\dy) {};
     
     \node[focus2] (1sb) at  (\ox+0*\dx,\sy-0.5*\dy) {};
@@ -70,8 +70,8 @@
 
     \node[focus1] (2bb) at  (\ox+0*\dx,2.5*\dy) {};
     \node[word]  (2b3) at (\ox+0*\dx,\by-0.5*\dy) {};
-    \node[word]  (2b2) at (\ox+0*\dx,\by+0.5*\dy) {};
-    \node[word]  (2b1) at (\ox+0*\dx,\by+1.5*\dy) {down};
+    \node[word]  (2b2) at (\ox+0*\dx,\by+1.5*\dy) {};
+    \node[word]  (2b1) at (\ox+0*\dx,\by+2.5*\dy) {down};
     \node[bbox] (2bb) at  (\ox+0*\dx,\by+1*\dy) {};
     
     \node[focus2] (2sb) at  (\ox+0*\dx,\sy-0.5*\dy) {};
@@ -99,7 +99,7 @@
     \draw [fwd] (0bb) -- (1bb);
     \draw [fwd] (0so) to[out=5,in=-140] (1sb);
     \draw [fwd] (0so) to[out=-5,in=170] (1bb);
-    \draw [gated] (0bb) to[out=10,in=-120] (1sb);
+    \draw [gated] (0bb) to[out=15,in=-125] (1sb);
     \draw [fwd] (0c) -- (1sb);
 
     \draw [fwd] (1sb) -- (1t);
@@ -114,7 +114,7 @@
     \draw [fwd] (1bb) -- (2bb);
     \draw [fwd] (1so) to[out=5,in=-140] (2sb);
     \draw [fwd] (1so) to[out=-5,in=170] (2bb);
-    \draw [fwd] (1bb) to[out=10,in=-120] (2sb);
+    \draw [fwd] (1bb) to[out=15,in=-125] (2sb);
     \draw [gated] (1c) -- (2sb);
 
     \draw [fwd] (2sb) -- (2t);
@@ -123,15 +123,15 @@
 
   \end{tikzpicture}}
   
- \caption{The SPINN unrolled for two transitions during the processing of the sentence \word{the cat sat down}. `Tracking', `transition', and `composition' are neural network layers.}\label{fig:model:1d}
+ \caption{The SPINN unrolled for two transitions during the processing of the sentence \word{the cat sat down}. `Tracking', `transition', and `composition' are neural network layers. Gray arrows indicate connections which are blocked by a gating function, and so contribute no information.}\label{fig:model:1d}
   
 \end{subfigure}\\\\\\
 \begin{subfigure}[t]{\textwidth}
 \centering
-\scalebox{0.47}{
+\scalebox{0.5}{
 
  \begin{tikzpicture}
-    \def\dx{21pt}
+    \def\dx{20pt}
     \def\dy{11pt}
     \def\sy{7*\dy}
     \def\oxb{5.5*\dx}
@@ -139,21 +139,21 @@
     \def\oxs{0pt}
 
     \tikzstyle{label}=[text width=15mm,align=center,text height=2mm]    
-    \tikzstyle{word}=[text width=35mm,align=center,text height=2mm]    
+    \tikzstyle{word}=[text width=32mm,align=center,text height=2mm]    
     \tikzstyle{tracker}=[fill=red!40,text width=15mm,align=center,text height=2mm]
     \tikzstyle{softmax}=[text width=40mm,align=center,text height=2mm]
     \tikzstyle{comp}=[fill=green!40,text width=20mm,align=center,text height=2mm]
     \tikzstyle{result}=[line width=1pt,draw=black,text width=15mm,align=center,text height=2mm]    
-    \tikzstyle{sbox}=[line width=1pt,draw=black,text width=33mm,align=center,text height=13.3mm]
-    \tikzstyle{bbox}=[line width=1pt,draw=black,text width=33mm,align=center,text height=13.3mm]
-    \tikzstyle{focus1}=[fill=yellow!40,text width=33mm,align=center,text height=2mm]
-    \tikzstyle{focus2}=[fill=yellow!40,text width=33mm,align=center,text height=5.5mm]
+    \tikzstyle{sbox}=[line width=1pt,draw=black,text width=30mm,align=center,text height=13.3mm]
+    \tikzstyle{bbox}=[line width=1pt,draw=black,text width=30mm,align=center,text height=13.3mm]
+    \tikzstyle{focus1}=[fill=yellow!40,text width=30mm,align=center,text height=2mm]
+    \tikzstyle{focus2}=[fill=yellow!40,text width=30mm,align=center,text height=5.5mm]
 
     \def\ox{0*\oxb+\oxs}
     
-    \node[label]  (sl) at (\ox-0.65*\oxb+0*\dx,\by+0.5*\dy) {buffer};
+    \node[label]  (sl) at (\ox-0.58*\oxb+0*\dx,\by+0.5*\dy) {buffer};
     
-    \node[label]  (sl) at (\ox-0.65*\oxb+0*\dx,\sy+0.5*\dy) {stack};
+    \node[label]  (sl) at (\ox-0.58*\oxb+0*\dx,\sy+0.5*\dy) {stack};
 
     \node[label]  (00l) at (\ox+0*\dx,\sy+3*\dy) {$t=0$};
 
@@ -361,5 +361,5 @@
   
  \caption{The fully unrolled SPINN for \word{the cat sat down} with some layers omitted for clarity.}\label{fig:model:1b}  
 \end{subfigure}
-\caption{\label{fig:m1-views}Two views of the SPINN. In both views, the lower boxes represent the input buffer, and the upper boxes represent the stack. Yellow highlighting indicates which portions of these data structures are visible to the tracking LSTM and to the composition function. Thin gray arrows indicate connections which are blocked by a gating function, and so contribute no information.}
+\caption{\label{fig:m1-views}Two views of the SPINN. In both views, the lower boxes represent the input buffer, and the upper boxes represent the stack. Yellow highlighting indicates which portions of these data structures are visible to the tracking LSTM and to the composition function.}
 \end{figure*}
