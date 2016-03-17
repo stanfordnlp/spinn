@@ -106,7 +106,6 @@ Tree-structured neural networks exploit valuable syntactic parse information as 
 
 \input{batching_fig.tex}
 \input{../model1_fig.tex}
-\todo{[SB,JG,AR,RG] Trim mercilessly whenever you see anything redundant.}
 
 A wide range of current state-of-the-art models in NLP are built around neural network components that build vector representations of sentence meaning \citep{socher2011semi,sutskever2014sequence}. This component, the sentence encoder, is generally formulated as a learned parametric function from a sequence of word vector to a sentence vector, and this function can take a range of different forms. Common sentence encoders include sequence-based recurrent neural network models (RNNs) with Long Short-Term Memory \citep[LSTM,][see Figure~\ref{fig:batching:good}]{hochreiter1997long}, which accumulate information over the sentence sequentially, convolutional neural networks over words or characters \citep{kalchbrenner2014convolutional,DBLP:journals/corr/ZhangZL15}, which accumulate information using filters over short local sequences of words, and tree-structured recursive neural networks \citep[TreeRNNs,][see Figure~\ref{fig:batching:bad}]{goller1996learning,socher2011semi}, which propagate information up a binary parse tree structure over words. 
 
@@ -373,7 +372,7 @@ Both SPINN-PI and the full SPINN outperform all previous sentence encoding model
 
 \begin{figure}
 \resizebox{0.85\linewidth}{!}{
-\begin{tikzpicture}
+\begin{tikzpicture} 
 \begin{axis}[xmin=0, ymin=0, xlabel=Batch size, ylabel=Feedforward time (sec),
 			 xtick={0,256,512,1024,2048}, legend style={at={(1.1, 0.98)},anchor=north east}]
   \addplot table [x={Batch size}, y=CPU, col sep=tab] {runtime.csv};
@@ -387,9 +386,9 @@ Both SPINN-PI and the full SPINN outperform all previous sentence encoding model
 \label{fig:speed}
 \end{figure}
 
-In this section, we compare the test time speed of our SPINN-PI-NT with an equivalent TreeRNN implemented in the conventional fashion. While the full models evaluated above are implemented and trained using Theano \todo{[SB] Cite Theano.}, which is reasonably efficient but not perfect for our model, we wish to compare well-optimized implementations of both models here. To do this, we reimplement the feedforward of SPINN-PI-NT in C++/CUDA, and we compare that implementation with a CPU-based C++/Eigen TreeRNN implementation from \citet{irsoy2014deep}, which we modified to perform exactly the same computations as our model.\footnote{The original code for Irsoy \& Cardie's model is available at \url{https://github.com/oir/deep-recursive}. We plan to release our modified code at publication time, alongside the Theano source code for the full SPINN.} TreeRNNs like this can only operate on a single example at a time and are thus poorly suited for GPU computation.\footnote{We chose to reimplement and evaluate only the thin-stack feedforward (not training/backpropagation) in C++/CUDA, as feedforward/inference speed is the relevant performance metric for most practical applications.}
+In this section, we compare the test time speed of our SPINN-PI-NT with an equivalent TreeRNN implemented in the conventional fashion. While the full models evaluated above are implemented and trained using Theano \citep{bergstra+al:2010-scipy,Bastien-Theano-2012}, which is reasonably efficient but not perfect for our model, we wish to compare well-optimized implementations of both models here. To do this, we reimplement the feedforward of SPINN-PI-NT in C++/CUDA, and we compare that implementation with a CPU-based C++/Eigen TreeRNN implementation from \citet{irsoy2014deep}, which we modified to perform exactly the same computations as our model.\footnote{The original code for Irsoy \& Cardie's model is available at \url{https://github.com/oir/deep-recursive}. We plan to release our modified code at publication time, alongside the Theano source code for the full SPINN.} TreeRNNs like this can only operate on a single example at a time and are thus poorly suited for GPU computation.\footnote{We chose to reimplement and evaluate only the thin-stack feedforward (not training/backpropagation) in C++/CUDA, as feedforward/inference speed is the relevant performance metric for most practical applications.}
 
-Each model is restricted to run on sentences of 30 tokens or fewer (for SPINN, this means we iterate over a sequence of 59 transitions). We fix the model dimension and the word embedding dimension at 300. We run the CPU performance test on a 2.20-GHz Intel Xeon processor with hyperthreading enabled. Our GPU model is implemented in C++ and CUDA, and will be released with the rest of our code. We test it on a NVIDIA Titan X GPU. \todo{[SB, JG] Is Titan X sufficiently unambiguous?}
+Each model is restricted to run on sentences of 30 tokens or fewer (for SPINN, this means we iterate over a sequence of 59 transitions). We fix the model dimension and the word embedding dimension at 300. We run the CPU performance test on a 2.20-GHz Intel Xeon processor with hyperthreading enabled. Our GPU model is implemented in C++ and CUDA, and will be released with the rest of our code. We test it on a NVIDIA Titan X GPU.
 
 Figure~\ref{fig:speed} compares the runtime performance of the two models computing representations on data from the Stanford Sentiment Treebank \citep{socher2013recursive}. Figure~\ref{fig:speed} shows a substantial difference in runtime that increases with batch size, as is typical of GPU computation. At the larger batch sizes that are most effective for test-time applications (e.g., 512+ examples), we observe a 10--20x speedup relative to the standard CPU implementation. We hope that this dramatically accelerated approach to tree-structured models will accelerate research into this model class.
 
@@ -416,36 +415,34 @@ The tracking LSTM that we incorporated into SPINN uses only simple, quick-to-com
 
 For a more ambitious goal, we expect that it should be possible to implement a variant of SPINN on top of a modified stack data structure with differentiable \textsc{push} and \textsc{pop} operations \citep[as in][]{grefenstette2015learning,joulin2015inferring}. This would make it possible for the model to learn to parse using guidance from the semantic representation objective, essentially allowing learn to produce parses that are, in aggregate, better suited to supporting semantic interpretation than those supplied in the training data. 
 
-%    \subsubsection*{Acknowledgments}
+%    \subsubsection*{Acknowledgments} 
 %    
 %    Some of the Tesla K40(s) used for this research was/were donated by the NVIDIA Corporation.
 %    \todo{[CM,CP] Acknowledge other grants.}
  
-\bibliographystyle{../acl_natbib}
+\bibliographystyle{../acl_natbib} 
 \bibliography{../MLSemantics}
  
-\todo{[SB] Track down mystery spaces.}
-
 \begin{table*}[t]\small
 \begin{center}
 \begin{tabular}{lrlrrrr}
 \toprule
 Param.     & Range & Strategy        & RNN       & SPINN-PI-NT   & SPINN-PI  & SPINN \\
 \midrule 
-Initial LR & 2e-4--2e-2 & \textsc{log} & 5e-3  & 3e-4 & 7e-3  & SPINN\\
-L2 regularization $\lambda$ & 8e-7--3e-5   & \textsc{log} & 4e-6  & 3e-6   & 2e-5  & SPINN\\
-Transition cost $\alpha$  & 0.5--4.0 & \textsc{lin} & N/A & N/A & N/A  & SPINN\\
-Embedding transformation dropout keep rate & 80\%--95\% & \textsc{lin} & N/A & 83\% & 92\%  & SPINN\\
-Classifier MLP dropout keep rate & 80\%--95\% & \textsc{lin} & 94\%  & 94\%   & 93\%  & SPINN\\
-Tracking LSTM size $D_t$ & 24--128 & \textsc{log} & N/A & N/A & 61  & SPINN\\
-Classifier MLP layers & 1--3 & \textsc{lin} & 2 & 2 & 2 & SPINN\\
+Initial LR & 2e-4--2e-2 & \textsc{log} & 5e-3  & 3e-4 & 7e-3  & 2e-3\\
+L2 regularization $\lambda$ & 8e-7--3e-5   & \textsc{log} & 4e-6  & 3e-6   & 2e-5  & 3e-5\\
+Transition cost $\alpha$  & 0.5--4.0 & \textsc{lin} & --- & --- & ---  & 3.9    \\
+Embedding transformation dropout keep rate & 80--95\% & \textsc{lin} & --- & 83\% & 92\%  & 86\%\\
+Classifier MLP dropout keep rate & 80--95\% & \textsc{lin} & 94\%  & 94\%   & 93\%  & 94\%\\
+Tracking LSTM size $D_t$ & 24--128 & \textsc{log} & --- & --- & 61  & 79\\
+Classifier MLP layers & 1--3 & \textsc{lin} & 2 & 2 & 2 & 1\\
 \bottomrule
 \end{tabular}
 \end{center}
  
 \caption{
 \label{tab:hyperparams}
-Hyperparameter ranges and values. \ii{Range} shows the hyperparameter ranges explored during random search. \ii{Strategy} indicates whether sampling from the range was uniform, or log--uniform. \result{[SB] Full model hyperparams.}
+Hyperparameter ranges and values. \ii{Range} shows the hyperparameter ranges explored during random search. \ii{Strategy} indicates whether sampling from the range was uniform, or log--uniform.
 }
 \end{table*}
 
