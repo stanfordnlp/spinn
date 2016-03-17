@@ -249,9 +249,9 @@ We train each model for 250k steps in each run, using a batch size of 32. We tra
 
 \subsection{Efficient stack representation}
 
-A na\"ive implementation of SPINN would require simulating a stack of size $N$ for each input sentence. In order to update the model weights via backpropagation, we would also need to maintain all intermediate stack representations for later chain rule calculations. This implies a per-example space requirement of $N \times T \times D$, which is prohibitively large for significant batch sizes $M$ or sentence lengths $N$. (Recall that $T = 2N - 1$ is the number of transitions in the shift-reduce parsing sequence, and $D$ is the dimension of the vectors on the stack.) Such a naive implementation would also require duplicating a largely unchanged stack at each timestep (as \shift~and \reduce~operations only affect the top of the stack). \todo{[JG] Shorten this a tiny bit.}
+A na\"ive implementation of SPINN would require representing a stack of size $N$ for each timestep of each input sentence at training time to support backpropagation. This implies a per-example space requirement of $N \times T \times D$, which is prohibitively large for significant batch sizes or sentence lengths $N$. (Recall that $T = 2N - 1$ is the number of transitions in the shift-reduce parsing sequence, and $D$ is the dimension of the vectors on the stack.) Such a naive implementation would also require duplicating a largely unchanged stack at each timestep, since \shift~and \reduce~operations only affect the top of the stack.
 
-We designed an alternative minimal-space stack algorithm inspired by the zipper technique \citep{huet1997zipper}. For a single input sentence, we represent the stack with a single $T \times D$ matrix $S$. Each row $S_t$ represents the top of the actual stack at timestep $t$. We maintain a queue of backpointers onto $S$ in order to track which elements should be involved in a \reduce~operation at any given time. Algorithm~\ref{alg:thin-stack} below describes the full mechanics of a stack feedforward in this compressed representation. It operates on the compressed $T \times D$ matrix $S$ and a backpointer queue $Q$. Table~\ref{tbl:thin-stack} shows an example run of this algorithm.
+We propose an alternative space-efficient stack representation technique inspired by the zipper technique \citep{huet1997zipper}. For a single input sentence, we represent the stack with a single $T \times D$ matrix $S$. Each row $S_t$ represents the top of the actual stack at timestep $t$. We maintain a queue of backpointers onto $S$ in order to track which elements should be involved in a \reduce~operation at any given time. Algorithm~\ref{alg:thin-stack} below describes the full mechanics of a stack feedforward in this compressed representation. It operates on the compressed $T \times D$ matrix $S$ and a backpointer queue $Q$. Table~\ref{tbl:thin-stack} shows an example run of this algorithm.
 
 \begin{algorithm}[t]
 \caption{The thin-stack algorithm}
@@ -321,7 +321,7 @@ Lexicalized classifier \citep{snli:emnlp2015}
 300D SPINN-PI (\ii{parsed input}) encoders
                         & 3.7m                  & --                &   89.2      &   \textbf{83.2}       \\
 \result{300D SPINN (unparsed input) encoders }
-                        & ??                  & 92?           &   ?    &   82?      \\          
+                        & ??                  & 9?           &   87.2    &   82.6      \\          
 % \result{300D SPINN-PI, sequence-based attn.   }     
 %                         & ?                  & --                &   ?      &   86.3dv         \\
 % \result{300D SPINN-PI, tree-based attn. }           
@@ -401,9 +401,23 @@ Though this experiment only covers SPINN-PI-NT, the results should be similar fo
 
 \section{Discussion}
 
-\result{[SB] Compare the types of errors in the different runs and cherry pick interesting examples/tenancies; measure frequency of broken parses.}
+The use of tree structure improves the performance of sentence encoding models for SNLI. We suspect that this improvement is largely attributable to the more efficient learning of accurate generalizations overall, and not to any small set of phenomena. However, some patterns are identifiable in the results. In particular, it seems that tree-structured models are better able to focus on the key actors and events named in a sentence (possibly by learning an approximation of the linguistic notion of headedness), and that this allows them to effectively inferences based on these key actors. For example, this pair was classified successfully by all three SPINN variants, but not by the RNN baseline (emphasis added):
 
-\vspace{10em}
+\begin{description}\small 
+\item[\bf Premise:] {\it A \textbf{woman} in red blouse is \textbf{standing} with small blond \textbf{child} in front of a small folding chalkboard.}
+\item[\bf Hypothesis:] {\it a woman stands with her child}
+\item[\bf Correct label:] neutral
+\end{description}
+
+We suspect that tree-sequence hybrid models in particular are especially effective at comparing sentences with very different structures, where it is useful to use strict compositionality with the tree-structured component to get the meanings of the setence parts, but then to also accumulate a broad sentence summary that abstracts away from the precise structures. For example, this pair is classified correctly by both hybrid models, but not by the RNN or the SPINN-PI-NT: 
+
+\begin{description}\small 
+\item[\bf Premise:] {\it Nurses in a medical setting conversing over a plastic cup.}
+\item[\bf Hypothesis:] {\it The nurses are discussing a patient.}
+\item[\bf Correct label:] neutral
+\end{description}
+
+We suspect that the hybrid nature of the full SPINN model is also responsible for its ability to perform better than an RNN baseline even when its internal parser is relatively ineffective at producing correct full-sentence parses. We suspect that it is acting somewhat like the Tree-based CNN, only with access to more larger trees: Using tree structure to build up local phrase meanings, and then using the tracking LSTM, at least in part, to combine those meanings.
 
 \section{Conclusions and future work}
 
