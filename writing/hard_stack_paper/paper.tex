@@ -368,7 +368,7 @@ We find that the bare SPINN-PI-NT model performs little better than the RNN base
 
 Both SPINN-PI and the full SPINN outperform all previous sentence encoding models by a significant margin. Most notably our modes outperform the Tree-based CNN of \citet{mou2015recognizing}, which also uses tree-structured composition for local feature extraction, but uses simpler pooling techniques to build sentence features in the interest of efficiency. Our results show that a model that uses tree-structured composition fully (SPINN) outperforms one which uses it only partially (Tree-based CNN), which in turn outperforms one which does not use it at all (LSTM RNN).
 
-\subsection{Runtime performance}
+\subsection{Inference speed}
 \label{sec:speed}
 
 \begin{figure}
@@ -387,13 +387,13 @@ Both SPINN-PI and the full SPINN outperform all previous sentence encoding model
 \label{fig:speed}
 \end{figure}
 
-In this section, we compare the test time speed of our SPINN-PI-NT with an equivalent TreeRNN implemented in the conventional fashion. While the full models evaluated above are implemented and trained using Theano \todo{[SB] Cite Theano.}, which is reasonably efficient but not perfect for our model, we wish to compare well-optimized implementations of both models here. To do this, we reimplemented the feedforward of SPINN-PI-NT in C++/CUDA, and we compare with a CPU-based C++/Eigen TreeRNN implementation from \citet{irsoy2014deep}, modified to perform exactly the same computations as our model.\footnote{The original code for this model is available at \url{https://github.com/oir/deep-recursive}. We plan to release our modified code alongside the Theano source code for the full SPINN.} TreeRNNs like this can only operate on a single example at a time and are thus poorly suited for GPU computation.\footnote{We chose to reimplement and evaluate only the thin-stack feedforward (not training/backpropagation) in C++/CUDA, as this is the more critical performance metric for real-world applications.}
+In this section, we compare the test time speed of our SPINN-PI-NT with an equivalent TreeRNN implemented in the conventional fashion. While the full models evaluated above are implemented and trained using Theano \todo{[SB] Cite Theano.}, which is reasonably efficient but not perfect for our model, we wish to compare well-optimized implementations of both models here. To do this, we reimplement the feedforward of SPINN-PI-NT in C++/CUDA, and we compare that implementation with a CPU-based C++/Eigen TreeRNN implementation from \citet{irsoy2014deep}, which we modified to perform exactly the same computations as our model.\footnote{The original code for Irsoy \& Cardie's model is available at \url{https://github.com/oir/deep-recursive}. We plan to release our modified code at publication time, alongside the Theano source code for the full SPINN.} TreeRNNs like this can only operate on a single example at a time and are thus poorly suited for GPU computation.\footnote{We chose to reimplement and evaluate only the thin-stack feedforward (not training/backpropagation) in C++/CUDA, as feedforward/inference speed is the relevant performance metric for most practical applications.}
 
-Each model is restricted to run on sentences of 30 tokens or fewer (for SPINN, this means we iterate over a sequence of 59 transitions). We fix the model dimension and the word embedding dimension at 300. We run the CPU performance test on a 2.20-GHz Intel Xeon processor with hyperthreading enabled. Our GPU model is implemented in C++ and CUDA, and will be released with the rest of our code. We test its performance on an NVIDIA Titan X GPU.
+Each model is restricted to run on sentences of 30 tokens or fewer (for SPINN, this means we iterate over a sequence of 59 transitions). We fix the model dimension and the word embedding dimension at 300. We run the CPU performance test on a 2.20-GHz Intel Xeon processor with hyperthreading enabled. Our GPU model is implemented in C++ and CUDA, and will be released with the rest of our code. We test it on a NVIDIA Titan X GPU. \todo{[SB, JG] Is Titan X sufficiently unambiguous?}
 
-Figure~\ref{fig:speed} compares the runtime performance of the two models computing representations on data from the Stanford Sentiment Treebank \citep{socher2013recursive}. At batch sizes of interest for test-time applications (e.g., 512 or 1024 examples), we observe a 10--20x speedup relative to the standard CPU implementation. Figure~\ref{fig:speed} shows a substantial difference in runtime scaling as batch sizes increase, which is typical of GPU computation. We hope that this dramatically accelerated approach to tree-structured models will accelerate research into this model class.
+Figure~\ref{fig:speed} compares the runtime performance of the two models computing representations on data from the Stanford Sentiment Treebank \citep{socher2013recursive}. Figure~\ref{fig:speed} shows a substantial difference in runtime that increases with batch size, as is typical of GPU computation. At the larger batch sizes that are most effective for test-time applications (e.g., 512+ examples), we observe a 10--20x speedup relative to the standard CPU implementation. We hope that this dramatically accelerated approach to tree-structured models will accelerate research into this model class.
 
-\todo{[JG] Note that the full SPINN (i.e., Model 1) is in the same complexity class as SPINN-PI (what we're evaluating here) with very similar constants.}
+Though this experiment only covers SPINN-PI-NT, the results should be similar for the full SPINN model: most of the computation involved in running SPINN is involved in populating the buffer, applying the composition function, and manipulating the buffer and the stack, with the low-dimensional tracking and parsing components adding only a small additional load.
 
 \paragraph{Parsing performance}
 
@@ -408,9 +408,9 @@ Figure~\ref{fig:speed} compares the runtime performance of the two models comput
 
 \section{Conclusions and future work}
 
-In this paper, we first introduce a model architecture (SPINN-PI-NT) that is precisely equivalent to a TreeLSTM, but an order of magnitude faster at test time. Next, we expand that architecture into a tree-sequence hybrid model (SPINN-PI), and show that this yields significant gains on the SNLI entailment task. Finally, we show that it is possible exploit the strengths of this model without the need for an external parser by integrating a fast parser into the model itself, as in the full SPINN.
+In this paper, we first introduce a model architecture (SPINN-PI-NT) that is equivalent to a TreeLSTM, but an order of magnitude faster at test time. Next, we expand that architecture into a tree-sequence hybrid model (SPINN-PI), and show that this yields significant gains on the SNLI entailment task. Finally, we show that it is possible exploit the strengths of this model without the need for an external parser by integrating a fast parser into the model (as in the full SPINN), and that the lack of external parse information yields little loss in accuracy.
 
-\paragraph{Future work} Because this paper aims to introduce a general purpose model for sentence encoding, we did not pursue the use of soft attention \citep{bahdanau2014neural,rocktaschel2015reasoning}, despite its demonstrated effectiveness on the SNLI task.\footnote{Attention based models like \citep{cheng2016long} have shown accuracies as high as 89.1\% on SNLI, but are more narrowly engineered to suit the task, and do not produce sentence encodings.} However, we expect that it should be possible to productively combine our model with soft attention, following \citet{cheng2016long}, to yield state-of-the-art performance.
+\paragraph{Future work} Because this paper aims to introduce a general purpose model for sentence encoding, we did not pursue the use of soft attention \citep{bahdanau2014neural,rocktaschel2015reasoning}, despite its demonstrated effectiveness on the SNLI task.\footnote{Attention based models like \citet{rocktaschel2015reasoning} and the unpublished \citet{cheng2016long} have shown accuracies as high as 89.1\% on SNLI, but are more narrowly engineered to suit the task, and do not yield sentence encodings.} However, we expect that it should be possible to productively combine our model with soft attention, following \citet{cheng2016long}, to yield state-of-the-art performance.
 
 The tracking LSTM that we incorporated into SPINN uses only simple, quick-to-compute features drawn from the head of the buffer and the head of the stack. It is plausible that giving the tracking LSTM access to more information from the buffer and stack at each step would allow it to better represent the context at each tree node, yielding both better parsing and better sentence encoding. One promising way to pursue this goal would be to encode the full contents of the stack and buffer at each time step following the method used by \citet{dyer-EtAl:2015:ACL-IJCNLP}.
 
@@ -424,6 +424,8 @@ For a more ambitious goal, we expect that it should be possible to implement a v
 \bibliographystyle{../acl_natbib}
 \bibliography{../MLSemantics}
  
+\todo{[SB] Track down mystery spaces.}
+
 \begin{table*}[t]\small
 \begin{center}
 \begin{tabular}{lrlrrrr}
