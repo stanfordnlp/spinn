@@ -288,6 +288,10 @@ void ThinStack::update_buffer_cur(float *buffer_cur_t, float *transitions, int t
 
 
 void ThinStack::reset() {
+  // TODO: Technically these don't need to be explicitly zeroed out before
+  // every feedforward. They just get overwritten and their bad values are
+  // never used, provided that the feedforward uses a valid transition
+  // sequence.
   cudaMemset(stack, 0, stack_total_size * sizeof(float));
   cudaMemset(queue, 0, queue_total_size * sizeof(float));
 
