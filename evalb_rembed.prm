@@ -12,8 +12,9 @@ DEBUG 0
 ##    The process will stop when this number##
 ##    of errors are accumulated.            ##
 ##------------------------------------------##
-# (arastogi) Interested in all parses
-MAX_ERROR 10000000
+# (arastogi) Interested in all parses, set to 
+# high value
+MAX_ERROR 1000000
 
 ##------------------------------------------##
 ## Cut-off length for statistics            ##
@@ -23,7 +24,8 @@ MAX_ERROR 10000000
 ##    be shown, on top of the statistics    ##
 ##    for all the sentences                 ##
 ##------------------------------------------##
-CUTOFF_LEN 30
+# (arastogi) Set cutoff to num_transitions 
+CUTOFF_LEN 50
 
 ##------------------------------------------##
 ## unlabeled or labeled bracketing          ##
