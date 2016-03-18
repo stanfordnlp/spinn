@@ -30,7 +30,7 @@ void destroy_params(ThinStackParameters params) {
 }
 
 int main() {
-  ModelSpec spec = {50, 50, 1, 10, 71, 50};//{300, 300, 256, 10, 25, 300};//{5, 5, 2, 10, 3, 5};
+  ModelSpec spec = {300, 300, (size_t) atoi(getenv("BATCH_SIZE")), 10, 59, 300};
   ThinStackParameters params = load_params(spec);
 
   cublasHandle_t handle;
@@ -45,19 +45,29 @@ int main() {
   // Set model inputs.
   cout << "X:" << endl;
   int num_tokens = (spec.seq_length + 1) / 2;
-  load_weights_cuda("/scr/jgauthie/projects/rembed/metal_stack/sst_one_buffer.txt", spec.model_dim * spec.batch_size * num_tokens, ts.X);
-/* #if DEBUG */
-/*   print_device_matrix(ts.X, spec.model_dim, spec.batch_size * num_tokens); */
-/* #endif */
+  fill_rand_matrix(ts.X, spec.model_dim, spec.batch_size * num_tokens);
 
   cout << "transitions:" << endl;
-  load_weights_cuda("/scr/jgauthie/tmp/deep-recursive/models/drsv_1_50_0_0.1_1_200_0.002_0.0001_0.9_0.transitions", spec.batch_size * spec.seq_length, ts.transitions);
+  float *h_transitions = (float *) malloc(spec.seq_length * spec.batch_size * sizeof(float));
+  for (int i = 0; i < spec.seq_length * spec.batch_size; i++) {
+    float val;
+    if (i < spec.batch_size * 2) {
+      val = 0.0f;
+    } else if (i >= spec.batch_size * 2 && i < spec.batch_size * 3) {
+      val = 1.0f;
+    } else {
+      val = rand() % 2 == 0 ? 1.0f : 0.0f;
+    }
+    h_transitions[i] = val;
+  }
+  cudaMemcpy(ts.transitions, h_transitions, spec.seq_length * spec.batch_size * sizeof(float), cudaMemcpyHostToDevice);
+  free(h_transitions);
 #if DEBUG
   print_device_matrix(ts.transitions, 1, spec.batch_size * spec.seq_length);
 #endif
 
   auto time_elapsed = chrono::microseconds::zero();
-  int n_batches = 1; // 50
+  int n_batches = 50;
   for (int t = 0; t < n_batches; t++) {
     auto start = chrono::high_resolution_clock::now();
     ts.forward();
