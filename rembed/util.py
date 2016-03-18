@@ -1152,7 +1152,7 @@ def LoadEmbeddingsFromASCII(vocabulary, embedding_dim, path):
 
 def TransitionsToParse(transitions, words):
     if transitions is not None:
-        stack = ["*ZEROS*"] * (len(transitions) + 1)
+        stack = ["(P *ZEROS*)"] * (len(transitions) + 1)
         buffer_ptr = 0
         for transition in transitions:
             if transition == 0:
