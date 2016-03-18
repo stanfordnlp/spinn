@@ -40,10 +40,10 @@ SOURCES = thin-stack.cc rnn.cc \
 		  kernels.cu util.cc
 
 test: gtest_main.a gmock_main.a test.cc $(SOURCES)
-	rm -f test
+	rm -f bin/unittest
 	nvcc -g -O0 -lcublas -lcurand \
 		-isystem $(GTEST_DIR)/include -isystem $(GMOCK_DIR)/include \
-		-std=c++11 -o test \
+		-std=c++11 -o bin/unittest \
 		$^
 
 stacktest: bin/stacktest.cc $(SOURCES)
@@ -57,5 +57,5 @@ rnntest: bin/rnntest.cc $(SOURCES)
 	  $^
 
 clean:
-	rm -f bin/stacktest bin/rnntest
+	rm -f bin/unittest bin/stacktest bin/rnntest
 	rm -f *.a *.o *.cu_o
