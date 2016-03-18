@@ -331,7 +331,7 @@ To classify an SNLI sentence pair, we run two copies of SPINN with shared parame
     {\vec{h}_{\text{premise}} - \vec{h}_{\text{hypothesis}}}
     {\vec{h}_{\text{premise}} \odot \vec{h}_{\text{hypothesis}}}
 \end{equation}
-Following \citet{snli:emnlp2015}, this feature vector is then passed to a series of ReLU neural network layers (i.e., an MLP; the number of layers is tuned as a hyperparameter), then passed into a linear transformation, and then finally passed to a softmax layer, which yields a distribution over the three labels.
+Following \citet{snli:emnlp2015}, this feature vector is then passed to a series of 1024D ReLU neural network layers (i.e., an MLP; the number of layers is tuned as a hyperparameter), then passed into a linear transformation, and then finally passed to a softmax layer, which yields a distribution over the three labels.
 
 
 \begin{table*}[t]
