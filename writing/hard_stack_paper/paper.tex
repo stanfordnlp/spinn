@@ -144,10 +144,10 @@ The parser uses two auxiliary data structures: a stack $S$ of partially complete
 
 \subsection{Composition and representation}
 
-The core SPINN model implements a sequential shift-reduce parser which operates over sentences. It is designed to produce a vector representation of the sentence as output, as opposed to a tree as in standard shift-reduce parsing. This relies on two key modifications to the shift-reduce algorithm. First, the parser's intermediate representations, including those of partial tree structures on the stack, are fixed-length vectors. In addition, the \reduce~operation combines two such vectors from the stack into another vector using a neural network function.
+The core SPINN model implements a sequential shift-reduce parser which operates over sentences. It is designed to produce a vector representation of the sentence as output, as opposed to a tree as in standard shift-reduce parsing. SPINN is an extension of the shift-reduce model whose intermediate representations, including those of partial tree structures on the stack, are fixed-length vectors. Its \reduce~operation combines two vector representations from the stack into another vector using a neural network function.
 
 \paragraph{The composition function}
-When a \reduce~operation is performed, vector representations of two tree nodes are popped off of the head of the stack and fed into a {\it composition function}, which is a neural network function that produces a representation for a new tree node that is the parent of the two popped nodes. This new node is then pushed on to the stack.
+When a \reduce~operation is performed, the vector representations of two tree nodes are popped off of the head of the stack and fed into a {\it composition function}, which is a neural network function that produces a representation for a new tree node that is the parent of the two popped nodes. This new node is then pushed on to the stack.
 
 The TreeLSTM composition function \citep{tai2015improved} generalizes the LSTM neural network layer to tree- rather than sequence-based inputs, and it shares with the LSTM the idea of representing intermediate states as a pair of a fast-changing state representation $\vec{h}$ and a slower-changing memory representation $\vec{c}$. Our version is formulated as:
 \begin{gather}
