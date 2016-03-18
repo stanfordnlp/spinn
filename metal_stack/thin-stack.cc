@@ -73,6 +73,7 @@ ThinStack::~ThinStack() {
   cout << "!!!!!!!!!!!!!!!!" << endl;
   free_helpers();
 
+  cudaFree(X_indices);
   cudaFree(X);
   cudaFree(transitions);
 
