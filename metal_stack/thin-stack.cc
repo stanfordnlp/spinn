@@ -128,7 +128,6 @@ void ThinStack::forward() {
 
 void ThinStack::step(int t) {
 
-  // TODO sync after kernel calls.
   float *transitions_t = &transitions[t * spec.batch_size];
 #if DEBUG
   cout << "transitions " << t << endl;
