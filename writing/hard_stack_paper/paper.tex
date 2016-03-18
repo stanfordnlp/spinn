@@ -325,7 +325,7 @@ To classify an SNLI sentence pair, we run two copies of SPINN with shared parame
     {\vec{h}_{\text{premise}} - \vec{h}_{\text{hypothesis}}}
     {\vec{h}_{\text{premise}} \odot \vec{h}_{\text{hypothesis}}}
 \end{equation}
-Following \citet{snli:emnlp2015}, this feature vector is then passed to a series of ReLU neural network layers (i.e., an MLP; the number of layers is tuned as a hyperparameter), then passed into a linear transformation, and then finally passed to a softmax layer, which yields a distribution among the three labels.
+Following \citet{snli:emnlp2015}, this feature vector is then passed to a series of ReLU neural network layers (i.e., an MLP; the number of layers is tuned as a hyperparameter), then passed into a linear transformation, and then finally passed to a softmax layer, which yields a distribution over the three labels.
 
 
 \begin{table*}[t]
@@ -386,7 +386,7 @@ We initialize the model parameters using the nonparametric strategy of \citet{DB
 
 We use the RMSProp optimizer \citep{tieleman2012lecture} with a tuned starting learning rate that decays by a factor of 0.75 every 10k steps. We apply both dropout \citep{srivastava2014dropout} and batch normalization \citep{2015SIoffeCSzegedy} to the output of the word embedding projection layer and to the feature vectors that serve as the inputs and outputs to the MLP that precedes the final entailment classifier.
 
-We train each model for 250k steps in each run, using a batch size of 32. We track each model's performance on the development set during training and save parameters when this performance reached a new peak. We use early stopping, evaluating on the test set using the parameters that perform best on the development set.
+We train each model for 250k steps in each run, using a batch size of 32. We track each model's performance on the development set during training and save parameters when this performance reaches a new peak. We use early stopping, evaluating on the test set using the parameters that perform best on the development set.
 
 Appendix~\ref{sec:hyperparams} discusses hyperparameter tuning.
 
@@ -403,7 +403,7 @@ Table~\ref{tab:results} shows our results on SNLI inference classification. For 
 
 We find that the bare SPINN-PI-NT model performs little better than the RNN baseline, but that SPINN-PI with the added tracking LSTM reaches state-of-the-art accuracy among sentence encoding based models. The success of SPINN-PI, which is a hybrid tree-sequence model, suggests that the tree- and sequence-based encoding methods are complementary. The full SPINN model with its relatively weak internal parser performs slightly less well, but nonetheless robustly exceeds the performance of the LSTM baseline.
 
-Both SPINN-PI and the full SPINN outperform all previous sentence encoding models by a significant margin. Most notably our models outperform the Tree-based CNN of \citet{mou2015recognizing}, which also uses tree-structured composition for local feature extraction, but uses simpler pooling techniques to build sentence features in the interest of efficiency. Our results show that a model that uses tree-structured composition fully (SPINN) outperforms one which uses it only partially (Tree-based CNN), which in turn outperforms one which does not use it at all (LSTM RNN).
+Both SPINN-PI and the full SPINN outperform all previous sentence encoding models by a significant margin. Most notably our models outperform the Tree-Based CNN of \citet{mou2015recognizing}, which also uses tree-structured composition for local feature extraction, but uses simpler pooling techniques to build sentence features in the interest of efficiency. Our results show that a model that uses tree-structured composition fully (SPINN) outperforms one which uses it only partially (Tree-Based CNN), which in turn outperforms one which does not use it at all (LSTM RNN).
 
 \paragraph{Parsing performance}
 
@@ -425,7 +425,7 @@ The tree-sequence hybrid models seem to be especially effective at comparing sen
 {The nurses are discussing a patient.}
 {neutral}
 
-We suspect that the hybrid nature of the full SPINN model is also responsible for its ability to perform better than an RNN baseline even when its internal parser is relatively ineffective at producing correct full-sentence parses. We suspect that it is acting somewhat like the Tree-based CNN, only with access to larger trees: Using tree structure to build up local phrase meanings, and then using the tracking LSTM, at least in part, to combine those meanings.
+We suspect that the hybrid nature of the full SPINN model is also responsible for its ability to perform better than an RNN baseline even when its internal parser is relatively ineffective at producing correct full-sentence parses. We suspect that it is acting somewhat like the Tree-Based CNN, only with access to larger trees: Using tree structure to build up local phrase meanings, and then using the tracking LSTM, at least in part, to combine those meanings.
 
 \section{Conclusions and future work}
 
