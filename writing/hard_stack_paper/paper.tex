@@ -218,16 +218,17 @@ At test time, the model uses whichever transition (i.e., \shift\ or \reduce) is 
 \centering
 \begin{tabular}{c|cl}
   \toprule
-  $t$ & $S$[$t$] & $Q_t$ \\
+  $t$ & $S$[$t$] & \multicolumn{1}{c}{$Q_t$} \\
   \midrule
-  0 & $a$ & \underline{\hphantom{0} 0} \\
-  1 & $b$ & \hphantom{0} \underline{0 1} \\
-  2 & $c$ & \hphantom{0} 0 \underline{1 2} \\
-  3 & $(c~b)$ & \hphantom{0} \underline{0 3} \\
-  4 & $((c~b)~a)$ & \underline{\hphantom{0} 4} \\
+  0 & & \underline{\hphantom{0} \hphantom{0}} \\
+  1 & $a$ & \hphantom{0} \underline{\hphantom{0} 1} \\
+  2 & $b$ & \hphantom{0} \hphantom{0} \underline{1 2} \\
+  3 & $c$ & \hphantom{0} \hphantom{0} 1 \underline{2 3} \\
+  4 & $(c~b)$ & \hphantom{0} \hphantom{0} \underline{1 4} \\
+  5 & $((c~b)~a)$ & \hphantom{0} \underline{\hphantom{0} 5} \\
   \bottomrule
 \end{tabular}
-\caption{An example of the thin-stack algorithm computing a \shift-\shift-\shift-\reduce-\reduce\ sequence on the input sentence $(a, b, c)$. $S$ is shown in the second column and may be thought of as a list of the tops of the stack at all timesteps $t$. The last two elements of $Q$ (underlined) specify which rows $t$ would be involved in a \reduce\ operation at the next timestep.}
+\caption{The thin-stack algorithm computing a \shift-\shift-\shift-\reduce-\reduce\ sequence on the input sentence $(a, b, c)$. $S$ is shown in the second column and represents the top of the stack at each step $t$. The last two elements of $Q$ (underlined) specify which rows $t$ would be involved in a \reduce\ operation at the next step.}
 \label{tbl:thin-stack}
 \end{table}
 
