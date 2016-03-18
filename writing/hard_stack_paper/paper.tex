@@ -379,10 +379,10 @@ Lexicalized classifier \citep{snli:emnlp2015}
 \end{table*}
 
 
-\paragraph{The objective function} Our objective combines a cross-entropy objective $\mathcal{L}_{\text{s}}$ for the SNLI classification task, a cross-entropy objective $\{\mathcal{L}_p^t, \mathcal{L}_h^t\}$ for each parsing decision for each of the sentences at each step $t$, and an L2 regularization term on the trained parameters. The terms are weighted using the tuned hyperparameters $\alpha$ and $\lambda$:
+\paragraph{The objective function} Our objective combines a cross-entropy objective $\mathcal{L}_{\text{s}}$ for the SNLI classification task, a cross-entropy objective $\{\mathcal{L}_t^p, \mathcal{L}_t^h\}$ for each parsing decision for each of the sentences at each step $t$, and an L2 regularization term on the trained parameters. The terms are weighted using the tuned hyperparameters $\alpha$ and $\lambda$:
 \begin{equation}
 \begin{split}
-\mathcal{L}_{\text{m}} = &\mathcal{L}_{\text{s}} + \alpha \sum_{t=0}^{T-1} (\mathcal{L}_{\text{p}}^{t} + \mathcal{L}_{\text{h}}^{t}) + \lambda \|\theta\|^2_2
+\mathcal{L}_{\text{m}} = &\mathcal{L}_{\text{s}} + \alpha \sum_{t=0}^{T-1} (\mathcal{L}_{\text{t}}^{p} + \mathcal{L}_{\text{t}}^{h}) + \lambda \|\theta\|^2_2
 \end{split}
 \end{equation}
 
