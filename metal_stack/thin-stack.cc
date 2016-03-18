@@ -5,7 +5,8 @@ namespace k = kernels;
 
 ThinStack::ThinStack(ModelSpec spec, ThinStackParameters params,
     cublasHandle_t handle)
-  : spec(spec), params(params), stack_size(spec.seq_length), handle(handle) {
+  : SequenceModel(spec), params(params), stack_size(spec.seq_length),
+    handle(handle) {
 
   stack_total_size = (stack_size * spec.batch_size) * spec.model_dim;
   buffer_total_size = spec.batch_size * spec.seq_length * spec.model_dim;
@@ -91,13 +92,6 @@ ThinStack::~ThinStack() {
 
   cudaFree(buffer_cur_t);
 
-}
-
-
-void ThinStack::lookup_embeddings(float *embedding_source) {
-  k::subtensor1(X, embedding_source, X_indices, spec.vocab_size,
-          spec.seq_length * spec.batch_size, spec.model_dim, 0.0f, 1.0f, 0.0f,
-          NULL);
 }
 
 

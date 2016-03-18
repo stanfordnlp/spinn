@@ -4,6 +4,7 @@
 #include <cuda_runtime.h>
 #include "cublas_v2.h"
 
+#include "sequence-model.h"
 #include "util.h"
 
 #include "kernels.cuh"
@@ -19,7 +20,7 @@ typedef struct ThinStackParameters {
   float *compose_b;
 } ThinStackParameters;
 
-class ThinStack {
+class ThinStack : public SequenceModel {
   public:
     /**
      * Constructs a new `ThinStack`.
@@ -29,20 +30,11 @@ class ThinStack {
 
     ~ThinStack();
 
-    ModelSpec spec;
     ThinStackParameters params;
     cublasHandle_t handle;
 
-    void lookup_embeddings(float *embedding_source);
     void forward();
 
-    // Embedding index inputs, of dimension `batch_size * seq_length` -- i.e.,
-    // we have `seq_length`-many concatenated vectors of embedding integers
-    float *X_indices;
-    // Embedding inputs, of dimension `model_dim * (batch_size * seq_length)` --
-    // i.e., along 2nd axis we have `seq_length`-many `model_dim * batch_size`
-    // matrices.
-    float *X;
     float *transitions;
 
     float *stack;
