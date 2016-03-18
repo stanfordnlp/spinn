@@ -67,6 +67,14 @@ void print_device_matrix(const float *m, int M, int N) {
 }
 
 
+float *make_rand_matrix(int M, int N) {
+  float *m;
+  cudaMalloc(&m, M * N * sizeof(float));
+  fill_rand_matrix(m, M, N);
+  return m;
+}
+
+
 void fill_rand_matrix(float *m, int M, int N) {
   static curandGenerator_t prng;
   if (!prng) {
@@ -74,5 +82,5 @@ void fill_rand_matrix(float *m, int M, int N) {
     curandSetPseudoRandomGeneratorSeed(prng, (unsigned long long) clock());
   }
 
-  curandGenerateUniform(prng, m, M * N);
+  curandGenerateNormal(prng, m, M * N, 0.0f, 0.5f);
 }

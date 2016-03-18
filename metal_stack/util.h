@@ -30,6 +30,7 @@ float *load_weights_cuda(string filename, int N, float *target=NULL);
 cublasHandle_t getCublasHandle();
 
 void print_device_matrix(const float *m, int M, int N);
+float *make_rand_matrix(int M, int N);
 void fill_rand_matrix(float *m, int M, int N);
 
 #endif
