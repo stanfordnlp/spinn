@@ -24,7 +24,7 @@ void destroy_params(RNNParameters params) {
 }
 
 int main() {
-  ModelSpec spec = {10, 10, 1, 10, 30, 10};//{300, 300, (size_t) atoi(getenv("BATCH_SIZE")), 10, 30, 300};
+  ModelSpec spec = {300, 300, (size_t) atoi(getenv("BATCH_SIZE")), 10, 30, 300};
   RNNParameters params = load_params(spec);
 
   cublasHandle_t handle;
