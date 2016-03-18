@@ -394,7 +394,7 @@ Appendix~\ref{sec:hyperparams} discusses hyperparameter tuning.
 
 We evaluate four models. The four all use the sentence pair classifier architecture described in Section~\ref{sec:classifier}, and differ only in the function computing the sentence encodings. First, a single-layer LSTM RNN \citep[similar to that of][]{snli:emnlp2015} serves as a baseline encoder. Next, the minimal SPINN-PI-NT model (equivalent to a TreeLSTM) introduces the SPINN model design. SPINN-PI adds the tracking LSTM to that design. Finally, the full SPINN adds the integrated parser.
 
-We compare our models against several baselines, including the strongest published non-neural network-based result from \citet{snli:emnlp2015} and previous neural network models built around several types of sentence encoder.
+We compare our models against several baselines, including the strongest published non-neural network-based result from \citet{snli:emnlp2015} and previous neural network models built around several types of sentence encoders.
 
 \subsection{Results}
 
@@ -402,7 +402,7 @@ Table~\ref{tab:results} shows our results on SNLI inference classification. For 
 
 We find that the bare SPINN-PI-NT model performs little better than the RNN baseline, but that SPINN-PI with the added tracking LSTM reaches state-of-the-art accuracy among sentence encoding based models. The success of SPINN-PI, which is a hybrid tree-sequence model, suggests that the tree- and sequence-based encoding methods are complementary. The full SPINN model with its relatively weak internal parser performs slightly less well, but nonetheless robustly exceeds the performance of the LSTM baseline.
 
-Both SPINN-PI and the full SPINN outperform all previous sentence encoding models by a significant margin. Most notably our modes outperform the Tree-based CNN of \citet{mou2015recognizing}, which also uses tree-structured composition for local feature extraction, but uses simpler pooling techniques to build sentence features in the interest of efficiency. Our results show that a model that uses tree-structured composition fully (SPINN) outperforms one which uses it only partially (Tree-based CNN), which in turn outperforms one which does not use it at all (LSTM RNN).
+Both SPINN-PI and the full SPINN outperform all previous sentence encoding models by a significant margin. Most notably our models outperform the Tree-based CNN of \citet{mou2015recognizing}, which also uses tree-structured composition for local feature extraction, but uses simpler pooling techniques to build sentence features in the interest of efficiency. Our results show that a model that uses tree-structured composition fully (SPINN) outperforms one which uses it only partially (Tree-based CNN), which in turn outperforms one which does not use it at all (LSTM RNN).
 
 \paragraph{Parsing performance}
 
