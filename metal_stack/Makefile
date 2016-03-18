@@ -51,6 +51,11 @@ stacktest: bin/stacktest.cc $(SOURCES)
 	  -std=c++11 -I. -o bin/stacktest \
 	  $^
 
+rnntest: bin/rnntest.cc $(SOURCES)
+	nvcc -g -O0 -lcublas -lcurand \
+	  -std=c++11 -I. -o bin/rnntest \
+	  $^
+
 clean:
-	rm -f testrun
+	rm -f bin/stacktest bin/rnntest
 	rm -f *.a *.o *.cu_o
