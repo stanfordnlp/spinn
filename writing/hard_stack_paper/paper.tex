@@ -405,10 +405,7 @@ We find that the bare SPINN-PI-NT model performs little better than the RNN base
 
 Both SPINN-PI and the full SPINN outperform all previous sentence encoding models by a significant margin. Most notably our models outperform the Tree-Based CNN of \citet{mou2015recognizing}, which also uses tree-structured composition for local feature extraction, but uses simpler pooling techniques to build sentence features in the interest of efficiency. Our results show that a model that uses tree-structured composition fully (SPINN) outperforms one which uses it only partially (Tree-Based CNN), which in turn outperforms one which does not use it at all (LSTM RNN).
 
-\paragraph{Parsing performance}
-
-\todo{[Fill in some details here.}
-\todo{Read report and work out what to include.}
+The full SPINN performed moderately well at reproducing the Stanford Parser's parses of the SNLI data at a transition-by-transition level with 92.4\% accuracy at test time. However, its transition prediction errors were fairly evenly distributed across sentences, and most sentences were assigned partially invalid transition sequences that either left a few words out of the final representation or incorporated a few padding tokens into the final representation.
 
 \subsection{Discussion}
 
