@@ -214,11 +214,32 @@ At test time, the model uses whichever transition (i.e., \shift\ or \reduce) is 
 
 \subsection{Implementation issues}
 
+\begin{table}[t]
+\centering
+\begin{tabular}{c|cl}
+  \toprule
+  $t$ & $S$[$t$] & $Q_t$ \\
+  \midrule
+  0 & $a$ & \underline{\hphantom{0} 0} \\
+  1 & $b$ & \hphantom{0} \underline{0 1} \\
+  2 & $c$ & \hphantom{0} 0 \underline{1 2} \\
+  3 & $(c~b)$ & \hphantom{0} \underline{0 3} \\
+  4 & $((c~b)~a)$ & \underline{\hphantom{0} 4} \\
+  \bottomrule
+\end{tabular}
+\caption{An example of the thin-stack algorithm computing a \shift-\shift-\shift-\reduce-\reduce\ sequence on the input sentence $(a, b, c)$. $S$ is shown in the second column and may be thought of as a list of the tops of the stack at all timesteps $t$. The last two elements of $Q$ (underlined) specify which rows $t$ would be involved in a \reduce\ operation at the next timestep.}
+\label{tbl:thin-stack}
+\end{table}
+
 \paragraph{Representing the stack efficiently}
 
 A na\"ive implementation of SPINN would require representing a stack of size $N$ for each timestep of each input sentence at training time to support backpropagation. This implies a per-example space requirement of $N \times T \times D$, which is prohibitively large for significant batch sizes or sentence lengths $N$. Such a naive implementation would also require copying a largely unchanged stack at each timestep, since each \shift\ or \reduce\ operation writes only one new representation to the stack.
 
-We propose an alternative space-efficient stack representation inspired by the zipper technique \citep{huet1997zipper}. For a single input sentence, we represent the stack with a single $T \times D$ matrix $S$. Each row $S_t$ represents the top of the actual stack at timestep $t$. We maintain a queue of backpointers onto $S$ in order to track which elements should be involved in a \reduce\ operation at any given time. Algorithm~\ref{alg:thin-stack} below describes the full mechanics of a stack feedforward in this compressed representation. It operates on the compressed $T \times D$ matrix $S$ and a backpointer queue $Q$. Table~\ref{tbl:thin-stack} shows an example run of this algorithm.
+We propose an alternative space-efficient stack representation inspired by the zipper technique \citep{huet1997zipper}. For a single input sentence, we represent the stack with a single $T \times D$ matrix $S$. Each row $S_t$ represents the top of the actual stack at timestep $t$. We maintain a queue of backpointers onto $S$ in order to track which elements should be involved in a \reduce\ operation at any given time. The thin-stack algorithm (Algorithm~\ref{alg:thin-stack}) describes the full mechanics of a stack feedforward in this compressed representation. It operates on the compressed $T \times D$ matrix $S$ and a backpointer queue $Q$. Table~\ref{tbl:thin-stack} shows an example run.
+
+This stack representation requires substantially less space. It stores each element involved in the feedforward computation exactly once, meaning that this representation can still support efficient backpropagation. Furthermore, all of the updates to $S$ and $Q$ can be performed batched and in-place on a GPU, yielding substantial speed gains. We describe speed results in Section~\ref{sec:speed}.
+
+A simpler variant of this technique can be used to represent the buffer, since information is not written to the buffer during model operation. It can be stored as a single fixed matrix with a scalar pointer variable indicating which element is the head at each step.
 
 \begin{algorithm}[t]
 \caption{The thin-stack algorithm}
@@ -237,10 +258,6 @@ We propose an alternative space-efficient stack representation inspired by the z
 \end{algorithmic}
 \end{algorithm}
 
-This stack representation requires substantially less space. It stores each element involved in the feedforward computation exactly once, meaning that this representation can still support efficient backpropagation. Furthermore, all of the updates to $S$ and $Q$ can be performed batched and in-place on a GPU, yielding substantial speed gains. We describe speed results in Section~\ref{sec:speed}.
-
-A simpler variant of this technique can be used to represent the buffer, since information is not written to the buffer during model operation. It can be stored as a single fixed matrix with a scalar pointer variable indicating which element is the head at each step.
-
 \paragraph{Preparing the data} At training time, SPINN requires both a transition sequence $\mathbf t$  and a token sequence $\mathbf x$ as its inputs for each sentence. The token sequence is simply the words in the sentence in order. $\mathbf t$ can be obtained from any constituency parse for the sentence by first converting that parse into an unlabeled binary parse, then linearizing it (with the usual in-order traversal), then taking each word token as a \shift\ transition and each `)' as a \reduce\ transition, as here:
 
 \vspace{0.5em}
@@ -256,23 +273,6 @@ A simpler variant of this technique can be used to represent the buffer, since i
 \subsection{TreeRNN-equivalence}
 
 Without the addition of the tracking LSTM, SPINN (in particular the SPINN-PI-NT variant, for \textit{parsed input, no tracking}) is precisely equivalent to a conventional tree-structured neural network model in the function that it computes, and it therefore also has the same learning dynamics. In both, the representation of each sentence consists of the representation of the words, combined recursively using a TreeRNN composition function (in our case, the TreeLSTM function). The SPINN, however, is dramatically faster, and supports both integrated parsing and a novel approach to context through the tracking LSTM.
-
-\begin{table}[t]
-\centering
-\begin{tabular}{c|cl}
-  \toprule
-  $t$ & $S$[$t$] & $Q_t$ \\
-  \midrule
-  0 & $a$ & \underline{\hphantom{0} 0} \\
-  1 & $b$ & \hphantom{0} \underline{0 1} \\
-  2 & $c$ & \hphantom{0} 0 \underline{1 2} \\
-  3 & $(c~b)$ & \hphantom{0} \underline{0 3} \\
-  4 & $((c~b)~a)$ & \underline{\hphantom{0} 4} \\
-  \bottomrule
-\end{tabular}
-\caption{An example of the thin-stack algorithm computing a \shift-\shift-\shift-\reduce-\reduce\ sequence on the input sentence $(a, b, c)$. $S$ is shown in the second column and may be thought of as a list of the tops of the stack at all timesteps $t$. The last two elements of $Q$ (underlined) specify which rows $t$ would be involved in a \reduce\ operation at the next timestep.}
-\label{tbl:thin-stack}
-\end{table}
 
 \subsection{Inference speed}
 \label{sec:speed}
@@ -296,11 +296,11 @@ Without the addition of the tracking LSTM, SPINN (in particular the SPINN-PI-NT 
 \label{fig:speed}
 \end{figure}
 
-In this section, we compare the test time speed of our SPINN-PI-NT with an equivalent TreeRNN implemented in the conventional fashion and a standard recurrent neural network sequence model. While the full models evaluated below are implemented and trained using Theano \citep{bergstra+al:2010-scipy,Bastien-Theano-2012}, which is reasonably efficient but not perfect for our model, we wish to compare well-optimized implementations of both models here. To do this, we reimplement the feedforward of SPINN-PI-NT in C++/CUDA, and we compare that implementation with a CPU-based C++/Eigen TreeRNN implementation from \citet{irsoy2014deep}, which we modified to perform exactly the same computations as our model.\footnote{The original code for Irsoy \& Cardie's model is available at \url{https://github.com/oir/deep-recursive}. We plan to release our modified code at publication time, alongside the optimized C++/CUDA SPINN and the Theano source code for the full SPINN.} TreeRNNs like this can only operate on a single example at a time and are thus poorly suited for GPU computation.\footnote{We chose to reimplement and evaluate only the feedforward/inference pass, as inference speed is the relevant performance metric for most practical applications.} We also include speed results from a simple C++/CUDA implementation of a recurrent neural network.
+In this section, we compare the test time speed of our SPINN-PI-NT with an equivalent TreeRNN implemented in the conventional fashion and a standard RNN sequence model. While the full models evaluated below are implemented and trained using Theano \citep{bergstra+al:2010-scipy,Bastien-Theano-2012}, which is reasonably efficient but not perfect for our model, we wish to compare well-optimized implementations of both models here. To do this, we reimplement the feedforward of SPINN-PI-NT and our RNN baseline in C++/CUDA, and we compare that implementation with a CPU-based C++/Eigen TreeRNN implementation from \citet{irsoy2014deep}, which we modified to perform exactly the same computations as our model.\footnote{The original code for Irsoy \& Cardie's model is available at \url{https://github.com/oir/deep-recursive}. We plan to release our modified code at publication time, alongside the optimized C++/CUDA models and the Theano source code for the full SPINN.} TreeRNNs like this can only operate on a single example at a time and are thus poorly suited for GPU computation.\footnote{We chose to reimplement and evaluate only the feedforward/inference pass, as inference speed is the relevant performance metric for most practical applications.}
 
 Each model is restricted to run on sentences of 30 tokens or fewer. We fix the model dimension and the word embedding dimension at 300. We run the CPU performance test on a 2.20-GHz Intel Xeon processor with hyperthreading enabled. We test our thin-stack implementation and the RNN model on an NVIDIA Titan X GPU.
 
-Figure~\ref{fig:speed} compares the sentence encoding speed of the three models on random input data. Figure~\ref{fig:speed} shows a substantial difference in runtime between the CPU and thin-stack implementations that increases with batch size. At the larger batch sizes that are most effective for test-time applications (e.g., 512+ examples), we observe a 10--25x speedup relative to the standard CPU implementation. The thin-stack implementation is consistently about 4x slower than the recurrent neural network we tested here.
+Figure~\ref{fig:speed} compares the sentence encoding speed of the three models on random input data. Figure~\ref{fig:speed} shows a substantial difference in runtime between the CPU and thin-stack implementations that increases with batch size. At the larger batch sizes that are most effective for test-time applications (e.g., 512+ examples), our model 10--25x faster than the standard CPU implementation, and about 4x slower than the RNN baseline.
 
 Though this experiment only covers SPINN-PI-NT, the results should be similar for the full SPINN model: most of the computation involved in running SPINN is involved in populating the buffer, applying the composition function, and manipulating the buffer and the stack, with the low-dimensional tracking and parsing components adding only a small additional load.
 
