@@ -234,7 +234,7 @@ At test time, the model uses whichever transition (i.e., \shift\ or \reduce) is 
 
 \paragraph{Representing the stack efficiently}
 
-A na\"ive implementation of SPINN would require representing a stack of size $N$ for each timestep of each input sentence at training time to support backpropagation. This implies a per-example space requirement of $N \times T \times D$, which is prohibitively large for significant batch sizes or sentence lengths $N$. Such a naive implementation would also require copying a largely unchanged stack at each timestep, since each \shift\ or \reduce\ operation writes only one new representation to the stack.
+A na\"ive implementation of SPINN would require representing a stack of size $N$ for each timestep of each input sentence at training time to support backpropagation. This implies a per-example space requirement of $N \times T \times D$, which is prohibitively large for significant batch sizes or sentence lengths $N$. Such a na\"ive implementation would also require copying a largely unchanged stack at each timestep, since each \shift\ or \reduce\ operation writes only one new representation to the stack.
 
 We propose an alternative space-efficient stack representation inspired by the zipper technique \citep{huet1997zipper}. For a single input sentence, we represent the stack with a single $T \times D$ matrix $S$. Each row $S_t$ represents the top of the actual stack at timestep $t$. We maintain a queue of backpointers onto $S$ in order to track which elements should be involved in a \reduce\ operation at any given time. The thin-stack algorithm (Algorithm~\ref{alg:thin-stack}) describes the full mechanics of a stack feedforward in this compressed representation. It operates on the compressed $T \times D$ matrix $S$ and a backpointer queue $Q$. Table~\ref{tbl:thin-stack} shows an example run.
 
@@ -273,10 +273,13 @@ A simpler variant of this technique can be used to represent the buffer, since i
 
 \subsection{TreeRNN-equivalence}
 
-Without the addition of the tracking LSTM, SPINN (in particular the SPINN-PI-NT variant, for \textit{parsed input, no tracking}) is precisely equivalent to a conventional tree-structured neural network model in the function that it computes, and it therefore also has the same learning dynamics. In both, the representation of each sentence consists of the representation of the words, combined recursively using a TreeRNN composition function (in our case, the TreeLSTM function). The SPINN, however, is dramatically faster, and supports both integrated parsing and a novel approach to context through the tracking LSTM.
+Without the addition of the tracking LSTM, SPINN (in particular the SPINN-PI-NT variant, for \textit{parsed input, no tracking}) is precisely equivalent to a conventional tree-structured neural network model in the function that it computes, and therefore also has the same learning dynamics. In both, the representation of each sentence consists of the representations of the words combined recursively using a TreeRNN composition function (in our case, the TreeLSTM function). The SPINN, however, is dramatically faster, and supports both integrated parsing and a novel approach to context through the tracking LSTM.
 
 \subsection{Inference speed}
 \label{sec:speed}
+
+In this section, we compare the test time speed of our SPINN-PI-NT with an equivalent TreeRNN implemented in the conventional fashion and with a standard RNN sequence model. While the full models evaluated below are implemented and trained using Theano \citep{bergstra+al:2010-scipy,Bastien-Theano-2012}, which is reasonably efficient but not perfect for our model, we wish to compare well-optimized implementations of all three models. To do this, we reimplement the feedforward of SPINN-PI-NT and our RNN baseline in C++/CUDA, and we compare that implementation with a CPU-based C++/Eigen TreeRNN implementation from \citet{irsoy2014deep}, which we modified to perform exactly the same computations as our model.\footnote{The original code for Irsoy \& Cardie's model is available at \url{https://github.com/oir/deep-recursive}. We plan to release our modified code at publication time, alongside the optimized C++/CUDA models and the Theano source code for the full SPINN.} TreeRNNs like this can only operate on a single example at a time and are thus poorly suited for GPU computation.\footnote{We chose to reimplement and evaluate only the feedforward/inference pass, as inference speed is the relevant performance metric for most practical applications.}
+
 
 \begin{figure}
 \centering
@@ -297,11 +300,10 @@ Without the addition of the tracking LSTM, SPINN (in particular the SPINN-PI-NT 
 \label{fig:speed}
 \end{figure}
 
-In this section, we compare the test time speed of our SPINN-PI-NT with an equivalent TreeRNN implemented in the conventional fashion and a standard RNN sequence model. While the full models evaluated below are implemented and trained using Theano \citep{bergstra+al:2010-scipy,Bastien-Theano-2012}, which is reasonably efficient but not perfect for our model, we wish to compare well-optimized implementations of both models here. To do this, we reimplement the feedforward of SPINN-PI-NT and our RNN baseline in C++/CUDA, and we compare that implementation with a CPU-based C++/Eigen TreeRNN implementation from \citet{irsoy2014deep}, which we modified to perform exactly the same computations as our model.\footnote{The original code for Irsoy \& Cardie's model is available at \url{https://github.com/oir/deep-recursive}. We plan to release our modified code at publication time, alongside the optimized C++/CUDA models and the Theano source code for the full SPINN.} TreeRNNs like this can only operate on a single example at a time and are thus poorly suited for GPU computation.\footnote{We chose to reimplement and evaluate only the feedforward/inference pass, as inference speed is the relevant performance metric for most practical applications.}
 
-Each model is restricted to run on sentences of 30 tokens or fewer. We fix the model dimension and the word embedding dimension at 300. We run the CPU performance test on a 2.20-GHz Intel Xeon processor with hyperthreading enabled. We test our thin-stack implementation and the RNN model on an NVIDIA Titan X GPU.
+Each model is restricted to run on sentences of 30 tokens or fewer. We fix the model dimension and the word embedding dimension at 300. We run the CPU performance test on a 2.20-GHz 16-core Intel Xeon E5-2660 processor with hyperthreading enabled. We test our thin-stack implementation and the RNN model on an NVIDIA Titan X GPU.
 
-Figure~\ref{fig:speed} compares the sentence encoding speed of the three models on random input data. Figure~\ref{fig:speed} shows a substantial difference in runtime between the CPU and thin-stack implementations that increases with batch size. At the larger batch sizes that are most effective for test-time applications (e.g., 512+ examples), our model 10--25x faster than the standard CPU implementation, and about 4x slower than the RNN baseline.
+Figure~\ref{fig:speed} compares the sentence encoding speed of the three models on random input data. Figure~\ref{fig:speed} shows a substantial difference in runtime between the CPU and thin-stack implementations that increases with batch size. At the larger batch sizes that are most effective for test-time applications (e.g., 512+ examples), our model is 10--25x faster than the standard CPU implementation, and about 4x slower than the RNN baseline.
 
 Though this experiment only covers SPINN-PI-NT, the results should be similar for the full SPINN model: most of the computation involved in running SPINN is involved in populating the buffer, applying the composition function, and manipulating the buffer and the stack, with the low-dimensional tracking and parsing components adding only a small additional load.
 
@@ -320,8 +322,8 @@ SNLI is a corpus of 570k human-labeled pairs of scene descriptions like the one 
 \subsection{Applying SPINN to SNLI}
 
 \paragraph{Creating a sentence-pair classifier} \label{sec:classifier}
-
-To classify an SNLI sentence pair, we run two copies of SPINN with shared parameters: one on the premise sentence and another the hypothesis sentence. We then use their outputs (the $\vec{h}$ states at the top of each stack at time $t=T$) to construct a feature vector $\vec{x}_{\text{classifier}}$ for the pair. This feature vector consists of the concatenation of these two sentence vectors, their difference, and their elementwise product:
+ 
+To classify an SNLI sentence pair, we run two copies of SPINN with shared parameters: one on the premise sentence and another on the hypothesis sentence. We then use their outputs (the $\vec{h}$ states at the top of each stack at time $t=T$) to construct a feature vector $\vec{x}_{\text{classifier}}$ for the pair. This feature vector consists of the concatenation of these two sentence vectors, their difference, and their elementwise product \citep[following][]{mou2015recognizing}:
 \begin{equation}
 \vec{x}_{\text{classifier}} = 
 \colvec{4}
@@ -374,7 +376,7 @@ Lexicalized classifier \citep{snli:emnlp2015}
 %                         & 1.4m               & --                &   92.3   &   \textbf{89.1}      \\
     \bottomrule
   \end{tabular}
-\caption{\protect\label{tab:results}Results on SNLI 3-way inference classification. Params. is the approximate number of trained parameters (excluding word embeddings for models where they are trained). Trans. acc. is the model's accuracy in predicting parsing transitions at test time. Train and test are SNLI classification accuracy.} 
+\caption{\protect\label{tab:results}Results on SNLI 3-way inference classification. Params. is the approximate number of trained parameters (excluding word embeddings for all models). Trans. acc. is the model's accuracy in predicting parsing transitions at test time. Train and test are SNLI classification accuracy.} 
 \end{table*}
 
 
@@ -393,8 +395,8 @@ We use the RMSProp optimizer \citep{tieleman2012lecture} with a tuned starting l
 
 We train each model for 250k steps in each run, using a batch size of 32. We track each model's performance on the development set during training and save parameters when this performance reaches a new peak. We use early stopping, evaluating on the test set using the parameters that perform best on the development set.
 
-Appendix~\ref{sec:hyperparams} discusses hyperparameter tuning.
-
+A supplement discusses hyperparameter tuning.
+% TODO for arXiv: Make to appendix.
 
 \subsection{Models evaluated}
 
@@ -406,32 +408,32 @@ We compare our models against several baselines, including the strongest publish
 
 Table~\ref{tab:results} shows our results on SNLI inference classification. For the full SPINN, we also report a measure of agreement between this model's parses and the parses included with SNLI, calculated as classification accuracy over transitions averaged across timesteps.
 
-We find that the bare SPINN-PI-NT model performs little better than the RNN baseline, but that SPINN-PI with the added tracking LSTM reaches state-of-the-art accuracy among sentence-encoding-based models. The success of SPINN-PI, which is a hybrid tree-sequence model, suggests that the tree- and sequence-based encoding methods are complementary. The full SPINN model with its relatively weak internal parser performs slightly less well, but nonetheless robustly exceeds the performance of the LSTM baseline.
+We find that the bare SPINN-PI-NT model performs little better than the RNN baseline, but that SPINN-PI with the added tracking LSTM performs well. The success of SPINN-PI, which is a hybrid tree-sequence model, suggests that the tree- and sequence-based encoding methods are at least partially complementary. The full SPINN model with its relatively weak internal parser performs slightly less well, but nonetheless robustly exceeds the performance of the LSTM baseline.
 
-Both SPINN-PI and the full SPINN outperform all previous sentence-encoding models by a significant margin. Most notably our models outperform the Tree-Based CNN of \citet{mou2015recognizing}, which also uses tree-structured composition for local feature extraction, but uses simpler pooling techniques to build sentence features in the interest of efficiency. Our results show that a model that uses tree-structured composition fully (SPINN) outperforms one which uses it only partially (Tree-Based CNN), which in turn outperforms one which does not use it at all (LSTM RNN).
+Both SPINN-PI and the full SPINN significantly outperform all previous sentence-encoding models. Most notably, these models outperform the Tree-Based CNN of \citet{mou2015recognizing}, which also uses tree-structured composition for local feature extraction, but uses simpler pooling techniques to build sentence features in the interest of efficiency. Our results show that a model that uses tree-structured composition fully (SPINN) outperforms one which uses it only partially (Tree-Based CNN), which in turn outperforms one which does not use it at all (LSTM RNN).
 
 The full SPINN performed moderately well at reproducing the Stanford Parser's parses of the SNLI data at a transition-by-transition level with 92.4\% accuracy at test time. However, its transition prediction errors were fairly evenly distributed across sentences, and most sentences were assigned partially invalid transition sequences that either left a few words out of the final representation or incorporated a few padding tokens into the final representation.
 
 \subsection{Discussion}
 
-The use of tree structure improves the performance of sentence-encoding models for SNLI. We suspect that this improvement is largely attributable to the more efficient learning of accurate generalizations overall, and not to any particular few phenomena. However, some patterns are identifiable in the results. In particular, it seems that tree-structured models are better able to focus on the key actors and events named in a sentence (possibly by learning an approximation of the linguistic notion of headedness), and that this allows them to better handle inferences based on these key actors. For example, this pair was classified successfully by all three SPINN variants, but not by the RNN baseline (key words emphasized):
+The use of tree structure improves the performance of sentence-encoding models for SNLI. We suspect that this improvement is largely attributable to the more efficient learning of accurate generalizations overall, and not to any particular few phenomena. However, some patterns are identifiable in the results. In particular, it seems that tree-structured models are better able to focus on the key actors and events named in a sentence (possibly by learning an approximation of the linguistic notion of headedness), and that this allows them to better focus on the central actors and events described in a sentence. For example, this pair was classified successfully by all three SPINN variants, but not by the RNN baseline (key words emphasized):
 
 \snli
 {A \textit{woman} in red blouse is \textit{standing} with small blond \textit{child} in front of a small folding chalkboard.}
-{a woman stands with her child}
+{a \textit{woman} \textit{stands} with her \textit{child}}
 {neutral}
 
-The tree-sequence hybrid models seem to be especially effective at comparing sentences with very different structures, where it is useful to use strict compositionality with the tree-structured component to get the meanings of the sentence parts, but then to also accumulate a broad sentence summary that abstracts away from the precise structures. For example, this pair is classified correctly by both hybrid models, but not by the RNN or the SPINN-PI-NT:
+The tree-sequence hybrid models seem to be especially good at reasoning over pairs of sentences with very different structures, for which it is helpful to use strict compositionality with the tree-structured component to get the meanings of the sentence parts, but then to also accumulate a broad sentence summary that abstracts away from the precise structures of each sentences. For example, this pair is classified correctly by both hybrid models, but not by the RNN or the SPINN-PI-NT:
 
 \snli{Nurses in a medical setting conversing over a plastic cup.}
 {The nurses are discussing a patient.}
 {neutral}
 
-We suspect that the hybrid nature of the full SPINN model is also responsible for its ability to perform better than an RNN baseline even when its internal parser is relatively ineffective at producing correct full-sentence parses. We suspect that it is acting somewhat like the Tree-Based CNN, only with access to larger trees: Using tree structure to build up local phrase meanings, and then using the tracking LSTM, at least in part, to combine those meanings.
+We suspect that the hybrid nature of the full SPINN model is also responsible for its ability to perform better than an RNN baseline even when its internal parser is relatively ineffective at producing correct full-sentence parses. We suspect that it is acting somewhat like the Tree-Based CNN, only with access to larger trees: using tree structure to build up local phrase meanings, and then using the tracking LSTM, at least in part, to combine those meanings.
 
 \section{Conclusions and future work}
 
-We introduce a model architecture (SPINN-PI-NT) that is equivalent to a TreeLSTM, but an order of magnitude faster at test time. W expand that architecture into a tree-sequence hybrid model (SPINN-PI), and show that this yields significant gains on the SNLI entailment task. Finally, we show that it is possible exploit the strengths of this model without the need for an external parser by integrating a fast parser into the model (as in the full SPINN), and that the lack of external parse information yields little loss in accuracy.
+We introduce a model architecture (SPINN-PI-NT) that is equivalent to a TreeLSTM, but an order of magnitude faster at test time. We expand that architecture into a tree-sequence hybrid model (SPINN-PI), and show that this yields significant gains on the SNLI entailment task. Finally, we show that it is possible to exploit the strengths of this model without the need for an external parser by integrating a fast parser into the model (as in the full SPINN), and that the lack of external parse information yields little loss in accuracy.
 
 Because this paper aims to introduce a general purpose model for sentence encoding, we did not pursue the use of soft attention \citep{bahdanau2014neural,rocktaschel2015reasoning}, despite its demonstrated effectiveness on the SNLI task.\footnote{Attention based models like \citet{rocktaschel2015reasoning} and the unpublished \citet{cheng2016long} have shown accuracies as high as 89.0\% on SNLI, but are more narrowly engineered to suit the task, and do not yield sentence encodings.} However, we expect that it should be possible to productively combine our model with soft attention to reach state-of-the-art performance.
 
@@ -446,34 +448,5 @@ For a more ambitious goal, we expect that it should be possible to implement a v
 \bibliographystyle{../acl_natbib} 
 \bibliography{../MLSemantics}
  
-\begin{table*}[t]\small
-\begin{center}
-\begin{tabular}{lrlrrrr}
-\toprule
-Param.     & Range & Strategy        & RNN       & SPINN-PI-NT   & SPINN-PI  & SPINN \\
-\midrule 
-Initial LR & 2e-4--2e-2 & \textsc{log} & 5e-3  & 3e-4 & 7e-3  & 2e-3\\
-L2 regularization $\lambda$ & 8e-7--3e-5   & \textsc{log} & 4e-6  & 3e-6   & 2e-5  & 3e-5\\
-Transition cost $\alpha$  & 0.5--4.0 & \textsc{lin} & --- & --- & ---  & 3.9    \\
-Embedding transformation dropout keep rate & 80--95\% & \textsc{lin} & --- & 83\% & 92\%  & 86\%\\
-Classifier MLP dropout keep rate & 80--95\% & \textsc{lin} & 94\%  & 94\%   & 93\%  & 94\%\\
-Tracking LSTM size $D_\text{tracking}$ & 24--128 & \textsc{log} & --- & --- & 61  & 79\\
-Classifier MLP layers & 1--3 & \textsc{lin} & 2 & 2 & 2 & 1\\
-\bottomrule
-\end{tabular}
-\end{center}
- 
-\caption{
-\label{tab:hyperparams}
-Hyperparameter ranges and values. \ii{Range} shows the hyperparameter ranges explored during random search. \ii{Strategy} indicates whether sampling from the range was uniform, or log--uniform.
-}
-\end{table*}
-
-\appendix
-\section{Hyperparameters}\label{sec:hyperparams}
-
-
-We use random search to tune the hyperparameters of the model, setting the ranges for search for each hyperparameter heuristically (and validating the reasonableness of the ranges on the development set), and then launching eight copies of each experiment each with newly sampled hyperparameters from those ranges. Table~\ref{tab:hyperparams} below shows the hyperparameters used in the best run of each model.
-
 
 \end{document}
