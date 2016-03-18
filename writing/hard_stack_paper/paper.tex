@@ -69,7 +69,7 @@
 
 \noautomath
 
-\title{A fast unified model for parsing and sentence understanding} 
+\title{A Fast Unified Model for Parsing and Sentence Understanding} 
 
      \author{}
 %    \author{
@@ -353,7 +353,7 @@ Lexicalized classifier \citep{snli:emnlp2015}
 300D SPINN-PI (\ii{parsed input}) encoders
                         & 3.7m                  & --                &   89.2      &   \textbf{83.2}       \\
 300D SPINN (unparsed input) encoders
-                        & 2.7m                  & \result{}           &   87.2    &   82.6      \\          
+                        & 2.7m                  & 92.4           &   87.2    &   82.6      \\          
 % \result{300D SPINN-PI, sequence-based attn.   }     
 %                         & ?                  & --                &   ?      &   86.3dv         \\
 % \result{300D SPINN-PI, tree-based attn. }           
@@ -407,8 +407,8 @@ Both SPINN-PI and the full SPINN outperform all previous sentence encoding model
 
 \paragraph{Parsing performance}
 
-\todo{[AR] Fill in some details here.}
-\todo{[SB] Read AR's report and work out what to include.}
+\todo{[Fill in some details here.}
+\todo{Read report and work out what to include.}
 
 \subsection{Discussion}
 
@@ -419,7 +419,7 @@ The use of tree structure improves the performance of sentence encoding models f
 {a woman stands with her child}
 {neutral}
 
-The tree-sequence hybrid models seem to be especially effective at comparing sentences with very different structures, where it is useful to use strict compositionality with the tree-structured component to get the meanings of the sentence parts, but then to also accumulate a broad sentence summary that abstracts away from the precise structures. For example, this pair is classified correctly by both hybrid models, but not by the RNN or the SPINN-PI-NT: \todo{[SB] Lexical ambiguity example/comment.}
+The tree-sequence hybrid models seem to be especially effective at comparing sentences with very different structures, where it is useful to use strict compositionality with the tree-structured component to get the meanings of the sentence parts, but then to also accumulate a broad sentence summary that abstracts away from the precise structures. For example, this pair is classified correctly by both hybrid models, but not by the RNN or the SPINN-PI-NT: \todo{Lexical ambiguity example/comment.}
 
 \snli{Nurses in a medical setting conversing over a plastic cup.}
 {The nurses are discussing a patient.}
