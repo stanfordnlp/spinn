@@ -302,7 +302,7 @@ In this section, we compare the test time speed of our SPINN-PI-NT with an equiv
 
 Each model is restricted to run on sentences of 30 tokens or fewer. We fix the model dimension $D$ and the word embedding dimension at 300. We run the CPU performance test on a 2.20-GHz 16-core Intel Xeon E5-2660 processor with hyperthreading enabled. We test our thin-stack implementation and the RNN model on an NVIDIA Titan X GPU.
 
-Figure~\ref{fig:speed} compares the sentence encoding speed of the three models on random input data. Figure~\ref{fig:speed} shows a substantial difference in runtime between the CPU and thin-stack implementations that increases with batch size. At the larger batch sizes that are most effective for test-time applications (e.g., 512+ examples), our model is 10--25x faster than the standard CPU implementation, and about 4x slower than the RNN baseline.
+Figure~\ref{fig:speed} compares the sentence encoding speed of the three models on random input data. We observe a substantial difference in runtime between the CPU and thin-stack implementations that increases with batch size. At the larger batch sizes that are most effective for test-time applications (e.g., 512+ examples), our model is 10--25x faster than the standard CPU implementation, and about 4x slower than the RNN baseline.
 
 Though this experiment only covers SPINN-PI-NT, the results should be similar for the full SPINN model: most of the computation involved in running SPINN is involved in populating the buffer, applying the composition function, and manipulating the buffer and the stack, with the low-dimensional tracking and parsing components adding only a small additional load.
 
