@@ -46,9 +46,9 @@ test: gtest_main.a gmock_main.a test.cc $(SOURCES)
 		-std=c++11 -o test \
 		$^
 
-stacktest: testrun.cc $(SOURCES)
+stacktest: bin/stacktest.cc $(SOURCES)
 	nvcc -g -O0 -lcublas -lcurand \
-	  -std=c++11 -o stacktest \
+	  -std=c++11 -I. -o bin/stacktest \
 	  $^
 
 clean:
