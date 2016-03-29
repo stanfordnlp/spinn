@@ -3,7 +3,7 @@
 ### Generic job script for all experiments.
 
 # Usage example:
-# export REMBED_FLAGS="--learning_rate 0.01 --batch_size 256"; export DEVICE=gpu2; export DEVICE=gpu0; qsub -v REMBED_FLAGS,DEVICE train_rembed_classifier.sh -l host=jagupard10
+# export REMBED_FLAGS="--learning_rate 0.01 --batch_size 256"; export DEVICE=gpu2; export DEVICE=gpu0; qsub -v REMBED_FLAGS,DEVICE scripts/train_rembed_classifier.sh -l host=jagupard10
 
 # Change to the submission directory.
 cd $PBS_O_WORKDIR
