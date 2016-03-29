@@ -29,34 +29,46 @@ class EvalLine(object):
 
 class Log(object):
   def __init__(self, path):
+    self.evals = []
     with open(path) as f:
       lines = filter(lambda l : 'Step' in l, f.readlines())
       # count number of eval sets
       num_logs = 1
-      for i in xrange(1, len(lines)):
+      for i in xrange(len(lines)):
         if 'Acc' not in lines[i]:
           num_logs += 1
+          self.evals.append(lines[i].strip().split()[-1])
         else:
           break
       self.corpus = [[] for _ in xrange(num_logs)]
-      # read the costs and ccuracies
+      # read the costs and accuracies
       for i, line in enumerate(lines):
-        ind = i % num_logs
+        if 'Acc' in line:
+          ind = 0
+        else:
+          ind = self.evals.index(lines[i].strip().split()[-1]) + 1
+        # ind = i % num_logs
         if  ind == 0:
           self.corpus[0].append(TrainLine(line))
-        else:
+        elif 'Eval' in line:
           self.corpus[ind].append(EvalLine(line))
 
-def ShowPlots():
+def ShowPlots(subplot=False):
   for log_ind, path in enumerate(FLAGS.path.split(":")):
     log = Log(path)
+    if subplot:
+      plt.subplot(len(FLAGS.path.split(":")), 1, log_ind + 1)
     for index in FLAGS.index.split(","):
       index = int(index)
       for attr in ["pred_acc", "parse_acc", "total_cost", "xent_cost", "l2_cost", "action_cost"]:
         if getattr(FLAGS, attr):
           if "cost" in attr:
             assert index == 0, "costs only associated with training log"
-          steps, val = zip(*[(l.step, getattr(l, attr)) for l in log.corpus[index]])
+          steps, val = zip(*[(l.step, getattr(l, attr)) for l in log.corpus[index] if l.step < FLAGS.iters])
+          dct = {}
+          for k, v in zip(steps, val):
+            dct[k] = max(v, dct[k]) if k in dct else v
+          steps, val = zip(*sorted(dct.iteritems()))
           plt.plot(steps, val, label="Log%d:%s-%d" % (log_ind, attr, index))
     
   plt.xlabel("No. of training iteration")
@@ -77,9 +89,11 @@ if __name__ == '__main__':
   gflags.DEFINE_boolean("l2_cost", False, "L2 regularization cost, valid only if index == 0")
   gflags.DEFINE_boolean("action_cost", False, "Action cost, valid only if index == 0")
   gflags.DEFINE_boolean("legend", False, "Show legend in plot")
+  gflags.DEFINE_boolean("subplot", False, "Separate plots for each log")
   gflags.DEFINE_string("ylabel", "", "Label for y-axis of plot")
+  gflags.DEFINE_integer("iters", 10000, "Iters to limit plot to")
 
   FLAGS(sys.argv)
   assert FLAGS.path is not None, "Must provide a log path"
-  ShowPlots()
+  ShowPlots(FLAGS.subplot)
   
