@@ -17,6 +17,7 @@
 ./writing/gist/gist.pdf
 *.fls
 *.fdb_latexmk
+!checkpoints/*
 
 writing/gist/gist.pdf
 
