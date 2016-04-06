@@ -1,5 +1,5 @@
 [submodule "theano"]
-	path = theano
+	path = python/theano
 	url = git://github.com/hans/theano-hacked.git
 [submodule "cpp/lib/googletest"]
 	path = cpp/lib/googletest
