@@ -6,7 +6,7 @@ import numpy as np
 import theano
 
 from theano import tensor as T
-from rembed import util
+from spinn import util
 
 
 def update_hard_stack(stack_t, stack_pushed, stack_merged, push_value,

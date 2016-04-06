@@ -8,7 +8,7 @@
 # sentence_label	( ( word word ) ( ( word word ) word ) )
 import numpy as np
 
-from rembed import util
+from spinn import util
 
 NUM_CLASSES = 2
 

@@ -1,17 +1,17 @@
 """From the project root directory (containing data files), this can be run with:
 
 Boolean logic evaluation:
-python -m rembed.models.classifier --training_data_path bl-data/pbl_train.tsv \
+python -m spinn.models.classifier --training_data_path bl-data/pbl_train.tsv \
        --eval_data_path bl-data/pbl_dev.tsv
 
 SST sentiment (Demo only, model needs a full GloVe embeddings file to do well):
-python -m rembed.models.classifier --data_type sst --training_data_path sst-data/train.txt \
-       --eval_data_path sst-data/dev.txt --embedding_data_path rembed/tests/test_embedding_matrix.5d.txt \
+python -m spinn.models.classifier --data_type sst --training_data_path sst-data/train.txt \
+       --eval_data_path sst-data/dev.txt --embedding_data_path spinn/tests/test_embedding_matrix.5d.txt \
        --model_dim 10 --word_embedding_dim 5
 
 SNLI entailment (Demo only, model needs a full GloVe embeddings file to do well):
-python -m rembed.models.classifier --data_type snli --training_data_path snli_1.0/snli_1.0_dev.jsonl \
-       --eval_data_path snli_1.0/snli_1.0_dev.jsonl --embedding_data_path rembed/tests/test_embedding_matrix.5d.txt \
+python -m spinn.models.classifier --data_type snli --training_data_path snli_1.0/snli_1.0_dev.jsonl \
+       --eval_data_path snli_1.0/snli_1.0_dev.jsonl --embedding_data_path spinn/tests/test_embedding_matrix.5d.txt \
        --model_dim 10 --word_embedding_dim 5
 
 Note: If you get an error starting with "TypeError: ('Wrong number of dimensions..." during development,
@@ -29,14 +29,14 @@ from theano import tensor as T
 import theano
 import numpy as np
 
-from rembed import afs_safe_logger
-from rembed import util
-from rembed.data.boolean import load_boolean_data
-from rembed.data.sst import load_sst_data
-from rembed.data.snli import load_snli_data
+from spinn import afs_safe_logger
+from spinn import util
+from spinn.data.boolean import load_boolean_data
+from spinn.data.sst import load_sst_data
+from spinn.data.snli import load_snli_data
 
-import rembed.fat_stack
-import rembed.plain_rnn
+import spinn.fat_stack
+import spinn.plain_rnn
 
 
 FLAGS = gflags.FLAGS
@@ -49,7 +49,7 @@ def build_sentence_model(cls, vocab_size, seq_length, tokens, transitions,
     Construct a classifier which makes use of some hard-stack model.
 
     Args:
-      cls: Hard stack class to use (from e.g. `rembed.fat_stack`)
+      cls: Hard stack class to use (from e.g. `spinn.fat_stack`)
       vocab_size:
       seq_length: Length of each sequence provided to the stack model
       tokens: Theano batch (integer matrix), `batch_size * seq_length`
@@ -64,7 +64,7 @@ def build_sentence_model(cls, vocab_size, seq_length, tokens, transitions,
     """
 
     # Prepare layer which performs stack element composition.
-    if cls is rembed.plain_rnn.RNN:
+    if cls is spinn.plain_rnn.RNN:
         compose_network = partial(util.LSTMLayer,
                                       initializer=util.HeKaimingInitializer())
         embedding_projection_network = None
@@ -102,7 +102,7 @@ def build_sentence_model(cls, vocab_size, seq_length, tokens, transitions,
         use_input_batch_norm=False)
 
     # Extract top element of final stack timestep.
-    if FLAGS.lstm_composition or cls is rembed.plain_rnn.RNN:
+    if FLAGS.lstm_composition or cls is spinn.plain_rnn.RNN:
         sentence_vector = sentence_model.final_representations[:,:FLAGS.model_dim / 2].reshape((-1, FLAGS.model_dim / 2))
         sentence_vector_dim = FLAGS.model_dim / 2
     else:
@@ -128,7 +128,7 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
     Construct a classifier which makes use of some hard-stack model.
 
     Args:
-      cls: Hard stack class to use (from e.g. `rembed.fat_stack`)
+      cls: Hard stack class to use (from e.g. `spinn.fat_stack`)
       vocab_size:
       seq_length: Length of each sequence provided to the stack model
       tokens: Theano batch (integer matrix), `batch_size * seq_length`
@@ -144,7 +144,7 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
 
 
     # Prepare layer which performs stack element composition.
-    if cls is rembed.plain_rnn.RNN:
+    if cls is spinn.plain_rnn.RNN:
         compose_network = partial(util.LSTMLayer,
                                       initializer=util.HeKaimingInitializer())
         embedding_projection_network = None
@@ -190,7 +190,7 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
         initialize_hyp_tracking_state=FLAGS.initialize_hyp_tracking_state)
 
     premise_stack_tops = premise_model.stack_tops if FLAGS.use_attention != "None" else None
-    premise_tracking_c_state_final = premise_model.tracking_c_state_final if cls is not rembed.plain_rnn.RNN else None
+    premise_tracking_c_state_final = premise_model.tracking_c_state_final if cls is not spinn.plain_rnn.RNN else None
     hypothesis_model = cls(
         FLAGS.model_dim, FLAGS.word_embedding_dim, vocab_size, seq_length,
         compose_network, embedding_projection_network, training_mode, ground_truth_transitions_visible, vs,
@@ -216,7 +216,7 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
         premise_vector = premise_model.final_representations
         hypothesis_vector = hypothesis_model.final_representations
 
-        if FLAGS.lstm_composition or cls is rembed.plain_rnn.RNN:
+        if FLAGS.lstm_composition or cls is spinn.plain_rnn.RNN:
             premise_vector = premise_vector[:,:FLAGS.model_dim / 2].reshape((-1, FLAGS.model_dim / 2))
             hypothesis_vector = hypothesis_vector[:,:FLAGS.model_dim / 2].reshape((-1, FLAGS.model_dim / 2))
             sentence_vector_dim = FLAGS.model_dim / 2
@@ -351,7 +351,7 @@ def evaluate_expanded(eval_fn, eval_set, eval_path, logger, step, sentence_pair_
     Write the  gold parses and predicted parses in the files <eval_out_path>.gld and <eval_out_path>.tst
     respectively. These files can be given as inputs to Evalb to evaluate parsing performance -
 
-        evalb -p evalb_rembed.prm <eval_out_path>.gld  <eval_out_path>.tst
+        evalb -p evalb_spinn.prm <eval_out_path>.gld  <eval_out_path>.tst
 
     TODO(SB): Set up for RNN and Model0 on non-sentence-pair data; port support to classifier.py.
     """
@@ -520,9 +520,9 @@ def run(only_forward=False):
         default_initializer=util.UniformInitializer(FLAGS.init_range), logger=logger)
 
     if FLAGS.model_type == "RNN":
-        model_cls = rembed.plain_rnn.RNN
+        model_cls = spinn.plain_rnn.RNN
     else:
-        model_cls = getattr(rembed.fat_stack, FLAGS.model_type)
+        model_cls = getattr(spinn.fat_stack, FLAGS.model_type)
 
     # Generator of mask for scheduled sampling
     numpy_random = np.random.RandomState(1234)

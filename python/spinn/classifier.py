@@ -9,12 +9,12 @@ import gflags
 import theano
 from theano import tensor as T
 
-import rembed
-from rembed import afs_safe_logger
-from rembed import util
-from rembed.data.boolean import load_boolean_data
-from rembed.data.sst import load_sst_data
-from rembed.data.snli import load_snli_data
+import spinn
+from spinn import afs_safe_logger
+from spinn import util
+from spinn.data.boolean import load_boolean_data
+from spinn.data.sst import load_sst_data
+from spinn.data.snli import load_snli_data
 
 
 FLAGS = gflags.FLAGS
@@ -44,7 +44,7 @@ def build_sentence_model(make_stack_fn, vocab_size, seq_length, tokens,
     """
 
     # Prepare layer which performs stack element composition.
-    if cls is rembed.plain_rnn.RNN:
+    if cls is spinn.plain_rnn.RNN:
         compose_network = partial(util.LSTMLayer,
                                       initializer=util.HeKaimingInitializer())
         embedding_projection_network = None
@@ -100,7 +100,7 @@ def build_sentence_pair_model(make_stack_fn, vocab_size, seq_length, tokens, tra
     Construct a classifier which makes use of some hard-stack model.
 
     Args:
-      cls: Hard stack class to use (from e.g. `rembed.stack`)
+      cls: Hard stack class to use (from e.g. `spinn.stack`)
       vocab_size:
       seq_length: Length of each sequence provided to the stack model
       tokens: Theano batch (integer matrix), `batch_size * seq_length`
@@ -115,7 +115,7 @@ def build_sentence_pair_model(make_stack_fn, vocab_size, seq_length, tokens, tra
     """
 
     # Prepare layer which performs stack element composition.
-    if cls is rembed.plain_rnn.RNN:
+    if cls is spinn.plain_rnn.RNN:
         compose_network = partial(util.LSTMLayer,
                                       initializer=util.HeKaimingInitializer())
         embedding_projection_network = None
@@ -147,7 +147,7 @@ def build_sentence_pair_model(make_stack_fn, vocab_size, seq_length, tokens, tra
         premise_vector = premise_model.final_representations
         hypothesis_vector = hypothesis_model.final_representations
 
-        if FLAGS.lstm_composition or cls is rembed.plain_rnn.RNN:
+        if FLAGS.lstm_composition or cls is spinn.plain_rnn.RNN:
             premise_vector = premise_vector[:,:FLAGS.model_dim / 2].reshape((-1, FLAGS.model_dim / 2))
             hypothesis_vector = hypothesis_vector[:,:FLAGS.model_dim / 2].reshape((-1, FLAGS.model_dim / 2))
             sentence_vector_dim = FLAGS.model_dim / 2
@@ -289,7 +289,7 @@ def evaluate_expanded(eval_fn, eval_set, eval_path, logger, step, sentence_pair_
     Write the  gold parses and predicted parses in the files <eval_out_path>.gld and <eval_out_path>.tst
     respectively. These files can be given as inputs to Evalb to evaluate parsing performance -
 
-        evalb -p evalb_rembed.prm <eval_out_path>.gld  <eval_out_path>.tst
+        evalb -p evalb_spinn.prm <eval_out_path>.gld  <eval_out_path>.tst
 
     TODO(SB): Set up for RNN and Model0 on non-sentence-pair data; port support to classifier.py.
     """

@@ -9,7 +9,7 @@
 import collections
 import numpy as np
 
-from rembed import util
+from spinn import util
 
 SENTENCE_PAIR_DATA = False
 

@@ -4,8 +4,8 @@ import numpy as np
 import theano
 from theano import tensor as T
 
-from rembed.plain_rnn import RNN
-from rembed.util import VariableStore, CropAndPad, IdentityLayer
+from spinn.plain_rnn import RNN
+from spinn.util import VariableStore, CropAndPad, IdentityLayer
 
 
 class RNNTestCase(unittest.TestCase):

@@ -13,7 +13,7 @@ from theano.gof.fg import MissingInputError
 from theano.sandbox.cuda import HostFromGpu
 from theano.sandbox.rng_mrg import MRG_RandomStreams
 
-from rembed import cuda_util
+from spinn import cuda_util
 
 numpy_random = np.random.RandomState(1234)
 theano_random = MRG_RandomStreams(numpy_random.randint(999999))

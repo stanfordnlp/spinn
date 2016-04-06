@@ -1,17 +1,17 @@
 """From the project root directory (containing data files), this can be run with:
 
 Boolean logic evaluation:
-python -m rembed.models.classifier --training_data_path bl-data/pbl_train.tsv \
+python -m spinn.models.classifier --training_data_path bl-data/pbl_train.tsv \
        --eval_data_path bl-data/pbl_dev.tsv
 
 SST sentiment (Demo only, model needs a full GloVe embeddings file to do well):
-python -m rembed.models.classifier --data_type sst --training_data_path sst-data/train.txt \
-       --eval_data_path sst-data/dev.txt --embedding_data_path rembed/tests/test_embedding_matrix.5d.txt \
+python -m spinn.models.classifier --data_type sst --training_data_path sst-data/train.txt \
+       --eval_data_path sst-data/dev.txt --embedding_data_path spinn/tests/test_embedding_matrix.5d.txt \
        --model_dim 10 --word_embedding_dim 5
 
 SNLI entailment (Demo only, model needs a full GloVe embeddings file to do well):
-python -m rembed.models.classifier --data_type snli --training_data_path snli_1.0/snli_1.0_dev.jsonl \
-       --eval_data_path snli_1.0/snli_1.0_dev.jsonl --embedding_data_path rembed/tests/test_embedding_matrix.5d.txt \
+python -m spinn.models.classifier --data_type snli --training_data_path snli_1.0/snli_1.0_dev.jsonl \
+       --eval_data_path snli_1.0/snli_1.0_dev.jsonl --embedding_data_path spinn/tests/test_embedding_matrix.5d.txt \
        --model_dim 10 --word_embedding_dim 5
 
 Note: If you get an error starting with "TypeError: ('Wrong number of dimensions..." during development,
@@ -22,8 +22,8 @@ Note: If you get an error starting with "TypeError: ('Wrong number of dimensions
 from copy import copy
 from functools import partial
 
-from rembed import recurrences, util
-from rembed.stack import ThinStack
+from spinn import recurrences, util
+from spinn.stack import ThinStack
 
 
 def make_sentence_stack(cls, embedding_projection_network, compose_network,

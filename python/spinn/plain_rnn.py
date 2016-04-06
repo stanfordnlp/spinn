@@ -4,7 +4,7 @@ import numpy as np
 import theano
 
 from theano import tensor as T
-from rembed import util
+from spinn import util
 
 
 class RNN(object):
