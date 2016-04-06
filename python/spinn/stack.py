@@ -473,7 +473,7 @@ class ThinStack(object):
         self.final_stack = self.scan_updates[self.stack]
         self.final_aux_stacks = [self.scan_updates[aux_stack]
                                  for aux_stack in self.aux_stacks]
-        self.sentence_embeddings = self.final_stack[-self.batch_size:]
+        self.final_representations = self.final_stack[-self.batch_size:]
 
         self.transitions_pred = None
         if self.recurrence.predicts_transitions:
