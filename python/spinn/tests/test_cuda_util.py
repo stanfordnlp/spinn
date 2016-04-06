@@ -3,7 +3,7 @@ import theano
 import theano.tensor as T
 
 # Import cuda_util in order to register the optimization
-from rembed import cuda_util
+from spinn import cuda_util
 
 
 def _test_gpu_rowwise_switch_inner(f, A, B, mask, expected):

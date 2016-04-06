@@ -7,7 +7,7 @@ import theano
 from theano.ifelse import ifelse
 
 from theano import tensor as T
-from rembed import cuda_util, util
+from spinn import cuda_util, util
 
 
 def update_hard_stack(t, t_f, stack_t, push_value, merge_value, merge_queue_t,

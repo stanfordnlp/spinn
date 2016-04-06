@@ -2,10 +2,10 @@ import numpy as np
 
 from nose.tools import assert_equal
 
-from rembed import util
+from spinn import util
 
 
-TEST_EMBEDDING_MATRIX = "rembed/tests/test_embedding_matrix.5d.txt"
+TEST_EMBEDDING_MATRIX = "spinn/tests/test_embedding_matrix.5d.txt"
 
 
 def test_build_vocabulary_for_ascii_embedding_file():

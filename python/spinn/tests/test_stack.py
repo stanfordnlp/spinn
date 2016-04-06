@@ -5,10 +5,10 @@ import numpy as np
 import theano
 from theano import tensor as T
 
-from rembed import cuda_util, util
-from rembed.stack import ThinStack
-from rembed.recurrences import Recurrence, Model0
-from rembed.util import VariableStore, CropAndPad, IdentityLayer, batch_subgraph_gradients
+from spinn import cuda_util, util
+from spinn.stack import ThinStack
+from spinn.recurrences import Recurrence, Model0
+from spinn.util import VariableStore, CropAndPad, IdentityLayer, batch_subgraph_gradients
 
 
 class ThinStackTestCase(unittest.TestCase):

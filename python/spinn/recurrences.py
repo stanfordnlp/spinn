@@ -2,14 +2,14 @@
 Implements the core recurrences for various stack models.
 
 The recurrences described here are unrolled into bona-fide stack models
-by `rembed.stack`.
+by `spinn.stack`.
 """
 
 from functools import partial
 
 from theano import tensor as T
 
-from rembed import util
+from spinn import util
 
 
 class Recurrence(object):
