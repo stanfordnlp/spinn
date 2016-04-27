@@ -683,9 +683,10 @@ def run(only_forward=False):
         for key, val in gradients.iteritems():
             if val is None:
                 null_gradients.add(key)
-        logger.Log("The following parameters have null (disconnected) cost "
-                   "gradients and will not be trained: %s"
-                   % ", ".join(str(k) for k in null_gradients), logger.WARNING)
+        if null_gradients:
+            logger.Log("The following parameters have null (disconnected) cost "
+                    "gradients and will not be trained: %s"
+                    % ", ".join(str(k) for k in null_gradients), logger.WARNING)
         for key in null_gradients:
             del gradients[key]
 
