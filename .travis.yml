@@ -23,4 +23,4 @@ install:
     - nvcc --version
     - pip install -r python/requirements.txt
 
-script: "nosetests -a \!slow python/spinn/tests"
+script: "nosetests -a \\!slow python/spinn/tests"
