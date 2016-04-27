@@ -13,7 +13,7 @@ before_install:
     - export CUDA_APT=${CUDA%-*}
     - export CUDA_APT=${CUDA_APT/./-}
 #  - travis_retry sudo apt-get install -y cuda-${CUDA_APT}
-    - travis_retry sudo apt-get install -y cuda-drivers cuda-core-${CUDA_APT} cuda-cudart-dev-${CUDA_APT}
+    - travis_retry sudo apt-get install -y nvidia-settings cuda-drivers cuda-core-${CUDA_APT} cuda-cudart-dev-${CUDA_APT}
     - travis_retry sudo apt-get clean
     - export CUDA_HOME=/usr/local/cuda-${CUDA%%-*}
     - export LD_LIBRARY_PATH=${CUDA_HOME}/lib64:${LD_LIBRARY_PATH}
