@@ -7,7 +7,8 @@ import theano
 from theano.ifelse import ifelse
 
 from theano import tensor as T
-from spinn import cuda_util, util
+from spinn import util
+from spinn.util import cuda
 
 
 def update_hard_stack(t, t_f, stack_t, push_value, merge_value, merge_queue_t,
@@ -31,11 +32,11 @@ def update_hard_stack(t, t_f, stack_t, push_value, merge_value, merge_queue_t,
 
     mask2 = mask.dimshuffle(0, "x")
     top_next = mask2 * merge_value + (1 - mask2) * push_value
-    stack_next = cuda_util.AdvancedIncSubtensor1Floats(set_instead_of_inc=True, inplace=True)(
+    stack_next = cuda.AdvancedIncSubtensor1Floats(set_instead_of_inc=True, inplace=True)(
             stack_t, top_next, t_f * batch_size + stack_shift)
 
     cursors_next = merge_cursors_t + (mask * -1 + (1 - mask) * 1)
-    queue_next = cuda_util.AdvancedIncSubtensor1Floats(set_instead_of_inc=True, inplace=True)(
+    queue_next = cuda.AdvancedIncSubtensor1Floats(set_instead_of_inc=True, inplace=True)(
             merge_queue_t, t_f, cursors_shift + cursors_next)
 
     return stack_next, queue_next, cursors_next
@@ -262,22 +263,22 @@ class ThinStack(object):
 
         # Extract top buffer values.
         idxs = buffer_cur_t + self._buffer_shift
-        buffer_top_t = cuda_util.AdvancedSubtensor1Floats("F_buffer_top")(buffer, idxs)
+        buffer_top_t = cuda.AdvancedSubtensor1Floats("F_buffer_top")(buffer, idxs)
 
         # Fetch top two stack elements.
         stack_1_ptrs = (t - 1) * self.batch_size + self._stack_shift
-        stack_1 = cuda_util.AdvancedSubtensor1Floats("F_stack1")(self.stack, stack_1_ptrs)
+        stack_1 = cuda.AdvancedSubtensor1Floats("F_stack1")(self.stack, stack_1_ptrs)
 
         # Get pointers into stack for second-to-top element.
         cursors = self.cursors - 1.0
-        stack_2_ptrs = cuda_util.AdvancedSubtensor1Floats("F_stack2_ptrs")(self.queue, cursors + self._queue_shift)
+        stack_2_ptrs = cuda.AdvancedSubtensor1Floats("F_stack2_ptrs")(self.queue, cursors + self._queue_shift)
         stack_2_ptrs = stack_2_ptrs * batch_size + self._stack_shift
 
         # Retrieve second-to-top element.
-        stack_2 = cuda_util.AdvancedSubtensor1Floats("F_stack2")(self.stack, stack_2_ptrs)
+        stack_2 = cuda.AdvancedSubtensor1Floats("F_stack2")(self.stack, stack_2_ptrs)
 
         extra_inputs = tuple([
-            cuda_util.AdvancedSubtensor1Floats("F_extra_inp_%i" % i)(
+            cuda.AdvancedSubtensor1Floats("F_extra_inp_%i" % i)(
                 aux_stack, stack_1_ptrs)
             for i, aux_stack in enumerate(self.aux_stacks)])
 
@@ -336,7 +337,7 @@ class ThinStack(object):
         # merge -- then we don't have to mask it
         aux_outputs = [mask2 * m_output + (1. - mask2) * p_output
                        for p_output, m_output in zip(push_ret, merge_ret[1:])]
-        aux_stack_updates = {aux_stack: cuda_util.AdvancedIncSubtensor1Floats(set_instead_of_inc=True, inplace=True)(
+        aux_stack_updates = {aux_stack: cuda.AdvancedIncSubtensor1Floats(set_instead_of_inc=True, inplace=True)(
             aux_stack, aux_output, ptr_next)
             for aux_stack, aux_output in zip(self.aux_stacks, aux_outputs)}
 
@@ -487,7 +488,7 @@ class ThinStack(object):
             self.final_weighed_representation = util.AttentionUnitFinalRepresentation(self.final_attn_hidden[-1],
                 self.embeddings, self.model_dim, self._vs)
 
-    def _make_backward_graphs(self, extra_graph_inputs):
+    def _make_backward_graphs(self):
         """Generate gradient subgraphs for this stack's recurrence."""
 
         input_ndim = [2] * 3
@@ -507,15 +508,9 @@ class ThinStack(object):
         def m_fwd(*inputs, **constants):
             return self.recurrence(inputs, **constants)[1]
 
-        extra_graph_inputs += self._vs.vars.values()
-
         f_p_delta = util.batch_subgraph_gradients(input_ndim, wrt, p_fwd,
-                                                  batch_size=self.batch_size,
-                                                  extra_scan_inputs=extra_graph_inputs,
                                                   name=self._prefix + "bwd_graph_push")
         f_m_delta = util.batch_subgraph_gradients(input_ndim, wrt, m_fwd,
-                                                  batch_size=self.batch_size,
-                                                  extra_scan_inputs=extra_graph_inputs,
                                                   name=self._prefix + "bwd_graph_merge")
 
         # Also create a backprop graph for the embedding projection network.
@@ -526,7 +521,6 @@ class ThinStack(object):
                 projection_ndim += [2]
             f_proj_delta = util.batch_subgraph_gradients(projection_ndim, wrt,
                                                          self._project_embeddings,
-                                                         extra_scan_inputs=extra_graph_inputs,
                                                          name=self._prefix + "bwd_graph_proj")
 
         return wrt, f_proj_delta, f_p_delta, f_m_delta
@@ -566,7 +560,7 @@ class ThinStack(object):
             extra_cost_inputs = []
 
         wrt, f_proj_delta, f_push_delta, f_merge_delta = \
-            self._make_backward_graphs(extra_cost_inputs)
+                self._make_backward_graphs()
         wrt_shapes = [wrt_i.get_value().shape for wrt_i in wrt]
 
         # Build shared variables for accumulating wrt deltas.
@@ -607,10 +601,10 @@ class ThinStack(object):
             """Retrieve all relevant bwd inputs/outputs at time `t`."""
 
             grad_cursor = t_f * batch_size + stack_shift
-            main_grad = cuda_util.AdvancedSubtensor1Floats("B_maingrad")(
+            main_grad = cuda.AdvancedSubtensor1Floats("B_maingrad")(
                 stack_bwd_t, grad_cursor)
             extra_grads = tuple([
-                cuda_util.AdvancedSubtensor1Floats("B_extragrad_%i" % i)(
+                cuda.AdvancedSubtensor1Floats("B_extragrad_%i" % i)(
                     extra_bwd_i, grad_cursor)
                 for i, extra_bwd_i in enumerate(extra_bwd)])
 
@@ -620,15 +614,15 @@ class ThinStack(object):
             t_c2 = stack_2_ptrs_t
 
             # Find the two elements involved in the potential merge.
-            c1 = cuda_util.AdvancedSubtensor1Floats("B_stack1")(stack_fwd, t_c1)
-            c2 = cuda_util.AdvancedSubtensor1Floats("B_stack2")(stack_fwd, t_c2)
+            c1 = cuda.AdvancedSubtensor1Floats("B_stack1")(stack_fwd, t_c1)
+            c2 = cuda.AdvancedSubtensor1Floats("B_stack2")(stack_fwd, t_c2)
 
-            buffer_top_t = cuda_util.AdvancedSubtensor1Floats("B_buffer_top")(
+            buffer_top_t = cuda.AdvancedSubtensor1Floats("B_buffer_top")(
                 self.buffer_t, buffer_cur_t + buffer_shift)
 
             # Retrieve extra inputs from auxiliary stack(s).
             extra_inps_t = tuple([
-                cuda_util.AdvancedSubtensor1Floats("B_extra_inp_%i" % i)(
+                cuda.AdvancedSubtensor1Floats("B_extra_inp_%i" % i)(
                     extra_inp_i, t_c1)
                 for extra_inp_i in self.final_aux_stacks])
 
@@ -681,7 +675,7 @@ class ThinStack(object):
 
             # Retrieve embedding indices on buffer at this timestep.
             # (Necessary for sending embedding gradients.)
-            buffer_ids_t = cuda_util.AdvancedSubtensor1Floats("B_buffer_ids")(
+            buffer_ids_t = cuda.AdvancedSubtensor1Floats("B_buffer_ids")(
                     id_buffer, buffer_cur_t + buffer_shift)
 
             # Prepare masks for op-wise gradient accumulation.
@@ -696,12 +690,12 @@ class ThinStack(object):
                 # Look up raw buffer top for this timestep -- i.e., buffer top
                 # *before* the op at this timestep was performed. This was the
                 # input to the projection network at this timestep.
-                proj_input = cuda_util.AdvancedSubtensor1Floats("B_raw_buffer_top")(
+                proj_input = cuda.AdvancedSubtensor1Floats("B_raw_buffer_top")(
                     self._raw_buffer_t, buffer_cur_t + buffer_shift)
 
                 proj_inputs = (proj_input,)
                 if self.use_input_dropout:
-                    embedding_dropout_mask = cuda_util.AdvancedSubtensor1Floats("B_buffer_dropout")(
+                    embedding_dropout_mask = cuda.AdvancedSubtensor1Floats("B_buffer_dropout")(
                         self._embedding_dropout_masks, buffer_cur_t + buffer_shift)
                     proj_inputs = (proj_input, embedding_dropout_mask)
 
@@ -754,7 +748,7 @@ class ThinStack(object):
 
                 # Run subtensor update on associated structure using the
                 # current cursor.
-                new_stack = cuda_util.AdvancedIncSubtensor1Floats(inplace=True)(
+                new_stack = cuda.AdvancedIncSubtensor1Floats(inplace=True)(
                     base, delta, cursor)
                 new_stacks[stack] = new_stack
 
@@ -790,7 +784,7 @@ class ThinStack(object):
             # projection network / embedding parameters.
             # TODO make sparse?
             if compute_embedding_gradients:
-                new_stacks[dE] = cuda_util.AdvancedIncSubtensor1Floats(inplace=True)(
+                new_stacks[dE] = cuda.AdvancedIncSubtensor1Floats(inplace=True)(
                     new_stacks.get(dE, dE), (1. - masks[1]) * main_grad, buffer_ids_t)
 
             updates = dict(new_wrt_deltas.items() + new_stacks.items())
