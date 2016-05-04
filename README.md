@@ -47,12 +47,13 @@ First install CUDA >=7.0 and ensure that `nvcc` is on your `PATH`. Then:
 
     # Compile C++ code
     make stacktest
+    make rnntest
 
 This should generate a binary in `cpp/bin/stacktest`.
 
 ### Running
 
-The binary `cpp/bin/stacktest` runs on random input data. You can time the feedforward yourself by running the following command:
+The binary `cpp/bin/stacktest` runs on random input data. You can time the feedforward yourself by running the following commands:
 
     # From project root
     cd cpp
@@ -60,6 +61,15 @@ The binary `cpp/bin/stacktest` runs on random input data. You can time the feedf
     BATCH_SIZE=512 ./bin/stacktest
 
 You can of course set `BATCH_SIZE` to whatever integer you desire. The other model architecture parameters are fixed in the code, but you can easily change them as well [on this line][6] if you desire.
+
+#### Baseline RNN
+
+The binary `cpp/bin/rnntest` runs a vanilla RNN (ReLU activations) with random input data. You can run this performance test script as follows:
+
+    # From project root
+    cd cpp
+
+    BATCH_SIZE=512 ./bin/rnntest
 
 ## Pretrained models
 

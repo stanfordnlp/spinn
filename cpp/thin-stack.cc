@@ -1,3 +1,24 @@
+/**
+ * This file contains a C++/CUDA implementation of the thin-stack algorithm.
+ * Thin-stack computes the same function as a vanilla recursive neural network
+ * and as the SPINN-PI-NT model.
+ *
+ * The SPINN model and the thin-stack algorithm are described in our paper:
+ *
+ *     A Fast Unified Model for Sentence Parsing and Understanding.
+ *     Samuel R. Bowman, Jon Gauthier, Abhinav Rastogi, Raghav Gupta,
+ *     Christopher D. Manning, and Christopher Potts. arXiv March 2016.
+ *     http://arxiv.org/abs/1603.06021
+ *
+ * The exact model implemented here is a recursive neural network (equivalent
+ * to SPINN-PI-NT) with ReLU activations. It has been verified to compute the
+ * exact same function of its inputs as a recursive neural network.
+ *
+ * You can execute this code using the script `bin/stacktest`. See the README
+ * in the root directory of this project for more usage instructions.
+ */
+
+
 #include "thin-stack.h"
 using namespace std;
 namespace k = kernels;

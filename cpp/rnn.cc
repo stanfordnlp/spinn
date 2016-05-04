@@ -1,3 +1,11 @@
+/**
+ * Implements a basic RNN feedforward (ReLU activation) for speed comparison.
+ *
+ * You can run this code with the script in `bin/rnntest.cc`. See the README in
+ * the root directory of this project for full usage instructions.
+ */
+
+
 #include "rnn.h"
 using namespace std;
 namespace k = kernels;
