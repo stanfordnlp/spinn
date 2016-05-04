@@ -298,11 +298,11 @@ In this section, we compare the test-time speed of our SPINN-PI-NT with an equiv
 \begin{axis}[xmin=0, ymin=0, xlabel=Batch size, ylabel=Feedforward time (sec),
              xticklabels={0,32,64,128,256,512,1024,2048}, xmode=log, log basis x=2,
              legend style={at={(0.55, 0.5)},anchor=north west}]
-  \addplot table [x={Batch size}, y=GPU, col sep=tab] {runtime.csv};
+  \addplot table [x={Batch size}, y=GPU, col sep=tab] {runtime.tsv};
   \addlegendentry{Thin-stack GPU}
-  \addplot table [x={Batch size}, y=CPU, col sep=tab] {runtime.csv};
+  \addplot table [x={Batch size}, y=CPU, col sep=tab] {runtime.tsv};
   \addlegendentry{CPU \citep{irsoy2014deep}}
-  \addplot table [x={Batch size}, y=RNN, col sep=tab] {runtime.csv};
+  \addplot table [x={Batch size}, y=RNN, col sep=tab] {runtime.tsv};
   \addlegendentry{RNN}
 \end{axis}
 \end{tikzpicture}
