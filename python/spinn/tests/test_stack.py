@@ -464,7 +464,8 @@ class ThinStackEmbeddingProjectionBackpropTestCase(ThinStackTreeLSTMTrackingLSTM
         if 'gpu' not in theano.config.device:
             raise RuntimeError("Thin stack only defined for GPU usage")
 
-        self.embedding_dim = self.model_dim = 20
+        self.embedding_dim = 10
+        self.model_dim = 20
         self.vocab_size = 5
         self.batch_size = 2
         self.num_classes = 2
