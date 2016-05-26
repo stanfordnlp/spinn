@@ -1,6 +1,11 @@
 from collections import namedtuple
 
-from spinn.util.cuda import *
+from theano.sandbox.cuda import cuda_available
+
+# Only import custom CUDA ops if we on a CUDA-enabled host.
+if cuda_available:
+    from spinn.util.cuda import *
+
 from spinn.util.theano_internal import *
 from spinn.util.blocks import *
 from spinn.util.data import *

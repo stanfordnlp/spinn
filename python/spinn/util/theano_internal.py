@@ -7,9 +7,11 @@ import theano
 from theano import ifelse
 from theano import tensor as T
 from theano.compile.sharedvalue import SharedVariable
-from theano.sandbox.cuda import HostFromGpu
+from theano.sandbox.cuda import cuda_available
 
-from spinn.util import cuda
+if cuda_available:
+    from theano.sandbox.cuda import HostFromGpu
+    from spinn.util import cuda
 
 
 def tensorx(name, ndim, dtype=theano.config.floatX):
