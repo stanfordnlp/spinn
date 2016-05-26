@@ -400,7 +400,7 @@ class ThinStack(object):
         # Look up all of the embeddings that will be used.
         raw_embeddings = self.embeddings[self.X]  # batch_size * seq_length * emb_dim
         # Flatten for easy indexing.
-        self._raw_buffer_t = raw_embeddings.reshape((-1, self.model_dim))
+        self._raw_buffer_t = raw_embeddings.reshape((-1, self.word_embedding_dim))
 
         # Allocate a "buffer" stack initialized with projected embeddings,
         # and maintain a cursor in this buffer.
