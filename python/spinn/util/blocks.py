@@ -12,6 +12,7 @@ from theano.sandbox.rng_mrg import MRG_RandomStreams
 numpy_random = np.random.RandomState(1234)
 theano_random = MRG_RandomStreams(numpy_random.randint(999999))
 
+NUM_TRANSITION_TYPES = 2
 
 def UniformInitializer(range):
     return lambda shape, **kwargs: np.random.uniform(-range, range, shape)
