@@ -400,7 +400,7 @@ def evaluate_expanded(eval_fn, eval_set, eval_path, logger, step, sentence_pair_
                     predicted_class = np.argmax(example_sem_logits)
                     exp_logit_values = np.exp(example_sem_logits)
                     class_probs = exp_logit_values / np.sum(exp_logit_values)
-                    class_probs_repr = "\t".join(map(lambda p : "%.3f" % (p,), class_probs))
+                    class_probs_repr = "\t".join(map(lambda p : "%.8f" % (p,), class_probs))
                     if FLAGS.write_predicted_label:
                         label_out.write(str(true_class == predicted_class) + "\t" + str(true_class)
                                   + "\t" + str(predicted_class) + "\t" + class_probs_repr + "\n")
