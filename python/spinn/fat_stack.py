@@ -1,5 +1,5 @@
 """
-A naïve Theano implementation of a stack whose elements are symbolic vector
+A naive Theano implementation of a stack whose elements are symbolic vector
 values. This "fat stack" powers the "fat classifier" model, which supports
 training and inference in all model configurations.
 
@@ -59,7 +59,7 @@ def update_stack(stack_t, stack_pushed, stack_merged, push_value,
 
 class HardStack(object):
     """
-    Implementation of the SPINN model using a naïve stack representation.
+    Implementation of the SPINN model using a naive stack representation.
 
     This model scans a sequence using a hard stack. It optionally predicts
     stack operations using an MLP, and can receive supervision on these
