@@ -1,5 +1,6 @@
 from collections import OrderedDict
 
+import cPickle
 import theano
 
 from spinn.util.blocks import HeKaimingInitializer
