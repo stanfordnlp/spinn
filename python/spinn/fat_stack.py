@@ -1,4 +1,13 @@
-"""Theano-based stack implementations."""
+"""
+A naïve Theano implementation of a stack whose elements are symbolic vector
+values. This "fat stack" powers the "fat classifier" model, which supports
+training and inference in all model configurations.
+
+Of course, we sacrifice speed for this flexibility. Theano's symbolic
+differentiation algorithm isn't friendly to this implementation, and
+so it suffers from poor backpropagation runtime efficiency. It is also
+relatively slow to compile.
+"""
 
 from functools import partial
 
@@ -212,7 +221,7 @@ class HardStack(object):
         self.premise_tracking_c_state_final = premise_tracking_c_state_final
         if initialize_hyp_tracking_state:
             assert not is_hypothesis or premise_tracking_c_state_final is not None, \
-                "Must supply initial c states in hypothesis model" 
+                "Must supply initial c states in hypothesis model"
 
         # Check whether we're processing the hypothesis or the premise
         self.is_hypothesis = is_hypothesis
