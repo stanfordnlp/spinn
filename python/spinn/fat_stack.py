@@ -58,18 +58,17 @@ def update_stack(stack_t, stack_pushed, stack_merged, push_value,
 
 
 class HardStack(object):
-
     """
-    Model 0/1/2 hard stack implementation.
+    Implementation of the SPINN model using a naïve stack representation.
 
     This model scans a sequence using a hard stack. It optionally predicts
     stack operations using an MLP, and can receive supervision on these
     predictions from some external parser which acts as the "ground truth"
     parser.
 
-    Model 0: prediction_and_tracking_network=None, train_with_predicted_transitions=False
-    Model 1: prediction_and_tracking_network=something, train_with_predicted_transitions=False
-    Model 2: prediction_and_tracking_network=something, train_with_predicted_transitions=True
+    All of the SPINN model variants described in the paper can be instantiated
+    with this class. See the file `checkpoints/commands.sh` in this project
+    directory for concrete examples of how to invoke the variants.
     """
 
     def __init__(self, model_dim, word_embedding_dim, vocab_size, seq_length, compose_network,
