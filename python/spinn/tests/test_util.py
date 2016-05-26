@@ -33,12 +33,11 @@ def test_load_embeddings_from_ascii():
     
     np.testing.assert_array_equal(loaded_matrix, expected)
 
-
 def test_crop_and_pad_example():
     def _run_asserts(seq, tgt_length, expected):
         example = {"seq": seq}
         left_padding = tgt_length - len(seq)
-        util.CropAndPadExample(example, left_padding, key="seq")
+        util.CropAndPadExample(example, left_padding, tgt_length, "seq")
         assert_equal(example["seq"], expected)
 
     seqs = [
