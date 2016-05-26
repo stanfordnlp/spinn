@@ -1,5 +1,6 @@
 """High-level modular Theano-based network components."""
 
+from collections import OrderedDict
 from functools import partial
 
 import numpy as np

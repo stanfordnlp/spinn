@@ -1,5 +1,6 @@
 """Low-level Theano utilities."""
 
+from collections import OrderedDict
 from functools import wraps
 
 import theano
