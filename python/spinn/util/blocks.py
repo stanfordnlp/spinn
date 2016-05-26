@@ -349,7 +349,7 @@ def TrackingUnit(state_prev, inp, inp_dim, hidden_dim, vs, name="track_unit", ma
 
     if make_logits:
         # Pass LSTM states through a Linear layer to predict the next transition.
-        logits = Linear(state, 2 * hidden_dim, NUM_TRANSITION_TYPES, vs, name="%s/linear" % name)
+        logits = Linear(state[:, :hidden_dim], hidden_dim, NUM_TRANSITION_TYPES, vs, name="%s/linear" % name)
     else:
         logits = 0.0
 
