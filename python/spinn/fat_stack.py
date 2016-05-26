@@ -18,9 +18,10 @@ from theano import tensor as T
 from spinn import util
 
 
-def update_hard_stack(stack_t, stack_pushed, stack_merged, push_value,
-                      merge_value, mask, model_dim):
-    """Compute the new value of the given hard stack.
+def update_stack(stack_t, stack_pushed, stack_merged, push_value,
+                 merge_value, mask, model_dim):
+    """
+    Compute the new value of the given stack.
 
     This performs stack pushes and pops in parallel, and somewhat wastefully.
     It accepts a precomputed merge result (in `merge_value`) and a precomputed
@@ -257,6 +258,7 @@ class HardStack(object):
     def _step(self, transitions_t, ss_mask_gen_matrix_t, stack_t, buffer_cur_t,
             tracking_hidden, attention_hidden, stack_pushed, stack_merged, buffer,
             ground_truth_transitions_visible, premise_stack_tops, projected_stack_tops):
+        """TODO document"""
         batch_size, _ = self.X.shape
 
         # Extract top buffer values.
@@ -330,8 +332,8 @@ class HardStack(object):
                 self._vs, name="compose")
 
         # Compute new stack value.
-        stack_next = update_hard_stack(stack_t, stack_pushed, stack_merged, buffer_top_t,
-                                    merge_value, mask, self.model_dim)
+        stack_next = update_stack(stack_t, stack_pushed, stack_merged, buffer_top_t,
+                                  merge_value, mask, self.model_dim)
 
         # If attention is to be used and premise_stack_tops is not None (i.e.
         # we're processing the hypothesis) calculate the attention weighed representation.
