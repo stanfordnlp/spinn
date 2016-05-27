@@ -777,6 +777,7 @@ if __name__ == '__main__':
     gflags.DEFINE_enum("model_type", "Model0",
                        ["RNN", "Model0", "Model1", "Model2", "Model2S"],
                        "")
+    # TODO(JG): Either add support for Models 1/2 or remove them as options.
     gflags.DEFINE_boolean("allow_gt_transitions_in_eval", False,
         "Whether to use ground truth transitions in evaluation when appropriate "
         "(i.e., in Model 1 and Model 2S.)")
