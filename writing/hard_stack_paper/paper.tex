@@ -1,8 +1,8 @@
 \documentclass[11pt]{article}
 \usepackage{../acl2016}
 
-%\aclfinalcopy % Uncomment this line for the final submission
-%\def\aclpaperid{***} %  Enter the acl Paper ID here
+\aclfinalcopy % Uncomment this line for the final submission
+\def\aclpaperid{265} %  Enter the acl Paper ID here
 %\setlength\titlebox{5cm}
 % You can expand the titlebox if you need extra space
 % to show all the authors. Please do not make the titlebox
@@ -77,33 +77,32 @@
 
 \title{A Fast Unified Model for Parsing and Sentence Understanding}
 
-     \author{}
-%    \author{
-%    Samuel R.\ Bowman$^{1,2,5,}$\thanks{~\,The first two authors contributed equally.} \\
-%    \texttt{\small sbowman@stanford.edu} \\
-%    \And
-%    Jon Gauthier$^{2,3,5,*}$ \\
-%    \texttt{\small jgauthie@stanford.edu} \\
-%    \And
-%    Abhinav Rastogi$^{4,5}$ \\
-%    \texttt{\small arastogi@stanford.edu} \\
-%    \AND
-%    Raghav Gupta$^{6}$ \\
-%    \texttt{\small rgupta93@stanford.edu} \\
-%    \And
-%    Christopher D.\ Manning$^{1,2,5,6}$\\
-%    \texttt{\small manning@stanford.edu}\\
-%    \And
-%    Christopher Potts$^{1}$\\
-%    \texttt{\small cgpotts@stanford.edu}
-%    \AND\\[-3ex]
-%    {$^{1}$Stanford Linguistics\quad
-%    $^{2}$Stanford NLP Group\quad
-%    $^{3}$Stanford Symbolic Systems}\\
-%    {$^{4}$Stanford Electrical Engineering\quad
-%    $^{5}$Stanford AI Lab\quad
-%    $^{6}$Stanford Computer Science}
-%    }
+\author{
+Samuel R.\ Bowman$^{1,2,5,}$\thanks{~\,The first two authors contributed equally.} \\
+\texttt{\small sbowman@stanford.edu} \\
+\And
+Jon Gauthier$^{2,3,5,*}$ \\
+\texttt{\small jgauthie@stanford.edu} \\
+\And
+Abhinav Rastogi$^{4,5}$ \\
+\texttt{\small arastogi@stanford.edu} \\
+\AND
+Raghav Gupta$^{6}$ \\
+\texttt{\small rgupta93@stanford.edu} \\
+\And
+Christopher D.\ Manning$^{1,2,5,6}$\\
+\texttt{\small manning@stanford.edu}\\
+\And
+Christopher Potts$^{1}$\\
+\texttt{\small cgpotts@stanford.edu}
+\AND\\[-3ex]
+{$^{1}$Stanford Linguistics\quad
+$^{2}$Stanford NLP Group\quad
+$^{3}$Stanford Symbolic Systems}\\
+{$^{4}$Stanford Electrical Engineering\quad
+$^{5}$Stanford AI Lab\quad
+$^{6}$Stanford Computer Science}
+}
 
 \date{}
 
@@ -128,7 +127,7 @@ Of these, the TreeRNN appears to be the principled choice, since meaning in natu
 
 This paper introduces a new model to address both these issues: the Stack-augmented Parser-Interpreter Neural Network, or SPINN, shown in Figure~\ref{fig:m1-views}. SPINN executes the computations of a tree-structured model in a linearized sequence, and can incorporate a neural network parser that produces the required parse structure on the fly. This design improves upon the TreeRNN architecture in three ways: At test time, it can simultaneously parse and interpret unparsed sentences, removing the dependence on an external parser and saving its additional computational cost. Secondly, it supports batched computation for both parsed and unparsed sentences, yielding dramatic speedups over standard TreeRNNs. Finally, it supports a novel tree-sequence hybrid architecture for handling local linear context in sentence interpretation. This model is a basically plausible model of human sentence processing and yields substantial accuracy gains over pure sequence- or tree-based models. % TRIMMABLE
 
-We evaluate SPINN on the Stanford Natural Language Inference entailment task \citep[SNLI,][]{snli:emnlp2015}, and find that it significantly outperforms other sentence-encoding-based models, and that it yields speed increases of up to 25$\times$ over a standard TreeRNN implementation.
+We evaluate SPINN on the Stanford Natural Language Inference entailment task \citep[SNLI,][]{snli:emnlp2015}, and find that it significantly outperforms other sentence-encoding-based models, even with a relatively simple and underpowered implementation of the built-in parser. We also find that SPINN yields speed increases of up to 25$\times$ over a standard TreeRNN implementation.
 
 \section{Related work}
 
@@ -217,11 +216,13 @@ It would be straightforward to augment SPINN to support the use of some amount o
 
 \subsection{Parsing: Predicting transitions}
 
-For SPINN to operate on unparsed inputs, it needs to produce its own transition sequence $\mathbf t$ rather than relying on an external parser to supply it as part of the input. To do this, the model predicts $t_t$ at each step using a simple two-way softmax classifier whose input is the state of the tracking LSTM:
+For SPINN to operate on unparsed inputs, it needs to produce its own transition sequence $\mathbf a$ rather than relying on an external parser to supply it as part of the input. To do this, the model predicts $a_t$ at each step using a simple two-way softmax classifier whose input is the state of the tracking LSTM:
 \begin{equation}
-\vec{p}_{\text{t}} = \text{softmax}(W_{\text{trans}}\vec{h}_{\text{tracking}} + \vec{b}_{\text{trans}})
+\vec{p}_{\text{a}} = \text{softmax}(W_{\text{trans}}\vec{h}_{\text{tracking}} + \vec{b}_{\text{trans}})
 \end{equation}
-At test time, the model uses whichever transition (i.e., \shift\ or \reduce) is assigned a higher probability. The prediction function is trained to mimic the decisions of an external parser. These decisions are used as the inputs to the model during training. For SNLI, we use the binary Stanford PCFG Parser parses that are included with the corpus. We did not find scheduled sampling \citep{bengio2015scheduled}---having the model use its own transition decisions sometimes at training time---to help.
+Note that this is the close to being simplest viable implementation of a transition decision function. In contrast, the decision functions in sate-of-the-art transition-based parsers tend to use significantly richer feature sets as inputs, including features containing information about several upcoming words on the buffer instead of just one. We use this simple parser here, and leave a more thorough investigation of this component of the model to future work.
+
+At test time, the model uses whichever transition (i.e., \shift\ or \reduce) is assigned a higher (unnormalized) probability. The prediction function is trained to mimic the decisions of an external parser. These decisions are used as the inputs to the model during training. For SNLI, we use the binary Stanford PCFG Parser parses that are included with the corpus. We did not find scheduled sampling \citep{bengio2015scheduled}---having the model use its own transition decisions sometimes at training time---to help.
 
 \subsection{Implementation issues}
 
@@ -435,6 +436,10 @@ The use of tree structure improves the performance of sentence-encoding models f
 {A \textit{woman} in red blouse is \textit{standing} with small blond \textit{child} in front of a small folding chalkboard.}
 {a \textit{woman} \textit{stands} with her \textit{child}}
 {neutral}
+The three SPINN models appear to be 
+\todo{Replace above with example of negation, and stats}
+
+\todo{Replace bewol with comment/example about very long sentences exaggerating difference.}
 
 The tree-sequence hybrid models seem to be especially good at reasoning over pairs of sentences with very different structures, for which it is helpful to use strict compositionality with the tree-structured component to get the meanings of the sentence parts, but then to also accumulate a broad sentence summary that abstracts away from the precise structures of each sentences. For example, this pair is classified correctly by both hybrid models, but not by the RNN or the SPINN-PI-NT:
 
