@@ -7,8 +7,8 @@ if cuda_available:
     from spinn.util.cuda import *
 
 from spinn.util.theano_internal import *
-from spinn.util.blocks import *
 from spinn.util.data import *
+from spinn.util.blocks import *
 from spinn.util.variable_store import VariableStore
 
 
