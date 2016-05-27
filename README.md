@@ -17,9 +17,11 @@ There is one enormous difference in the `fat-` and `thin-stack` implementations:
 ### Dependencies
 
 The Python code uses **Python 2.7** with the Theano symbolic math library.
-Full requirements are listed in [`requirements.txt`][2].
+Full Python package requirements are listed in [`requirements.txt`][2].
 
 We use a modified version of Theano in order to support fast forward- and backward-prop in `thin-stack` (see the [`theano-hacked` repository][3]). While it isn't absolutely necessary to use this hacked Theano, it greatly improves `thin-stack` performance.
+
+We also require CUDA >= 7.0 with CuDNN v4. (CuDNN v5 is not compatible with our fork of Theano.)
 
 ### Running the code
 
