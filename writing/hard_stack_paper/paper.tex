@@ -449,6 +449,8 @@ In addition, it seems that tree-structured models, and especially the tree-seque
 
 We suspect that the hybrid nature of the full SPINN model is also responsible for its ability to perform better than an RNN baseline even when its internal parser is relatively ineffective at producing correct full-sentence parses. We suspect that it is acting somewhat like the tree-based CNN, only with access to larger trees: using tree structure to build up local phrase meanings, and then using the tracking LSTM, at least in part, to combine those meanings.
 
+Finally, as is likely inevitable for models evaluated on SNLI, all four models under study did several percent worse on test examples whose ground truth label is \textit{neutral} than on examples of the other two classes. \textit{entailment}--\textit{neutral} and \textit{neutral}--\textit{contradiction} confusions appear to be much harder to avoid than \textit{entailment}--\textit{contradiction} confusions, where relatively superficial cues might be more readily useful.
+
 \section{Conclusions and future work}
 
 We introduce a model architecture (SPINN-PI-NT) that is equivalent to a TreeLSTM, but an order of magnitude faster at test time. We expand that architecture into a tree-sequence hybrid model (SPINN-PI), and show that this yields significant gains on the SNLI entailment task. Finally, we show that it is possible to exploit the strengths of this model without the need for an external parser by integrating a fast parser into the model (as in the full SPINN), and that the lack of external parse information yields little loss in accuracy.
