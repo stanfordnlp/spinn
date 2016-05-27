@@ -430,22 +430,22 @@ However, its transition prediction errors are fairly evenly distributed across s
 
 \subsection{Discussion}
 
-The use of tree structure improves the performance of sentence-encoding models for SNLI. We suspect that this improvement is largely attributable to the more efficient learning of accurate generalizations overall, and not to any particular few phenomena. However, some patterns are identifiable in the results. In particular, it seems that tree-structured models are better able to focus on the key actors and events named in a sentence (possibly by learning an approximation of the linguistic notion of headedness), and that this allows them to better focus on the central actors and events described in a sentence. For example, this pair was classified successfully by all three SPINN variants, but not by the RNN baseline (key words emphasized):
+The use of tree structure improves the performance of sentence-encoding models for SNLI. We suspect that this improvement is largely due to the more efficient learning of accurate generalizations overall, and not to any particular few phenomena. However, some patterns are identifiable in the results. 
+
+While all four models under study have trouble with negation, the tree-structured SPINN models do quite substantially better on these pairs. This is likely due to the fact that parse trees make the scope of any instance of negation (the portion of the sentence's content that is negated) relatively easy to identify and separate from the rest of the sentence. For test set sentence pairs like the one below where negation (\word{not} or \word{n't}) does not appear in the premise but does appear in the hypothesis, the RNN shows $67\%$ accuracy, while all three tree-structured models exceed $73\%$. Only the RNN got the below example wrong:
 
 \snli
-{A \textit{woman} in red blouse is \textit{standing} with small blond \textit{child} in front of a small folding chalkboard.}
-{a \textit{woman} \textit{stands} with her \textit{child}}
-{neutral}
-The three SPINN models appear to be 
-\todo{Replace above with example of negation, and stats}
+{The rhythmic gymnast completes her floor exercise at the competition.}
+{The gymnast cannot finish her exercise.}
+{contradiction}
+\noindent Note that the presence of negation in the hypothesis is correlated with a label of \textit{contradiction} in SNLI, but not as strongly as one might intuit---only $45\%$ of these examples in the test set are labeled as contradictions.
 
-\todo{Replace bewol with comment/example about very long sentences exaggerating difference.}
+In addition, it seems that tree-structured models, and especially the tree-sequence hybrid models, are more effective than RNNs at extracting informative representations of long sentences. The RNN model falls off in test accuracy more quickly with increasing sentence length than SPINN-PI-NT, which in turn falls of substantially faster than the two hybrid models, repeating a pattern seen more dramatically on artificial data in \citet{bowman2015trees}. For example, all three SPINN models labeled this pair correctly, while the RNN did not:
 
-The tree-sequence hybrid models seem to be especially good at reasoning over pairs of sentences with very different structures, for which it is helpful to use strict compositionality with the tree-structured component to get the meanings of the sentence parts, but then to also accumulate a broad sentence summary that abstracts away from the precise structures of each sentences. For example, this pair is classified correctly by both hybrid models, but not by the RNN or the SPINN-PI-NT:
-
-\snli{Nurses in a medical setting conversing over a plastic cup.}
-{The nurses are discussing a patient.}
-{neutral}
+\snli
+{A man wearing glasses and a ragged costume is playing a Jaguar electric guitar and singing with the accompaniment of a drummer.}
+{A man with glasses and a disheveled outfit is playing a guitar and singing along with a drummer.}
+{entailment}
 
 We suspect that the hybrid nature of the full SPINN model is also responsible for its ability to perform better than an RNN baseline even when its internal parser is relatively ineffective at producing correct full-sentence parses. We suspect that it is acting somewhat like the tree-based CNN, only with access to larger trees: using tree structure to build up local phrase meanings, and then using the tracking LSTM, at least in part, to combine those meanings.
 
@@ -459,9 +459,9 @@ Our tracking LSTM uses only simple, quick-to-compute features drawn from the hea
 
 For a more ambitious goal, we expect that it should be possible to implement a variant of SPINN on top of a modified stack data structure with differentiable \textsc{push} and \textsc{pop} operations \citep[as in][]{grefenstette2015learning,joulin2015inferring}. This would make it possible for the model to learn to parse using guidance from the semantic representation objective, essentially allowing it to learn to produce parses that are, in aggregate, better suited to supporting semantic interpretation than those supplied in the training data.
 
-%    \subsubsection*{Acknowledgments}
-%
-%    We acknowledge financial support from a Google Faculty Research Award, the Stanford Data Science Initiative, and the National Science Foundation under grant no.~BCS 1456077. Some of the Tesla K40s used for this research were donated by the NVIDIA Corporation.
+\subsubsection*{Acknowledgments}
+
+We acknowledge financial support from a Google Faculty Research Award, the Stanford Data Science Initiative, and the National Science Foundation under grant no.~BCS 1456077. Some of the Tesla K40s used for this research were donated by the NVIDIA Corporation.
 
 \bibliographystyle{../acl_natbib}
 \bibliography{../MLSemantics}
