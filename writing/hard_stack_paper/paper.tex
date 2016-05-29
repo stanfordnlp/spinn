@@ -202,7 +202,7 @@ We use word representations based on the standard 300D vectors provided with Glo
 
 \subsection{The tracking LSTM}\label{sec:tracking}
 
-In addition to the stack, buffer, and composition function, our full model includes an additional component: the tracking LSTM. This is a simple sequence-based LSTM RNN that operates in tandem with the model, taking inputs from the buffer and stack at each step. It is meant to maintain a low-resolution summary of the portion of the sentence that has been processed so far, which is used for two purposes: it supplies feature representations to the transition classifier, which allows the model to stand alone as a parser, and it additionally supplies a secondary input $\vec{e}$, see (\ref{eqn:lstm1}), to the composition function, allowing context information to enter the construction of sentence meaning,  forming what is effectively a tree-sequence hybrid model.
+In addition to the stack, buffer, and composition function, our full model includes an additional component: the tracking LSTM. This is a simple sequence-based LSTM RNN that operates in tandem with the model, taking inputs from the buffer and stack at each step. It is meant to maintain a low-resolution summary of the portion of the sentence that has been processed so far, which is used for two purposes: it supplies feature representations to the transition classifier, which allows the model to stand alone as a parser, and it additionally supplies a secondary input $\vec{e}$ to the composition function---see (\ref{eqn:lstm1})---allowing context information to enter the construction of sentence meaning and forming what is effectively a tree-sequence hybrid model.
 
 The tracking LSTM's inputs (yellow in Figure~\ref{fig:m1-views}) are the top element of the buffer $\vec{h}_b^1$ (which would be moved in a \shift\ operation) and the top two elements of the stack $\vec{h}_s^1$ and $\vec{h}_s^2$ (which would be composed in a \reduce\ operation).
 
@@ -218,7 +218,7 @@ For SPINN to operate on unparsed inputs, it needs to produce its own transition 
 \begin{equation}
 \vec{p}_{\text{a}} = \text{softmax}(W_{\text{trans}}\vec{h}_{\text{tracking}} + \vec{b}_{\text{trans}})
 \end{equation}
-Note that this is the close to being simplest viable implementation of a transition decision function. In contrast, the decision functions in sate-of-the-art transition-based parsers tend to use significantly richer feature sets as inputs, including features containing information about several upcoming words on the buffer instead of just one. We use this simple parser here, and leave a more thorough investigation of this component of the model to future work.
+This is the close to being simplest viable implementation of a transition decision function. In contrast, the decision functions in sate-of-the-art transition-based parsers tend to use significantly richer feature sets as inputs, including features containing information about several upcoming words on the buffer instead of just one supplied to the tracking LSTM.
 
 At test time, the model uses whichever transition (i.e., \shift\ or \reduce) is assigned a higher (unnormalized) probability. The prediction function is trained to mimic the decisions of an external parser. These decisions are used as the inputs to the model during training. For SNLI, we use the binary Stanford PCFG Parser parses that are included with the corpus. We did not find scheduled sampling \citep{bengio2015scheduled}---having the model use its own transition decisions sometimes at training time---to help.
 
@@ -226,19 +226,19 @@ At test time, the model uses whichever transition (i.e., \shift\ or \reduce) is 
 
 \begin{table}[t]
 \centering
-\begin{tabular}{c @{\hspace*{2em}}c @{\hspace*{2em}} l}
+\begin{tabular}{cc @{\hspace*{2em}}c @{\hspace*{2em}} l}
   \toprule
-  $t$ & $S$[$t$] & \multicolumn{1}{c}{$Q_t$} \\
+  $t$ & $a_t$ & $S$[$t$] & \multicolumn{1}{c}{$Q_t$} \\
   \midrule
-  0 & & \underline{\hphantom{0} \hphantom{0}} \\
-  1 & $a$ & \hphantom{0} \underline{\hphantom{0} 1} \\
-  2 & $b$ & \hphantom{0} \hphantom{0} \underline{1 2} \\
-  3 & $c$ & \hphantom{0} \hphantom{0} 1 \underline{2 3} \\
-  4 & $(c~b)$ & \hphantom{0} \hphantom{0} \underline{1 4} \\
-  5 & $((c~b)~a)$ & \hphantom{0} \underline{\hphantom{0} 5} \\
+  0 & \shift &  & \underline{\hphantom{0} \hphantom{0}} \\
+  1 & \shift & \word{Spot} & \hphantom{0} \underline{\hphantom{0} 1} \\
+  2 & \shift & \word{sat} & \hphantom{0} \hphantom{0} \underline{1 2} \\
+  3 & \reduce & \word{down} & \hphantom{0} \hphantom{0} 1 \underline{2 3} \\
+  4 & \reduce & \word{sat down} & \hphantom{0} \hphantom{0} \underline{1 4} \\
+  5 & & \word{Spot} (\word{sat down}) & \hphantom{0} \underline{\hphantom{0} 5} \\
   \bottomrule
 \end{tabular}
-\caption{The thin-stack algorithm computing a \shift-\shift-\shift-\reduce-\reduce\ sequence on the input sentence $(a, b, c)$. $S$ is shown in the second column and represents the top of the stack at each step $t$. The last two elements of $Q$ (underlined) specify which rows $t$ would be involved in a \reduce\ operation at the next step.}
+\caption{The thin-stack algorithm operating on the input sequence $\mathbf x = \text{(\word{Spot}, \word{sat}, \word{down})}$ and the transition sequence shown in the second column. $S$ is shown in the third column and represents the top of the stack at each step $t$. The last two elements of $Q$ (underlined) specify which rows $t$ would be involved in a \reduce\ operation at the next step.}
 \label{tbl:thin-stack}
 \end{table}
 
@@ -246,7 +246,7 @@ At test time, the model uses whichever transition (i.e., \shift\ or \reduce) is 
 
 A na\"ive implementation of SPINN would require representing a stack of size $N$ for each timestep of each input sentence at training time to support backpropagation. This implies a per-example space requirement of $N \times T \times D$, which is prohibitively large for significant batch sizes or sentence lengths $N$. Such a na\"ive implementation would also require copying a largely unchanged stack at each timestep, since each \shift\ or \reduce\ operation writes only one new representation to the stack.
 
-We propose an alternative space-efficient stack representation inspired by the zipper technique \citep{huet1997zipper}, that we call \textit{thin stack}. For each input sentence, we represent the stack with a single $(T + 1) \times D$ matrix $S$. Each row $S_t$ represents the top of the actual stack at timestep $t$. At each timestep we can \shift\ a new element onto the stack, or \reduce\ the top two elements of the stack into a single element. To shift an element from the buffer to the top of the stack at timestep $t$, we simply write it into the location $S[t]$. In order to perform the \reduce\ operation, we need to retrieve the top two elements of the actual stack. We maintain a queue $Q$ of pointers into $S$ which contains the row indices of $S$ which are still present in the actual stack. The top two elements of the stack can be found by using the final two pointers in the queue $Q$. These retrieved rows are used to perform the \reduce\ operation, which modifies $Q$ to mark that some rows of $S$ have now been replaced in the actual stack. Algorithm~\ref{alg:thin-stack} describes the full mechanics of a stack feedforward in this compressed representation. It operates on the single $(T + 1) \times D$ matrix $S$ and a backpointer queue $Q$. Table~\ref{tbl:thin-stack} shows an example run.
+We propose an alternative space-efficient stack representation inspired by the zipper technique \citep{huet1997zipper}, that we call \textit{thin stack}. For each input sentence, we represent the stack with a single $T \times D$ matrix $S$. Each row $S[t]$ (for $0<t\le T$) represents the top of the actual stack at timestep $t$. At each timestep we can \shift\ a new element onto the stack, or \reduce\ the top two elements of the stack into a single element. To shift an element from the buffer to the top of the stack at timestep $t$, we simply write it into the location $S[t]$. In order to perform the \reduce\ operation, we need to retrieve the top two elements of the actual stack. We maintain a queue $Q$ of pointers into $S$ which contains the row indices of $S$ which are still present in the actual stack. The top two elements of the stack can be found by using the final two pointers in the queue $Q$. These retrieved rows are used to perform the \reduce\ operation, which modifies $Q$ to mark that some rows of $S$ have now been replaced in the actual stack. Algorithm~\ref{alg:thin-stack} describes the full mechanics of a stack feedforward in this compressed representation. It operates on the single $T \times D$ matrix $S$ and a backpointer queue $Q$. Table~\ref{tbl:thin-stack} shows an example run.
 
 This stack representation requires substantially less space. It stores each element involved in the feedforward computation exactly once, meaning that this representation can still support efficient backpropagation. Furthermore, all of the updates to $S$ and $Q$ can be performed batched and in-place on a GPU, yielding substantial speed gains. We describe speed results in Section~\ref{sec:speed}.
 
@@ -274,8 +274,8 @@ A simpler variant of this technique can be used to represent the buffer, since i
 \vspace{0.5em}
 {\noindent\small
 {\bf Unlabeled binary parse:} ( ( the cat ) ( sat down ) )\\
-{$\mathbf a$}: \shift, \shift, \reduce, \shift, \shift, \reduce, \reduce\\
-{$\mathbf x$}: the, cat, sat, down
+{$\mathbf x$}: \word{the}, \word{cat}, \word{sat}, \word{down}\\
+{$\mathbf a$}: \shift, \shift, \reduce, \shift, \shift, \reduce, \reduce
 }
 
 \paragraph{Handling variable sentence lengths} For any sentence model to be trained with batched computation, it is necessary to pad or crop sentences to a fixed length. We fix this length at $N = 25$ words, longer than about 98\% of sentences in SNLI\@. Transition sequences $\mathbf a$ are cropped at the left or padded at the left with \shift s. Token sequences $\mathbf x$ are then cropped or padded with empty tokens at the left to match the number of \shift s added or removed from $\mathbf a$, and can then be padded with empty tokens at the right to meet the desired length $N$.
@@ -288,11 +288,11 @@ Without the addition of the tracking LSTM, SPINN (in particular the SPINN-PI-NT 
 \subsection{Inference speed}
 \label{sec:speed}
 
-In this section, we compare the test-time speed of our SPINN-PI-NT with an equivalent TreeRNN implemented in the conventional fashion and with a standard RNN sequence model. While the full models evaluated below are implemented and trained using Theano \citep{bergstra+al:2010-scipy,Bastien-Theano-2012}, which is reasonably efficient but not perfect for our model, we wish to compare well-optimized implementations of all three models. To do this, we reimplement the feedforward\footnote{We chose to reimplement and evaluate only the feedforward/inference pass, as inference speed is the relevant performance metric for most practical applications.} of SPINN-PI-NT and an LSTM RNN baseline in C++/CUDA, and compare that implementation with a CPU-based C++/Eigen TreeRNN implementation from \citet{irsoy2014deep}, which we modified to perform exactly the same computations as SPINN-PI-NT.\footnote{The original code for Irsoy \& Cardie's model is available at \url{https://github.com/oir/deep-recursive}. We plan to release our modified code at publication time, alongside the optimized C++/CUDA models and the Theano source code for the full SPINN.} TreeRNNs like this can only operate on a single example at a time and are thus poorly suited for GPU computation.
+In this section, we compare the test-time speed of our SPINN-PI-NT with an equivalent TreeRNN implemented in the conventional fashion and with a standard RNN sequence model. While the full models evaluated below are implemented and trained using Theano \citep{theano}, which is reasonably efficient but not perfect for our model, we wish to compare well-optimized implementations of all three models. To do this, we reimplement the feedforward\footnote{We chose to reimplement and evaluate only the feedforward/inference pass, as inference speed is the relevant performance metric for most practical applications.} of SPINN-PI-NT and an LSTM RNN baseline in C++/CUDA, and compare that implementation with a CPU-based C++/Eigen TreeRNN implementation from \citet{irsoy2014deep}, which we modified to perform exactly the same computations as SPINN-PI-NT.\footnote{The original code for Irsoy \& Cardie's model is available at \url{https://github.com/oir/deep-recursive}. Our optimized C++/CUDA models and the Theano source code for the full SPINN are available at \url{https://github.com/hans/spinn}.} TreeRNNs like this can only operate on a single example at a time and are thus poorly suited for GPU computation.
 
 \begin{figure}
 \centering
-\resizebox{0.85\linewidth}{!}{
+\resizebox{1\linewidth}{!}{
 \begin{tikzpicture}
 \begin{axis}[xmin=0, ymin=0, xlabel=Batch size, ylabel=Feedforward time (sec),
              xticklabels={0,32,64,128,256,512,1024,2048}, xmode=log, log basis x=2,
@@ -365,13 +365,13 @@ To classify an SNLI sentence pair, we run two copies of SPINN with shared parame
     {\vec{h}_{\text{premise}} - \vec{h}_{\text{hypothesis}}}
     {\vec{h}_{\text{premise}} \odot \vec{h}_{\text{hypothesis}}}
 \end{equation}
-Following \citet{snli:emnlp2015}, this feature vector is then passed to a series of 1024D ReLU neural network layers (i.e., an MLP; the number of layers is tuned as a hyperparameter), then passed into a linear transformation, and then finally passed to a softmax layer, which yields a distribution over the three labels.
+This feature vector is then passed to a series of 1024D ReLU neural network layers (i.e., an MLP; the number of layers is tuned as a hyperparameter), then passed into a linear transformation, and then finally passed to a softmax layer, which yields a distribution over the three labels.
 
 
-\paragraph{The objective function} Our objective combines a cross-entropy objective $\mathcal{L}^{\text{s}}$ for the SNLI classification task, a cross-entropy objective $\{\mathcal{L}_t^{\text{p}}, \mathcal{L}_t^{\text{h}}\}$ for each parsing decision for each of the sentences at each step $t$, and an L2 regularization term on the trained parameters. The terms are weighted using the tuned hyperparameters $\alpha$ and $\lambda$:
+\paragraph{The objective function} Our objective combines a cross-entropy objective $\mathcal{L}_{\text{s}}$ for the SNLI classification task, cross-entropy objectives $\mathcal{L}^t_{\text{p}}$ and $\mathcal{L}^t_{\text{h}}$ for the parsing decision for each of the two sentences at each step $t$, and an L2 regularization term on the trained parameters. The terms are weighted using the tuned hyperparameters $\alpha$ and $\lambda$:
 \begin{equation}
 \begin{split}
-\mathcal{L}_{\text{m}} = &\mathcal{L}^{\text{s}} + \alpha \sum_{t=0}^{T-1} (\mathcal{L}_t^{\text{p}} + \mathcal{L}_t^{\text{h}}) + \lambda \norm{\theta}^2_2
+\mathcal{L}_{\text{m}} = &\mathcal{L}_{\text{s}} + \alpha \sum_{t=0}^{T-1} (\mathcal{L}^t_{\text{p}} + \mathcal{L}^t_{\text{h}}) + \lambda \norm{\theta}^2_2
 \end{split}
 \end{equation}
 
@@ -469,7 +469,7 @@ In addition, it seems that tree-structured models, and especially the tree-seque
 
 We suspect that the hybrid nature of the full SPINN model is also responsible for its ability to perform better than an RNN baseline even when its internal parser is relatively ineffective at producing correct full-sentence parses. We suspect that it is acting somewhat like the tree-based CNN, only with access to larger trees: using tree structure to build up local phrase meanings, and then using the tracking LSTM, at least in part, to combine those meanings.
 
-Finally, as is likely inevitable for models evaluated on SNLI, all four models under study did several percent worse on test examples whose ground truth label is \textit{neutral} than on examples of the other two classes. \textit{entailment}--\textit{neutral} and \textit{neutral}--\textit{contradiction} confusions appear to be much harder to avoid than \textit{entailment}--\textit{contradiction} confusions, where relatively superficial cues might be more readily useful.
+Finally, as is likely inevitable for models evaluated on SNLI, all four models under study did several percent worse on test examples whose ground truth label is \textit{neutral} than on examples of the other two classes. \textit{Entailment}--\textit{neutral} and \textit{neutral}--\textit{contradiction} confusions appear to be much harder to avoid than \textit{entailment}--\textit{contradiction} confusions, where relatively superficial cues might be more readily useful.
 
 \section{Conclusions and future work}
 
