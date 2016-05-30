@@ -11,33 +11,40 @@ from spinn import util
 from spinn.util import cuda
 
 
-def update_hard_stack(t, t_f, stack_t, push_value, merge_value, merge_queue_t,
-                      merge_cursors_t, mask, batch_size, stack_shift, cursors_shift):
+def update_hard_stack(t, t_f, stack_t, shift_value, reduce_value, queue_t,
+                      cursors_t, mask, batch_size, stack_shift, cursors_shift):
     """Compute the new value of the given hard stack.
 
-    This performs stack pushes and pops in parallel, and somewhat wastefully.
-    It accepts a precomputed merge result (in `merge_value`) and a precomputed
-    push value `push_value` for all examples, and switches between the two
-    outcomes based on the per-example value of `mask`.
+    This performs stack shifts and reduces in parallel, and somewhat
+    wastefully.  It accepts a precomputed reduce result (in `reduce_value`) and
+    a precomputed shift value `shift` for all examples, and switches between
+    the two outcomes based on the per-example value of `mask`.
 
     Args:
-        stack_t: Current stack value
-        stack_pushed: Helper stack structure, of same size as `stack_t`
-        stack_merged: Helper stack structure, of same size as `stack_t`
-        push_value: Batch of values to be pushed
-        merge_value: Batch of merge results
-        mask: Batch of booleans: 1 if merge, 0 if push
-        model_dim: The dimension of push_value and merge_value.
+        t: (int scalar) current timestep
+        t_f: (float scalar) current timestep
+        shift_value: (float batch) New stack-tops for each example, if each
+            example were to shift at this timestep
+        reduce_value: (float batch) New stack-tops for each example, if each
+            example were to reduce at this timestep
+        queue_t: Aux queue after previous operation
+        cursors_t: Queue cursors after previous operation
+        mask: (float batch) 0 or 1 for each example; 0 if shift, 1 if reduce
+        batch_size:
+        stack_shift: ThinStack._stack_shift
+        cursors_shift: ThinStack._cursors_shift
     """
 
+    # Implementation of the core thin-stack update.
+
     mask2 = mask.dimshuffle(0, "x")
-    top_next = mask2 * merge_value + (1 - mask2) * push_value
+    top_next = mask2 * reduce_value + (1 - mask2) * shift_value
     stack_next = cuda.AdvancedIncSubtensor1Floats(set_instead_of_inc=True, inplace=True)(
             stack_t, top_next, t_f * batch_size + stack_shift)
 
-    cursors_next = merge_cursors_t + (mask * -1 + (1 - mask) * 1)
+    cursors_next = cursors_t + (mask * -1 + (1 - mask) * 1)
     queue_next = cuda.AdvancedIncSubtensor1Floats(set_instead_of_inc=True, inplace=True)(
-            merge_queue_t, t_f, cursors_shift + cursors_next)
+            queue_t, t_f, cursors_shift + cursors_next)
 
     return stack_next, queue_next, cursors_next
 
@@ -173,7 +180,7 @@ class ThinStack(object):
                 "embeddings", (self.vocab_size, self.word_embedding_dim))
 
     def _make_shared(self):
-        # Build main stack. This stores the push/merge outputs at each
+        # Build main stack. This stores the shift/reduce outputs at each
         # timestep.
         stack_shape = (self.stack_size * self.batch_size, self.model_dim)
         stack_init = np.zeros(stack_shape, dtype=np.float32)
@@ -263,7 +270,7 @@ class ThinStack(object):
         recurrence_inputs += extra_inputs
         recurrence_ret = self.recurrence(recurrence_inputs)
 
-        push_ret, merge_ret = recurrence_ret[:2]
+        shift_ret, reduce_ret = recurrence_ret[:2]
 
         if self.recurrence.predicts_transitions:
             actions_t = recurrence_ret[2].argmax(axis=1)
@@ -291,21 +298,21 @@ class ThinStack(object):
             mask = transitions_t_f
 
         # Compute new stack value.
-        stack_next, merge_queue_next, merge_cursors_next = update_hard_stack(
-            t, t_f, self.stack, buffer_top_t, merge_ret[0], self.queue, self.cursors,
+        stack_next, queue_next, cursors_next = update_hard_stack(
+            t, t_f, self.stack, buffer_top_t, reduce_ret[0], self.queue, self.cursors,
             mask, self.batch_size, self._stack_shift, self._cursors_shift)
 
-        # Move buffer cursor as necessary. Since mask == 1 when merge, we
+        # Move buffer cursor as necessary. Since mask == 1 when reduce, we
         # should increment each buffer cursor by 1 - mask.
         buffer_cur_next = buffer_cur_t + (1 - transitions_t_f)
 
         # Update auxiliary stacks.
         mask2 = mask.dimshuffle(0, "x")
         ptr_next = t_f * self.batch_size + self._stack_shift
-        # TODO: Allow recurrence to state that output i is the same for push +
-        # merge -- then we don't have to mask it
-        aux_outputs = [mask2 * m_output + (1. - mask2) * p_output
-                       for p_output, m_output in zip(push_ret, merge_ret[1:])]
+        # TODO: Allow recurrence to state that output i is the same for shift
+        # and reduce -- then we don't have to mask it
+        aux_outputs = [mask2 * r_output + (1. - mask2) * s_output
+                       for s_output, r_output in zip(shift_ret, reduce_ret[1:])]
         aux_stack_updates = {aux_stack: cuda.AdvancedIncSubtensor1Floats(set_instead_of_inc=True, inplace=True)(
             aux_stack, aux_output, ptr_next)
             for aux_stack, aux_output in zip(self.aux_stacks, aux_outputs)}
@@ -321,8 +328,8 @@ class ThinStack(object):
 
         updates = {
             self.stack: stack_next,
-            self.queue: merge_queue_next,
-            self.cursors: merge_cursors_next
+            self.queue: queue_next,
+            self.cursors: cursors_next
         }
         updates.update(aux_stack_updates)
 
@@ -459,10 +466,10 @@ class ThinStack(object):
         def m_fwd(*inputs, **constants):
             return self.recurrence(inputs, **constants)[1]
 
-        f_p_delta = util.batch_subgraph_gradients(input_ndim, wrt, p_fwd,
-                                                  name=self._prefix + "bwd_graph_push")
-        f_m_delta = util.batch_subgraph_gradients(input_ndim, wrt, m_fwd,
-                                                  name=self._prefix + "bwd_graph_merge")
+        f_s_delta = util.batch_subgraph_gradients(input_ndim, wrt, p_fwd,
+                                                  name=self._prefix + "bwd_graph_shift")
+        f_r_delta = util.batch_subgraph_gradients(input_ndim, wrt, m_fwd,
+                                                  name=self._prefix + "bwd_graph_reduce")
 
         # Also create a backprop graph for the embedding projection network.
         f_proj_delta = None
@@ -474,7 +481,7 @@ class ThinStack(object):
                                                          self._project_embeddings,
                                                          name=self._prefix + "bwd_graph_proj")
 
-        return wrt, f_proj_delta, f_p_delta, f_m_delta
+        return wrt, f_proj_delta, f_s_delta, f_r_delta
 
     def make_backprop_scan(self, error_signal,
                            extra_cost_inputs=None,
@@ -540,7 +547,7 @@ class ThinStack(object):
         #
         # These graphs will be repeatedly invoked and chained together in the
         # code further below.
-        wrt, f_proj_delta, f_push_delta, f_merge_delta = \
+        wrt, f_proj_delta, f_shift_delta, f_reduce_delta = \
                 self._make_backward_graphs()
         wrt_shapes = [wrt_i.get_value().shape for wrt_i in wrt]
 
@@ -585,11 +592,11 @@ class ThinStack(object):
                 for i, extra_bwd_i in enumerate(extra_bwd)])
 
             # Find the timesteps of the two elements involved in the potential
-            # merge at this timestep.
+            # reduce at this timestep.
             t_c1 = (t_f - 1.0) * self.batch_size + self._stack_shift
             t_c2 = stack_2_ptrs_t
 
-            # Find the two elements involved in the potential merge.
+            # Find the two elements involved in the potential reduce.
             c1 = cuda.AdvancedSubtensor1Floats("B_stack1")(stack_fwd, t_c1)
             c2 = cuda.AdvancedSubtensor1Floats("B_stack2")(stack_fwd, t_c2)
 
@@ -636,18 +643,18 @@ class ThinStack(object):
             main_grad = grads[0]
 
             # Calculate deltas for this timestep.
-            m_delta_inp, m_delta_wrt = f_merge_delta(inputs, grads)
-            # NB: main_grad is not passed to push function.
-            p_delta_inp, p_delta_wrt = f_push_delta(inputs, grads[1:])
+            r_delta_inp, r_delta_wrt = f_reduce_delta(inputs, grads)
+            # NB: main_grad is not passed to shift function.
+            s_delta_inp, s_delta_wrt = f_shift_delta(inputs, grads[1:])
 
             # Check that delta function outputs match (at least in number).
-            assert len(m_delta_inp) == len(p_delta_inp), \
-                "%i %i" % (len(m_delta_inp), len(p_delta_inp))
-            assert len(m_delta_wrt) == len(p_delta_wrt), \
-                "%i %i" % (len(m_delta_wrt), len(p_delta_wrt))
-            assert len(m_delta_inp) == 3 + len(self.aux_stacks), \
-                "%i %i" % (len(m_delta_inp), 3 + len(self.aux_stacks))
-            assert len(m_delta_wrt) == len(wrt)
+            assert len(r_delta_inp) == len(s_delta_inp), \
+                "%i %i" % (len(r_delta_inp), len(s_delta_inp))
+            assert len(r_delta_wrt) == len(s_delta_wrt), \
+                "%i %i" % (len(r_delta_wrt), len(s_delta_wrt))
+            assert len(r_delta_inp) == 3 + len(self.aux_stacks), \
+                "%i %i" % (len(r_delta_inp), 3 + len(self.aux_stacks))
+            assert len(r_delta_wrt) == len(wrt)
 
             # Retrieve embedding indices on buffer at this timestep.
             # (Necessary for sending embedding gradients.)
@@ -682,21 +689,21 @@ class ThinStack(object):
                 # parameters, but we don't have any reason to support this in
                 # practice. (Either we backprop to embeddings or project them
                 # and learn the projection -- not both.)
-                if m_delta_inp[2] is not None:
+                if r_delta_inp[2] is not None:
                     _, m_proj_delta_wrt = f_proj_delta(proj_inputs,
-                                                       (m_delta_inp[2],))
-                    m_delta_wrt = util.merge_update_lists(m_delta_wrt, m_proj_delta_wrt)
+                                                       (r_delta_inp[2],))
+                    r_delta_wrt = util.merge_update_lists(r_delta_wrt, m_proj_delta_wrt)
 
-                # If we pushed (moved the buffer top onto the stack), the
+                # If we shifted (moved the buffer top onto the stack), the
                 # gradient from above is a combination of the accumulated stack
-                # gradient (main_grad) and any buffer top deltas from the push
+                # gradient (main_grad) and any buffer top deltas from the shift
                 # function (e.g. tracking LSTM gradient).
                 embedding_grad = main_grad
-                if p_delta_inp[2] is not None:
-                    embedding_grad += p_delta_inp[2]
+                if s_delta_inp[2] is not None:
+                    embedding_grad += s_delta_inp[2]
                 _, p_proj_delta_wrt = f_proj_delta(proj_inputs,
                                                    (embedding_grad,))
-                p_delta_wrt = util.merge_update_lists(p_delta_wrt, p_proj_delta_wrt)
+                s_delta_wrt = util.merge_update_lists(s_delta_wrt, p_proj_delta_wrt)
 
             ###########
             # STEP 1. #
@@ -711,21 +718,21 @@ class ThinStack(object):
             stacks += extra_bwd
             cursors += ((t_c1,)) * len(extra_bwd)
             new_stacks = {}
-            for stack, cursor, m_delta, p_delta in zip(stacks, cursors, m_delta_inp, p_delta_inp):
+            for stack, cursor, r_delta, s_delta in zip(stacks, cursors, r_delta_inp, s_delta_inp):
                 if stack is None or cursor is None:
                     continue
-                elif m_delta is None and p_delta is None:
+                elif r_delta is None and s_delta is None:
                     # Disconnected gradient.
                     continue
 
                 base = new_stacks.get(stack, stack)
-                mask_i = masks[(m_delta or p_delta).ndim - 1]
-                if m_delta is None:
-                    delta = (1. - mask_i) * p_delta
-                elif p_delta is None:
-                    delta = mask_i * m_delta
+                mask_i = masks[(r_delta or s_delta).ndim - 1]
+                if r_delta is None:
+                    delta = (1. - mask_i) * s_delta
+                elif s_delta is None:
+                    delta = mask_i * r_delta
                 else:
-                    delta = mask_i * m_delta + (1. - mask_i) * p_delta
+                    delta = mask_i * r_delta + (1. - mask_i) * s_delta
 
                 # Run subtensor update on associated structure using the
                 # current cursor.
@@ -737,35 +744,35 @@ class ThinStack(object):
             # STEP 2. #
             ###########
             # Accumulate deltas with respect to the variables in the wrt store,
-            # again switching over push/merge decision.
+            # again switching over shift/reduce decision.
             new_wrt_deltas = {}
             wrt_data = enumerate(zip(wrt, zero_jac_wrts, wrt_deltas,
-                                     m_delta_wrt, p_delta_wrt))
-            for i, (wrt_var, wrt_zero, accum_delta, m_delta, p_delta) in wrt_data:
-                if m_delta is None and p_delta is None:
+                                     r_delta_wrt, s_delta_wrt))
+            for i, (wrt_var, wrt_zero, accum_delta, r_delta, s_delta) in wrt_data:
+                if r_delta is None and s_delta is None:
                     # Disconnected gradient.
                     continue
 
                 # Check that tensors returned by delta functions match shape
                 # expectations.
-                assert m_delta is None or accum_delta.ndim == m_delta.ndim - 1, \
-                    "%s %i %i" % (wrt_var.name, accum_delta.ndim, m_delta.ndim)
-                assert p_delta is None or accum_delta.ndim == p_delta.ndim - 1, \
-                    "%s %i %i" % (wrt_var.name, accum_delta.ndim, p_delta.ndim)
+                assert r_delta is None or accum_delta.ndim == r_delta.ndim - 1, \
+                    "%s %i %i" % (wrt_var.name, accum_delta.ndim, r_delta.ndim)
+                assert s_delta is None or accum_delta.ndim == s_delta.ndim - 1, \
+                    "%s %i %i" % (wrt_var.name, accum_delta.ndim, s_delta.ndim)
 
-                mask_i = masks[(m_delta or p_delta).ndim - 1]
-                if m_delta is None:
-                    delta = T.switch(mask_i, wrt_zero, p_delta)
-                elif p_delta is None:
-                    delta = T.switch(mask_i, m_delta, wrt_zero)
+                mask_i = masks[(r_delta or s_delta).ndim - 1]
+                if r_delta is None:
+                    delta = T.switch(mask_i, wrt_zero, s_delta)
+                elif s_delta is None:
+                    delta = T.switch(mask_i, r_delta, wrt_zero)
                 else:
-                    delta = T.switch(mask_i, m_delta, p_delta)
+                    delta = T.switch(mask_i, r_delta, s_delta)
                 # TODO: Is this at all efficient? (Bring back GPURowSwitch?)
                 delta = delta.sum(axis=0)
                 # TODO: we want this to be inplace
                 new_wrt_deltas[accum_delta] = accum_delta + delta
 
-            # On push ops, backprop the stack_bwd error onto the embedding
+            # On shift ops, backprop the stack_bwd error onto the embedding
             # projection network / embedding parameters.
             # TODO make sparse?
             if compute_embedding_gradients:
