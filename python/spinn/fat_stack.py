@@ -18,41 +18,38 @@ from theano import tensor as T
 from spinn import util
 
 
-def update_stack(stack_t, stack_pushed, stack_merged, push_value,
-                 merge_value, mask, model_dim):
+def update_stack(stack_t, shift_value, reduce_value, mask, model_dim):
     """
     Compute the new value of the given stack.
 
-    This performs stack pushes and pops in parallel, and somewhat wastefully.
-    It accepts a precomputed merge result (in `merge_value`) and a precomputed
-    push value `push_value` for all examples, and switches between the two
-    outcomes based on the per-example value of `mask`.
+    This performs stack shifts and reduces in parallel, and somewhat
+    wastefully.  It accepts a precomputed reduce result (in `reduce_value`) and
+    a precomputed shift value `shift` for all examples, and switches between
+    the two outcomes based on the per-example value of `mask`.
 
     Args:
         stack_t: Current stack value
-        stack_pushed: Helper stack structure, of same size as `stack_t`
-        stack_merged: Helper stack structure, of same size as `stack_t`
-        push_value: Batch of values to be pushed
-        merge_value: Batch of merge results
-        mask: Batch of booleans: 1 if merge, 0 if push
-        model_dim: The dimension of push_value and merge_value.
+        shift_value: Batch of values to be shifted
+        reduce_value: Batch of reduce results
+        mask: Batch of booleans: 1 if reduce, 0 if shift
+        model_dim: The dimension of shift_value and reduce_value.
     """
 
     # Build two copies of the stack batch: one where every stack has received
-    # a push op, and one where every stack has received a merge op.
-    #
-    # Copy 1: Push.
-    stack_pushed = T.set_subtensor(stack_pushed[:, 0, :model_dim], push_value)
-    stack_pushed = T.set_subtensor(stack_pushed[:, 1:], stack_t[:, :-1])
+    # a shift op, and one where every stack has received a reduce op.
 
-    # Copy 2: Merge.
-    stack_merged = T.set_subtensor(stack_merged[:, 0, :model_dim], merge_value)
-    stack_merged = T.set_subtensor(stack_merged[:, 1:-1], stack_t[:, 2:])
+    # Copy 1: Shift.
+    stack_s = T.set_subtensor(stack_t[:, 0, :model_dim], shift_value)
+    stack_s = T.set_subtensor(stack_s[:, 1:], stack_t[:, :-1])
+
+    # Copy 2: Reduce.
+    stack_r = T.set_subtensor(stack_t[:, 0, :model_dim], reduce_value)
+    stack_r = T.set_subtensor(stack_r[:, 1:-1], stack_t[:, 2:])
 
     # Make sure mask broadcasts over all dimensions after the first.
     mask = mask.dimshuffle(0, "x", "x")
     mask = T.cast(mask, dtype=theano.config.floatX)
-    stack_next = mask * stack_merged + (1. - mask) * stack_pushed
+    stack_next = mask * stack_r + (1. - mask) * stack_s
 
     return stack_next
 
@@ -255,7 +252,7 @@ class HardStack(object):
         self.transitions = self.transitions or T.imatrix("transitions")
 
     def _step(self, transitions_t, ss_mask_gen_matrix_t, stack_t, buffer_cur_t,
-            tracking_hidden, attention_hidden, stack_pushed, stack_merged, buffer,
+            tracking_hidden, attention_hidden, buffer,
             ground_truth_transitions_visible, premise_stack_tops, projected_stack_tops):
         """TODO document"""
         batch_size, _ = self.X.shape
@@ -314,25 +311,25 @@ class HardStack(object):
             # Model 0 case.
             mask = transitions_t
 
-        # Now update the stack: first precompute merge results.
+        # Now update the stack: first precompute reduce results.
         if self.model_dim != self.stack_dim:
             stack1 = stack_t[:, 0, :self.model_dim].reshape((-1, self.model_dim))
             stack2 = stack_t[:, 1, :self.model_dim].reshape((-1, self.model_dim))
         else:
             stack1 = stack_t[:, 0].reshape((-1, self.model_dim))
             stack2 = stack_t[:, 1].reshape((-1, self.model_dim))
-        merge_items = (stack1, stack2)
+        reduce_items = (stack1, stack2)
         if self.connect_tracking_comp:
             tracking_h_t = tracking_hidden[:, :self.tracking_lstm_hidden_dim]
-            merge_value = self._compose_network(merge_items, tracking_h_t, self.model_dim,
+            reduce_value = self._compose_network(reduce_items, tracking_h_t, self.model_dim,
                 self._vs, name="compose", external_state_dim=self.tracking_lstm_hidden_dim)
         else:
-            merge_value = self._compose_network(merge_items, (self.model_dim,) * 2, self.model_dim,
+            reduce_value = self._compose_network(reduce_items, (self.model_dim,) * 2, self.model_dim,
                 self._vs, name="compose")
 
         # Compute new stack value.
-        stack_next = update_stack(stack_t, stack_pushed, stack_merged, buffer_top_t,
-                                  merge_value, mask, self.model_dim)
+        stack_next = update_stack(stack_t, buffer_top_t, reduce_value, mask,
+                                  self.model_dim)
 
         # If attention is to be used and premise_stack_tops is not None (i.e.
         # we're processing the hypothesis) calculate the attention weighed representation.
@@ -352,7 +349,7 @@ class HardStack(object):
                 attention_hidden = self._attention_unit(attention_hidden, stack_next[:, 0, :h_dim],
                     premise_stack_tops, projected_stack_tops, h_dim, self._vs, name="attention_unit")
 
-        # Move buffer cursor as necessary. Since mask == 1 when merge, we
+        # Move buffer cursor as necessary. Since mask == 1 when reduce, we
         # should increment each buffer cursor by 1 - mask.
         buffer_cur_next = buffer_cur_t + (1 - mask)
 
@@ -375,10 +372,6 @@ class HardStack(object):
         # Stack batch is a 3D tensor.
         stack_shape = (batch_size, max_stack_size, self.stack_dim)
         stack_init = T.zeros(stack_shape)
-
-        # Allocate two helper stack copies (passed as non_seqs into scan).
-        stack_pushed = T.zeros(stack_shape)
-        stack_merged = T.zeros(stack_shape)
 
         # Look up all of the embeddings that will be used.
         raw_embeddings = self.word_embeddings[self.X]  # batch_size * seq_length * emb_dim
@@ -453,7 +446,7 @@ class HardStack(object):
             # done to avaid defining another step function.
             outputs_info = [DUMMY] + outputs_info
 
-        non_sequences = [stack_pushed, stack_merged, buffer_t, self.ground_truth_transitions_visible]
+        non_sequences = [buffer_t, self.ground_truth_transitions_visible]
 
         if self.use_attention != "None" and self.is_hypothesis:
             h_dim = self.model_dim / 2
