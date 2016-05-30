@@ -1,6 +1,6 @@
 # Stack-augmented Parser-Interpreter Neural Network
 
-*NOTE:* This repository may be broken at head. A working snapshot is available here: https://github.com/hans/spinn/tree/deadline
+*NOTE:* This repository may be broken at head. A working snapshot is available here: https://github.com/stanfordnlp/spinn/tree/deadline
 
 This repository contains the source code described in our paper [A Fast Unified Model for Sentence Parsing and Understanding][1]. There are three separate implementations available:
 
@@ -82,8 +82,8 @@ TODO
 TODO
 
 [1]: http://arxiv.org/abs/1603.06021
-[2]: https://github.com/hans/spinn/blob/master/requirements.txt
+[2]: https://github.com/stanfordnlp/spinn/blob/master/requirements.txt
 [3]: https://github.com/hans/theano-hacked/tree/8964f10e44bcd7f21ae74ea7cdc3682cc7d3258e
 [4]: https://github.com/google/googletest
 [5]: https://github.com/oir/deep-recursive
-[6]: https://github.com/hans/spinn/blob/5d4257f4cd15cf7213d2ff87f6f3d7f6716e2ea1/cpp/bin/stacktest.cc#L33
+[6]: https://github.com/stanfordnlp/spinn/blob/5d4257f4cd15cf7213d2ff87f6f3d7f6716e2ea1/cpp/bin/stacktest.cc#L33
