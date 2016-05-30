@@ -199,10 +199,7 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
         use_input_batch_norm=False,
         ss_mask_gen=ss_mask_gen,
         ss_prob=ss_prob,
-        use_attention=FLAGS.use_attention,
         name="premise")
-
-    premise_stack_tops = premise_model.stack_tops if FLAGS.use_attention != "None" else None
 
     hypothesis_model = ThinStack(spec, recurrence, embedding_projection_network,
         training_mode, ground_truth_transitions_visible, vs,
@@ -213,30 +210,11 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
         use_input_batch_norm=False,
         ss_mask_gen=ss_mask_gen,
         ss_prob=ss_prob,
-        use_attention=FLAGS.use_attention,
         name="hypothesis")
 
-    # Extract top element of final stack timestep.
-    if FLAGS.use_attention == "None" or FLAGS.use_difference_feature or FLAGS.use_product_feature:
-        premise_vector = premise_model.sentence_embeddings
-        hypothesis_vector = hypothesis_model.sentence_embeddings
-
-        if FLAGS.lstm_composition:
-            premise_vector = premise_vector[:,:FLAGS.model_dim / 2]
-            hypothesis_vector = hypothesis_vector[:,:FLAGS.model_dim / 2]
-            sentence_vector_dim = FLAGS.model_dim / 2
-        else:
-            sentence_vector_dim = FLAGS.model_dim
-
-    if FLAGS.use_attention != "None":
-        # Use the attention weighted representation
-        h_dim = FLAGS.model_dim / 2
-        mlp_input = hypothesis_model.final_weighed_representation.reshape((-1, h_dim))
-        mlp_input_dim = h_dim
-    else:
-        # Create standard MLP features
-        mlp_input = T.concatenate([premise_vector, hypothesis_vector], axis=1)
-        mlp_input_dim = 2 * sentence_vector_dim
+    # Create standard MLP features
+    mlp_input = T.concatenate([premise_vector, hypothesis_vector], axis=1)
+    mlp_input_dim = 2 * sentence_vector_dim
 
     if FLAGS.use_difference_feature:
         mlp_input = T.concatenate([mlp_input, premise_vector - hypothesis_vector], axis=1)
@@ -787,9 +765,6 @@ if __name__ == '__main__':
     gflags.DEFINE_integer("tracking_lstm_hidden_dim", 4, "")
     gflags.DEFINE_boolean("use_tracking_lstm", True,
                           "Whether to use LSTM in the tracking unit")
-    gflags.DEFINE_enum("use_attention", "None",
-                       ["None", "Rocktaschel", "WangJiang", "TreeWangJiang"],
-                       "")
     gflags.DEFINE_boolean("context_sensitive_shift", False,
         "Use LSTM hidden state and word embedding to determine the vector to be pushed")
     gflags.DEFINE_boolean("context_sensitive_use_relu", False,

@@ -65,9 +65,6 @@ class ThinStack(object):
                  embedding_dropout_keep_rate=1.0,
                  ss_mask_gen=None,
                  ss_prob=0.0,
-                 use_attention=False,
-                 premise_stack_tops=None,
-                 attention_unit=None,
                  is_hypothesis=False,
                  name="stack"):
         """
@@ -97,12 +94,6 @@ class ThinStack(object):
             embedding_dropout_keep_rate: The keep rate for dropout on projected embeddings.
             ss_mask_gen: A theano random stream
             ss_prob: Scheduled sampling probability
-            use_attention: Use attention over premise tree nodes to obtain sentence representation (SNLI)
-            premise_stack_tops: Tokens located on the top of premise stack. Used only when use_attention
-                is set to True (SNLI)
-            attention_unit: Function to implement the recurrent attention unit.
-                Takes in the current attention state, current hypothesis stack top, all premise stack tops
-                and returns the next attention state
             is_hypothesis: Whether we're processing the premise or the hypothesis (for SNLI)
         """
 
@@ -114,7 +105,7 @@ class ThinStack(object):
         self.seq_length = spec.seq_length
         self.stack_size = self.seq_length + 1
         self.model_dim = spec.model_dim
-        self.stack_dim = 2 * self.model_dim if use_attention == "TreeWangJiang" else self.model_dim
+        self.stack_dim = self.model_dim
         self.word_embedding_dim = spec.word_embedding_dim
 
         self._embedding_projection_network = embedding_projection_network
@@ -138,19 +129,6 @@ class ThinStack(object):
         self.interpolate = interpolate
         # Training step number.
         self.ss_prob = ss_prob
-        # Use constituent-by-constituent attention - true for both premise and hypothesis stacks
-        self.use_attention = use_attention
-        # Stores premise stack tops; none for the premise stack
-        self.premise_stack_tops = premise_stack_tops
-        # Attention unit
-        if use_attention == "Rocktaschel" and is_hypothesis:
-            self._attention_unit = util.RocktaschelAttentionUnit
-        elif use_attention == "WangJiang" and is_hypothesis:
-            self._attention_unit = util.WangJiangAttentionUnit
-        elif use_attention == "TreeWangJiang" and is_hypothesis:
-            self._attention_unit = util.TreeWangJiangAttentionUnit
-        else:
-            self._attention_unit = None
 
         # Check whether we're processing the hypothesis or the premise
         self.is_hypothesis = is_hypothesis
@@ -257,8 +235,7 @@ class ThinStack(object):
         self.transitions = self.transitions or T.imatrix(self._prefix + "transitions")
 
     def _step(self, t, t_f, transitions_t, transitions_t_f, ss_mask_gen_matrix_t,
-              buffer_cur_t, attention_hidden, buffer,
-              ground_truth_transitions_visible, premise_stack_tops, *rest):
+              buffer_cur_t, buffer, ground_truth_transitions_visible, *rest):
         batch_size = self.batch_size
 
         # Extract top buffer values.
@@ -318,19 +295,11 @@ class ThinStack(object):
             t, t_f, self.stack, buffer_top_t, merge_ret[0], self.queue, self.cursors,
             mask, self.batch_size, self._stack_shift, self._cursors_shift)
 
-        # If attention is to be used and premise_stack_tops is not None (i.e.
-        # we're processing the hypothesis) calculate the attention weighed representation.
-        if self.use_attention and self.is_hypothesis:
-            attention_hidden = self._attention_unit(attention_hidden, stack_next[:, 0], premise_stack_tops,
-                self.model_dim, self._vs, name=self._prefix + "attention_unit")
-        # premise_stack_tops.shape[0]
-
         # Move buffer cursor as necessary. Since mask == 1 when merge, we
         # should increment each buffer cursor by 1 - mask.
         buffer_cur_next = buffer_cur_t + (1 - transitions_t_f)
 
         # Update auxiliary stacks.
-        # TODO clean this up..
         mask2 = mask.dimshuffle(0, "x")
         ptr_next = t_f * self.batch_size + self._stack_shift
         # TODO: Allow recurrence to state that output i is the same for push +
@@ -342,9 +311,9 @@ class ThinStack(object):
             for aux_stack, aux_output in zip(self.aux_stacks, aux_outputs)}
 
         if self.recurrence.predicts_transitions:
-            ret_val = buffer_cur_next, attention_hidden, stack_2_ptrs, actions_t
+            ret_val = buffer_cur_next, stack_2_ptrs, actions_t
         else:
-            ret_val = buffer_cur_next, attention_hidden, stack_2_ptrs
+            ret_val = buffer_cur_next, stack_2_ptrs
 
         if not self.interpolate:
             # Use ss_mask as a redundant return value.
@@ -417,17 +386,9 @@ class ThinStack(object):
         transitions = self.transitions.dimshuffle(1, 0)
         transitions_f = T.cast(transitions, dtype=theano.config.floatX)
 
-        # Initialize the attention representation if needed.
-        if self.use_attention:
-            attention_init = util.zeros_nobroadcast((batch_size, self.model_dim))
-        else:
-            # If we're not using a sequential attention accumulator (i.e., no attention or
-            # tree attention), use a size-zero value here.
-            attention_init = DUMMY
-
         # Set up the output list for scanning over _step().
         # Final `None` entry is for accumulating `stack_2_ptr` values.
-        outputs_info = [buffer_cur_init, attention_init, None]
+        outputs_info = [buffer_cur_init, None]
         if self.recurrence.predicts_transitions:
             outputs_info.append(None)
 
@@ -448,11 +409,6 @@ class ThinStack(object):
             outputs_info = [DUMMY] + outputs_info
 
         non_sequences = [buffer_t, self.ground_truth_transitions_visible]
-        if self.use_attention and self.is_hypothesis:
-            non_sequences = non_sequences + [self.premise_stack_tops]
-        else:
-            DUMMY2 = T.zeros((2,)) # another dummy tensor
-            non_sequences = non_sequences + [DUMMY, DUMMY2]
 
         # Tack on all relevant params, structures to satisfy strict mode.
         non_sequences += self.aux_stacks + self._vs.vars.values()
@@ -467,9 +423,8 @@ class ThinStack(object):
 
         ret_shift = 0 if self.interpolate else 1
         self.final_buf = scan_ret[ret_shift + 0][-1]
-        self.stack_2_ptrs = scan_ret[ret_shift + 2]
+        self.stack_2_ptrs = scan_ret[ret_shift + 1]
         self.buf_ptrs = scan_ret[ret_shift + 0]
-        self.final_attn_hidden = scan_ret[ret_shift + 1]
 
         self.final_stack = self.scan_updates[self.stack]
         self.final_aux_stacks = [self.scan_updates[aux_stack]
@@ -478,15 +433,7 @@ class ThinStack(object):
 
         self.transitions_pred = None
         if self.recurrence.predicts_transitions:
-            self.transitions_pred = scan_ret[ret_shift + 3][-1].dimshuffle(1, 0, 2)
-
-        # TODO(Raghav): update to work with new stack representation
-        if self.use_attention and not self.is_hypothesis:
-            # Store the stack top at each step as an attribute.
-            self.stack_tops = self.final_stack[self.batch_size:]
-        if self.use_attention and self.is_hypothesis:
-            self.final_weighed_representation = util.AttentionUnitFinalRepresentation(self.final_attn_hidden[-1],
-                self.embeddings, self.model_dim, self._vs)
+            self.transitions_pred = scan_ret[ret_shift + 2][-1].dimshuffle(1, 0, 2)
 
     def _make_backward_graphs(self):
         """Generate gradient subgraphs for this stack's recurrence."""
@@ -824,8 +771,6 @@ class ThinStack(object):
         if self.use_input_dropout:
             aux_data.append(self._embedding_dropout_masks)
         aux_data += self._vs.vars.values() + extra_cost_inputs
-        if self.premise_stack_tops:
-            aux_data.append(self.premise_stack_tops)
         non_sequences += list(set(aux_data))
 
         bscan_ret, self.bscan_updates = theano.scan(
