@@ -47,14 +47,14 @@ class RNN(object):
         self.training_mode = training_mode
 
         self.X = X
-        
+
         self._make_params()
         self._make_inputs()
         self._make_scan()
 
         if make_test_fn:
             self.scan_fn = theano.function([self.X, self.training_mode],
-                                           self.embeddings,
+                                           self.final_representations,
                                            on_unused_input='warn')
 
     def _make_params(self):
