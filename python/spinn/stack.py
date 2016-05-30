@@ -360,6 +360,7 @@ class ThinStack(object):
         max_stack_size = stack_size = self.stack_size
         self.batch_range = batch_range = T.arange(batch_size, dtype="int32")
 
+        # Various indexing helpers. Make sure they're float32.
         self._queue_shift = T.cast(batch_range * self.seq_length,
                                    theano.config.floatX)
         self._buffer_shift = self._queue_shift
@@ -393,8 +394,11 @@ class ThinStack(object):
             outputs_info.append(None)
 
         # Prepare data to scan over.
-        sequences = [T.arange(1, self.seq_length + 1),
+        sequences = [# timesteps
+                     T.arange(1, self.seq_length + 1),
+                     # timesteps (as float)
                      T.arange(1, self.seq_length + 1, dtype="float32"),
+                     # input transitions (as int and as float)
                      transitions, transitions_f]
         if self.interpolate:
             # Generate Bernoulli RVs to simulate scheduled sampling
@@ -476,10 +480,31 @@ class ThinStack(object):
                            extra_cost_inputs=None,
                            compute_embedding_gradients=True):
         """
+        Compile the backpropagation graph for a ThinStack instance.
+
+        This method analyzes the feedforward graph of a ThinStack instance and
+        analytically calculates its gradient with respect to the stack's
+        parameters of interest.
+
+        This method must be called by the client after constructing ThinStack.
+        After creating the gradient graph, the outputs of the graph (gradient
+        batches) are installed into an instance member self.gradients. This
+        object is a dictionary mapping from stack shared variables (parameters)
+        to their symbolic gradients.
+
         Args:
             error_signal: The external gradient d(cost)/d(stack top). A Theano
                 batch of size `batch_size * model_dim`.
+            extra_cost_inputs: Other symbolic variables which may be involved
+                in the symbolic cost expression / the error signal that should
+                be passed as extra inputs to a backpropagation scan.
+            compute_embedding_gradients: Calculate gradients for each embedding
+                vector.
         """
+
+        # The meat of the implementation of this method is in the inner
+        # function step_b. What comes before is mainly preparatory code; what
+        # comes after is the scan invocation that unrolls the step_b function.
 
         assert hasattr(self, "stack_2_ptrs"), \
             ("self._make_scan (forward pass) must be defined before "
@@ -506,6 +531,15 @@ class ThinStack(object):
         if extra_cost_inputs is None:
             extra_cost_inputs = []
 
+        # Analytically calculate backpropagation graphs for an abstract single
+        # timestep. The list 'wrt' contains all variables for which we should
+        # collect gradients (this list of course depends on the nature of the
+        # forward-prop activation function). The latter 3 returns are actually
+        # graph "thunks" which return a concrete backpropagation graph when
+        # provided with actual symbolic inputs / error signals.
+        #
+        # These graphs will be repeatedly invoked and chained together in the
+        # code further below.
         wrt, f_proj_delta, f_push_delta, f_merge_delta = \
                 self._make_backward_graphs()
         wrt_shapes = [wrt_i.get_value().shape for wrt_i in wrt]
@@ -538,16 +572,11 @@ class ThinStack(object):
 
         DUMMY = util.zeros_nobroadcast((1,))
 
-        batch_size = self.batch_size
-        batch_range = T.arange(batch_size)
-        stack_shift = T.cast(batch_range, theano.config.floatX)
-        buffer_shift = T.cast(batch_range * self.seq_length, theano.config.floatX)
-
         def lookup(t_f, stack_fwd, stack_2_ptrs_t, buffer_cur_t,
                   stack_bwd_t, extra_bwd):
             """Retrieve all relevant bwd inputs/outputs at time `t`."""
 
-            grad_cursor = t_f * batch_size + stack_shift
+            grad_cursor = t_f * self.batch_size + self._stack_shift
             main_grad = cuda.AdvancedSubtensor1Floats("B_maingrad")(
                 stack_bwd_t, grad_cursor)
             extra_grads = tuple([
@@ -557,7 +586,7 @@ class ThinStack(object):
 
             # Find the timesteps of the two elements involved in the potential
             # merge at this timestep.
-            t_c1 = (t_f - 1.0) * batch_size + stack_shift
+            t_c1 = (t_f - 1.0) * self.batch_size + self._stack_shift
             t_c2 = stack_2_ptrs_t
 
             # Find the two elements involved in the potential merge.
@@ -565,7 +594,7 @@ class ThinStack(object):
             c2 = cuda.AdvancedSubtensor1Floats("B_stack2")(stack_fwd, t_c2)
 
             buffer_top_t = cuda.AdvancedSubtensor1Floats("B_buffer_top")(
-                self.buffer_t, buffer_cur_t + buffer_shift)
+                self.buffer_t, buffer_cur_t + self._buffer_shift)
 
             # Retrieve extra inputs from auxiliary stack(s).
             extra_inps_t = tuple([
@@ -623,7 +652,7 @@ class ThinStack(object):
             # Retrieve embedding indices on buffer at this timestep.
             # (Necessary for sending embedding gradients.)
             buffer_ids_t = cuda.AdvancedSubtensor1Floats("B_buffer_ids")(
-                    id_buffer, buffer_cur_t + buffer_shift)
+                    id_buffer, buffer_cur_t + self._buffer_shift)
 
             # Prepare masks for op-wise gradient accumulation.
             # TODO: Record actual transitions (e.g. for model 1S and higher)
@@ -632,18 +661,19 @@ class ThinStack(object):
             masks = [mask, mask.dimshuffle(0, "x"),
                      mask.dimshuffle(0, "x", "x")]
 
-            # Insert gradients for the embedding projection network as well.
+            # Accumulate gradients from the embedding projection network into
+            # the stack op gradients.
             if f_proj_delta is not None:
                 # Look up raw buffer top for this timestep -- i.e., buffer top
                 # *before* the op at this timestep was performed. This was the
                 # input to the projection network at this timestep.
                 proj_input = cuda.AdvancedSubtensor1Floats("B_raw_buffer_top")(
-                    self._raw_buffer_t, buffer_cur_t + buffer_shift)
+                    self._raw_buffer_t, buffer_cur_t + self._buffer_shift)
 
                 proj_inputs = (proj_input,)
                 if self.use_input_dropout:
                     embedding_dropout_mask = cuda.AdvancedSubtensor1Floats("B_buffer_dropout")(
-                        self._embedding_dropout_masks, buffer_cur_t + buffer_shift)
+                        self._embedding_dropout_masks, buffer_cur_t + self._buffer_shift)
                     proj_inputs = (proj_input, embedding_dropout_mask)
 
                 # Compute separate graphs based on gradient from above.
@@ -668,7 +698,11 @@ class ThinStack(object):
                                                    (embedding_grad,))
                 p_delta_wrt = util.merge_update_lists(p_delta_wrt, p_proj_delta_wrt)
 
-            # Accumulate inp deltas, switching over push/merge decision.
+            ###########
+            # STEP 1. #
+            ###########
+            # Accumulate deltas onto the graph inputs, switching over
+            # shift/reduce decisions.
             stacks = (stack_bwd_next, stack_bwd_next,
                       (compute_embedding_gradients and dE) or None)
             cursors = (t_c1, t_c2,
@@ -699,7 +733,11 @@ class ThinStack(object):
                     base, delta, cursor)
                 new_stacks[stack] = new_stack
 
-            # Accumulate wrt deltas, switching over push/merge decision.
+            ###########
+            # STEP 2. #
+            ###########
+            # Accumulate deltas with respect to the variables in the wrt store,
+            # again switching over push/merge decision.
             new_wrt_deltas = {}
             wrt_data = enumerate(zip(wrt, zero_jac_wrts, wrt_deltas,
                                      m_delta_wrt, p_delta_wrt))
@@ -752,7 +790,7 @@ class ThinStack(object):
         # buffer pointer values *before* computation at timestep *i* proceeds.
         # (This means we need to slice off the last actual buf_ptr output and
         # prepend a dummy.)
-        buf_ptrs = T.concatenate([T.zeros((1, batch_size,)),
+        buf_ptrs = T.concatenate([T.zeros((1, self.batch_size,)),
                                   self.buf_ptrs[:-1]], axis=0)
 
         sequences = [ts_f, transitions_f, self.stack_2_ptrs, buf_ptrs]
