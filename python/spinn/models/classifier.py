@@ -437,6 +437,11 @@ def run(only_forward=False):
         logger.Log("Bad data type.")
         return
 
+    if FLAGS.model_type != "Model0":
+        raise NotImplementedError("Only basic model 0 (SPINN-PI, SPINN-PI-NT) "
+                                  "is supported in the thin-stack "
+                                  "implementation.")
+
     pp = pprint.PrettyPrinter(indent=4)
     logger.Log("Flag values:\n" + pp.pformat(FLAGS.FlagValuesDict()))
 
