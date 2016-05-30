@@ -1,9 +1,13 @@
 #include "util.h"
 
 float *load_weights(string filename, int N) {
-  float *ret = (float *) malloc(N * sizeof(float));
   cout << filename << endl;
   ifstream file(filename);
+  return load_weights(file, N);
+}
+
+float *load_weights(ifstream& file, int N) {
+  float *ret = (float *) malloc(N * sizeof(float));
 
   float x;
   for (int i = 0; i < N; i++) {
@@ -14,8 +18,8 @@ float *load_weights(string filename, int N) {
   return ret;
 }
 
-float *load_weights_cuda(string filename, int N, float *target) {
-  float *h_weights = load_weights(filename, N);
+float *load_weights_cuda(auto file, int N, float *target) {
+  float *h_weights = load_weights(file, N);
 
   if (!target) {
     float *d_weights;

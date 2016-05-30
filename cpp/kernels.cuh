@@ -35,6 +35,24 @@ namespace kernels {
   __global__ void k_addi_mv(float *m, const float *v, float coeff, int M,
       int N);
 
+  /**
+   * Broadcast-multiply an `N`-dim column vector onto an `M * N` matrix.
+   *
+   *     m *= coeff * v
+   */
+  void muli_mv(float *m, const float *v, float coeff, int M, int N);
+  __global__ void k_muli_mv(float *m, const float *v, float coeff, int M,
+      int N);
+
+  /**
+   * Broadcast-divide an `N`-dim column vector onto an `M * N` matrix.
+   *
+   *     m /= coeff * v
+   */
+  void divi_mv(float *m, const float *v, float coeff, int M, int N);
+  __global__ void k_divi_mv(float *m, const float *v, float coeff, int M,
+      int N);
+
   void relu(float *m, int M, int N);
   __global__ void k_relu(float *m, int M, int N);
 

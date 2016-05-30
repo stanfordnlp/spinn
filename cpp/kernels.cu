@@ -42,6 +42,38 @@ __global__ void k_addi_mv(float *m, const float *v, float coeff, int M, int N) {
 }
 
 
+void muli_mv(float *m, const float *v, float coeff, int M, int N) {
+  // NB: a bias here: that we're working with small M, large N
+  int num_threads = min(M, MAX_THREADS_PER_BLOCK);
+  int num_blocks = min(N, MAX_BLOCKS);
+  k_muli_mv<<<num_blocks, num_threads>>>(m, v, coeff, M, N);
+}
+
+__global__ void k_muli_mv(float *m, const float *v, float coeff, int M, int N) {
+  for (int i0 = blockIdx.x; i0 < N; i0 += gridDim.x) {
+    for (int i1 = threadIdx.x; i1 < M; i1 += blockDim.x) {
+      m[i0 * M + i1] *= coeff * v[i1];
+    }
+  }
+}
+
+void divi_mv(float *m, const float *v, float coeff, int M, int N) {
+  // NB: a bias here: that we're working with small M, large N
+  int num_threads = min(M, MAX_THREADS_PER_BLOCK);
+  int num_blocks = min(N, MAX_BLOCKS);
+  k_divi_mv<<<num_blocks, num_threads>>>(m, v, coeff, M, N);
+}
+
+__global__ void k_divi_mv(float *m, const float *v, float coeff, int M, int N) {
+  for (int i0 = blockIdx.x; i0 < N; i0 += gridDim.x) {
+    for (int i1 = threadIdx.x; i1 < M; i1 += blockDim.x) {
+      m[i0 * M + i1] /= coeff * v[i1];
+    }
+  }
+}
+
+
+
 void relu(float *m, int M, int N) {
   // NB: a bias here: that we're working with small M, large N
   int num_threads = min(M, MAX_THREADS_PER_BLOCK);
