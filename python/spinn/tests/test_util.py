@@ -29,8 +29,8 @@ def test_load_embeddings_from_ascii():
     expected = np.asarray(
         [[0, 0, 0, 0, 0],
         [0.418, 0.24968, -0.41242, 0.1217, 0.34527],
-        [0.15164, 0.30177, -0.16763, 0.17684, 0.31719]])
-    
+        [0.15164, 0.30177, -0.16763, 0.17684, 0.31719]], dtype=np.float32)
+
     np.testing.assert_array_equal(loaded_matrix, expected)
 
 def test_crop_and_pad_example():
