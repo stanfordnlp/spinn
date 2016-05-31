@@ -10,6 +10,18 @@
 #include "kernels.cuh"
 
 
+struct ThinStackSpec : public SequenceModelSpec {
+  size_t tracking_lstm_dim;
+
+  ThinStackSpec(size_t model_dim, size_t word_embedding_dim, size_t batch_size,
+                size_t vocab_size, size_t seq_length, size_t model_visible_dim,
+                size_t tracking_lstm_dim)
+      : SequenceModelSpec(model_dim, word_embedding_dim, batch_size,
+                          vocab_size, seq_length, model_visible_dim),
+        tracking_lstm_dim(tracking_lstm_dim) {};
+};
+
+
 typedef struct ThinStackParameters {
   float *tracking_W_inp;
   float *tracking_W_hid;
@@ -25,7 +37,7 @@ class ThinStack : public SequenceModel {
     /**
      * Constructs a new `ThinStack`.
      */
-    ThinStack(ModelSpec spec, ThinStackParameters params,
+    ThinStack(ThinStackSpec spec, ThinStackParameters params,
             cublasHandle_t handle);
 
     ~ThinStack();

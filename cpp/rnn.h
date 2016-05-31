@@ -18,7 +18,7 @@ typedef struct RNNParameters {
 
 class RNN : public SequenceModel {
   public:
-    RNN(ModelSpec spec, RNNParameters params, cublasHandle_t handle);
+    RNN(SequenceModelSpec spec, RNNParameters params, cublasHandle_t handle);
     ~RNN();
 
     RNNParameters params;

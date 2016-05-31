@@ -14,20 +14,10 @@ using namespace std;
 
 #define DEBUG 0
 
-typedef struct ModelSpec {
-  size_t model_dim;
-  size_t word_embedding_dim;
-  size_t batch_size;
-  size_t vocab_size;
-  size_t seq_length;
-  size_t model_visible_dim;
-  size_t tracking_lstm_dim;
-} ModelSpec;
-
-
 float *load_weights(string filename, int N);
 float *load_weights(ifstream& file, int N);
 float *load_weights_cuda(string filename, int N, float *target=NULL);
+float *load_weights_cuda(ifstream& file, int N, float *target=NULL);
 
 cublasHandle_t getCublasHandle();
 

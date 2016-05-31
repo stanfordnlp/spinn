@@ -28,7 +28,7 @@
 #include "util.h"
 
 
-ThinStackParameters load_params(ModelSpec spec) {
+ThinStackParameters load_params(ThinStackSpec spec) {
   float *compose_W_l = load_weights_cuda("params/compose_W_l.txt",
       spec.model_dim * spec.model_dim);
   float *compose_W_r = load_weights_cuda("params/compose_W_r.txt",
@@ -50,7 +50,7 @@ void destroy_params(ThinStackParameters params) {
 }
 
 int main() {
-  ModelSpec spec = {
+  ThinStackSpec spec = {
       300, // Dimension of stack values / constituent node values
       300, // Word embedding dimension / tree leaf embedding dimension
       (size_t) atoi(getenv("BATCH_SIZE")), // Batch size

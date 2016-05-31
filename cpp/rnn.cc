@@ -11,7 +11,7 @@ using namespace std;
 namespace k = kernels;
 
 
-RNN::RNN(ModelSpec spec, RNNParameters params, cublasHandle_t handle)
+RNN::RNN(SequenceModelSpec spec, RNNParameters params, cublasHandle_t handle)
   : SequenceModel(spec), params(params), handle(handle) {
 
   // Pre-allocate inputs.

@@ -1,5 +1,14 @@
 #include "util.h"
 
+float *move_var_to_device(float *h_source, int N, float *d_target=NULL) {
+  if (!d_target)
+    cudaMalloc(&d_target, N * sizeof(float));
+
+  cudaMemcpy(d_target, h_source, N * sizeof(float), cudaMemcpyHostToDevice);
+  free(h_source);
+  return d_target;
+}
+
 float *load_weights(string filename, int N) {
   cout << filename << endl;
   ifstream file(filename);
@@ -18,18 +27,14 @@ float *load_weights(ifstream& file, int N) {
   return ret;
 }
 
-float *load_weights_cuda(auto file, int N, float *target) {
+float *load_weights_cuda(string file, int N, float *target) {
   float *h_weights = load_weights(file, N);
+  return move_var_to_device(h_weights, N, target);
+}
 
-  if (!target) {
-    float *d_weights;
-    cudaMalloc(&d_weights, N * sizeof(float));
-    target = d_weights;
-  }
-  cudaMemcpy(target, h_weights, N * sizeof(float),
-        cudaMemcpyHostToDevice);
-  free(h_weights);
-  return target;
+float *load_weights_cuda(ifstream& file, int N, float *target) {
+  float *h_weights = load_weights(file, N);
+  return move_var_to_device(h_weights, N, target);
 }
 
 

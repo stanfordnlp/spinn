@@ -10,7 +10,7 @@
 
 using namespace testing;
 
-static ThinStack make_stack(ModelSpec spec) {
+static ThinStack make_stack(ThinStackSpec spec) {
   // Make up random parameters.
   float *compose_W_l, *compose_W_r, *compose_b;
   cudaMalloc(&compose_W_l, spec.model_dim * spec.model_dim * sizeof(float));
@@ -91,11 +91,11 @@ class ThinStackTest : public ::testing::Test {
 
   public:
 
-    ModelSpec spec;
+    ThinStackSpec spec;
     ThinStack ts;
 
     ThinStackTest() :
-      spec({300, 300, 2, 10, 5, 300}),
+      spec({300, 300, 2, 10, 5, 300, 0}),
       ts(make_stack(spec)) {
 
       fill_rand_matrix(ts.X, spec.model_dim, spec.seq_length * spec.batch_size);

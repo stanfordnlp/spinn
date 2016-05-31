@@ -24,7 +24,7 @@ using namespace std;
 namespace k = kernels;
 
 
-ThinStack::ThinStack(ModelSpec spec, ThinStackParameters params,
+ThinStack::ThinStack(ThinStackSpec spec, ThinStackParameters params,
     cublasHandle_t handle)
   : SequenceModel(spec), params(params), stack_size(spec.seq_length),
     handle(handle) {

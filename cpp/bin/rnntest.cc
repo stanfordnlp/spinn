@@ -8,7 +8,7 @@
 #include "util.h"
 
 
-RNNParameters load_params(ModelSpec spec) {
+RNNParameters load_params(RNNSpec spec) {
   float *U = make_rand_matrix(spec.model_dim, spec.model_dim);
   float *W = make_rand_matrix(spec.model_dim, spec.word_embedding_dim);
   float *b = make_rand_matrix(spec.model_dim, 1);
@@ -24,7 +24,7 @@ void destroy_params(RNNParameters params) {
 }
 
 int main() {
-  ModelSpec spec = {300, 300, (size_t) atoi(getenv("BATCH_SIZE")), 10, 30, 300};
+  RNNSpec spec = {300, 300, (size_t) atoi(getenv("BATCH_SIZE")), 10, 30, 300};
   RNNParameters params = load_params(spec);
 
   cublasHandle_t handle;

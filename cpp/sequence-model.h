@@ -7,12 +7,31 @@
 
 #include "kernels.cuh"
 
+
+struct SequenceModelSpec {
+  size_t model_dim;
+  size_t word_embedding_dim;
+  size_t batch_size;
+  size_t vocab_size;
+  size_t seq_length;
+  size_t model_visible_dim;
+
+  SequenceModelSpec(size_t model_dim, size_t word_embedding_dim,
+                    size_t batch_size, size_t vocab_size, size_t seq_length,
+                    size_t model_visible_dim)
+    : model_dim(model_dim), word_embedding_dim(word_embedding_dim),
+      batch_size(batch_size), vocab_size(vocab_size), seq_length(seq_length),
+      model_visible_dim(model_visible_dim) {};
+
+};
+
+
 class SequenceModel {
 
   public:
 
-    ModelSpec spec;
-    SequenceModel(ModelSpec spec) : spec(spec) {};
+    SequenceModelSpec spec;
+    SequenceModel(SequenceModelSpec spec) : spec(spec) {};
 
     // Embedding index inputs, of dimension `batch_size * seq_length` -- i.e.,
     // we have `seq_length`-many concatenated vectors of embedding integers
