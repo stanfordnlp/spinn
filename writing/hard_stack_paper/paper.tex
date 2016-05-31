@@ -218,7 +218,7 @@ For SPINN to operate on unparsed inputs, it needs to produce its own transition 
 \begin{equation}
 \vec{p}_{\text{a}} = \text{softmax}(W_{\text{trans}}\vec{h}_{\text{tracking}} + \vec{b}_{\text{trans}})
 \end{equation}
-This is the close to being simplest viable implementation of a transition decision function. In contrast, the decision functions in sate-of-the-art transition-based parsers tend to use significantly richer feature sets as inputs, including features containing information about several upcoming words on the buffer instead of just one supplied to the tracking LSTM.
+This is the close to being simplest viable implementation of a transition decision function. In contrast, the decision functions in state-of-the-art transition-based parsers tend to use significantly richer feature sets as inputs, including features containing information about several upcoming words on the buffer instead of just one supplied to the tracking LSTM.
 
 At test time, the model uses whichever transition (i.e., \shift\ or \reduce) is assigned a higher (unnormalized) probability. The prediction function is trained to mimic the decisions of an external parser. These decisions are used as the inputs to the model during training. For SNLI, we use the binary Stanford PCFG Parser parses that are included with the corpus. We did not find scheduled sampling \citep{bengio2015scheduled}---having the model use its own transition decisions sometimes at training time---to help.
 
