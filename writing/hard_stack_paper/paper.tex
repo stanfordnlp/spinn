@@ -250,8 +250,6 @@ We propose a space-efficient stack representation inspired by the zipper techniq
 
 This stack representation requires substantially less space. It stores each element involved in the feedforward computation exactly once, meaning that this representation can still support efficient backpropagation. Furthermore, all of the updates to $S$ and $Q$ can be performed batched and in-place on a GPU, yielding substantial speed gains over both a more na\"ive SPINN implementation and a standard TreeRNN implementation. We describe speed results in Section~\ref{sec:speed}.
 
-A simpler variant of this technique can be used to represent the buffer, since information is not written to the buffer during model operation. It can be stored as a single fixed matrix with a scalar pointer variable indicating which element is the head at each step.
-
 \begin{algorithm}[t]
 \caption{The thin stack algorithm}
 \label{alg:thin-stack}
