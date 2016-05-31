@@ -234,8 +234,8 @@ At test time, the model uses whichever transition (i.e., \shift\ or \reduce) is 
   1 & \shift & \word{Spot} & \hphantom{0} \underline{\hphantom{0} 1} \\
   2 & \shift & \word{sat} & \hphantom{0} \hphantom{0} \underline{1 2} \\
   3 & \reduce & \word{down} & \hphantom{0} \hphantom{0} 1 \underline{2 3} \\
-  4 & \reduce & \word{sat down} & \hphantom{0} \hphantom{0} \underline{1 4} \\
-  5 & & \word{Spot} (\word{sat down}) & \hphantom{0} \underline{\hphantom{0} 5} \\
+  4 & \reduce & (\word{sat down}) & \hphantom{0} \hphantom{0} \underline{1 4} \\
+  5 & & (\word{Spot} (\word{sat down})) & \hphantom{0} \underline{\hphantom{0} 5} \\
   \bottomrule
 \end{tabular}
 \caption{The thin-stack algorithm operating on the input sequence $\mathbf x = \text{(\word{Spot}, \word{sat}, \word{down})}$ and the transition sequence shown in the second column. $S$ is shown in the third column and represents the top of the stack at each step $t$. The last two elements of $Q$ (underlined) specify which rows $t$ would be involved in a \reduce\ operation at the next step.}
