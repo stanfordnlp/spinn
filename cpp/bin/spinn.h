@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <fstream>
 
+#include "sequence-model.h"
 #include "thin-stack.h"
 #include "util.h"
 
@@ -32,6 +33,34 @@ typedef struct SpinnParameters {
 
   float *classifier_W;
   float *classifier_b;
+}
+
+
+class Spinn {
+  /**
+   * SPINN classifier which wraps around a thin-stack algorithm instance.
+   */
+
+  public:
+    Spinn(SpinnSpec spec, SpinnParameters params, cublasHandle_t handle);
+
+    SpinnParameters params;
+    cublasHandle_t handle;
+
+    void forward();
+
+    float *X;
+    float *y;
+    float *transitions;
+
+  private:
+
+    ThinStack ts;
+
+    // Feedforward containers
+    float **sentence_combinations;
+    float *logits;
+
 }
 
 

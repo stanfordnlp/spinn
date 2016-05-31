@@ -54,6 +54,7 @@ class VariableStore(object):
                 keys = self.savable_vars
         save_file = open(filename)
         for key in keys:
+            print key
             if skip_saved_unsavables and key not in self.savable_vars:
                 if self.logger:
                     full_name = "%s/%s" % (self.prefix, key)

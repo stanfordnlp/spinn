@@ -4,9 +4,6 @@
 #include "cublas_v2.h"
 
 
-void forward_batch()
-
-
 int main() {
   // TODO parse args to build spec
   SpinnSpec spec;
