@@ -93,7 +93,7 @@ Raghav Gupta$^{2,3,6}$ \\
 Christopher D.\ Manning$^{1,2,3,6}$\\
 \texttt{\small manning@stanford.edu}\\
 \And
-Christopher Potts$^{1}$\\
+Christopher Potts$^{1,6}$\\
 \texttt{\small cgpotts@stanford.edu}
 \AND\\[-3ex]
 {$^{1}$Stanford Linguistics\quad
@@ -317,7 +317,7 @@ Though this experiment only covers SPINN-PI-NT, the results should be similar fo
 
 \section{NLI Experiments}
 
-We evaluate SPINN on the task of natural language inference \citep[NLI, a.k.a.\ recognizing textual entailment, or RTE;][]{dagan2006pascal}. NLI is a sentence pair classification task, in which a model reads two sentences (a premise and a hypothesis), and outputs a judgment of {\it entailment}, {\it contradiction}, or {\it neutral}, reflecting the relationship between the meanings of the two sentences. Below is an example sentence pair and judgement from the SNLI corpus which we use in our experiments:
+We evaluate SPINN on the task of natural language inference \citep[NLI, a.k.a.\ recognizing textual entailment, or RTE;][]{dagan2006pascal}. NLI is a sentence pair classification task, in which a model reads two sentences (a premise and a hypothesis), and outputs a judgment of {\it entailment}, {\it contradiction}, or {\it neutral}, reflecting the relationship between the meanings of the two sentences. Below is an example sentence pair and judgment from the SNLI corpus which we use in our experiments:
 
 \snli{Girl in a red coat, blue head wrap and jeans is making a snow angel.}
 {A girl outside plays in the snow.}
@@ -348,7 +348,7 @@ Classifier MLP layers & 1--3 & \textsc{lin} & 2 & 2 & 2 & 1\\
 \end{center}
 \caption{
 \label{tab:hyperparams}
-Hyperparameter ranges and values. \ii{Range} shows the hyperparameter ranges explored during random search. \ii{Strategy} indicates whether sampling from the range was uniform, or log--uniform.
+Hyperparameter ranges and values. \ii{Range} shows the hyperparameter ranges explored during random search. \ii{Strategy} indicates whether sampling from the range was uniform, or log-uniform.
 }
 \end{table*}
 
@@ -431,7 +431,7 @@ Lexicalized classifier \citep{snli:emnlp2015}
 %                         & 1.4m               & --                &   92.3   &   \textbf{89.1}      \\
     \bottomrule
   \end{tabular}
-\caption{\protect\label{tab:results}Results on SNLI 3-way inference classification. Params. is the approximate number of trained parameters (excluding word embeddings for all models). Trans. acc. is the model's accuracy in predicting parsing transitions at test time. Train and test are SNLI classification accuracy.}
+\caption{\protect\label{tab:results}Results on SNLI 3-way inference classification. Params.\ is the approximate number of trained parameters (excluding word embeddings for all models). Trans.\ acc.\ is the model's accuracy in predicting parsing transitions at test time. Train and test are SNLI classification accuracy.}
 \end{table*}
 
 \subsection{Results}
@@ -473,7 +473,7 @@ Finally, as is likely inevitable for models evaluated on SNLI, all four models u
 
 We introduce a model architecture (SPINN-PI-NT) that is equivalent to a TreeLSTM, but an order of magnitude faster at test time. We expand that architecture into a tree-sequence hybrid model (SPINN-PI), and show that this yields significant gains on the SNLI entailment task. Finally, we show that it is possible to exploit the strengths of this model without the need for an external parser by integrating a fast parser into the model (as in the full SPINN), and that the lack of external parse information yields little loss in accuracy.
 
-Because this paper aims to introduce a general purpose model for sentence encoding, we do not pursue the use of soft attention \citep{bahdanau2014neural,rocktaschel2015reasoning}, despite its demonstrated effectiveness on the SNLI task.\footnote{Attention based models like \citet{rocktaschel2015reasoning,wang2015learning} and the unpublished \citet{cheng2016long} have shown accuracies as high as 86.1\% on SNLI, but are more narrowly engineered to suit the task, and do not yield sentence encodings.} However, we expect that it should be possible to productively combine our model with soft attention to reach state-of-the-art performance. 
+Because this paper aims to introduce a general purpose model for sentence encoding, we do not pursue the use of soft attention \citep{bahdanau2014neural,rocktaschel2015reasoning}, despite its demonstrated effectiveness on the SNLI task.\footnote{Attention-based models like \citet{rocktaschel2015reasoning,wang2015learning} and the unpublished \citet{cheng2016long} have shown accuracies as high as 86.3\% on SNLI, but are more narrowly engineered to suit the task, and do not yield sentence encodings.} However, we expect that it should be possible to productively combine our model with soft attention to reach state-of-the-art performance. 
 
 Our tracking LSTM uses only simple, quick-to-compute features drawn from the head of the buffer and the head of the stack. It is plausible that giving the tracking LSTM access to more information from the buffer and stack at each step would allow it to better represent the context at each tree node, yielding both better parsing and better sentence encoding. One promising way to pursue this goal would be to encode the full contents of the stack and buffer at each time step following the method used by \citet{dyer-EtAl:2015:ACL-IJCNLP}.
 
