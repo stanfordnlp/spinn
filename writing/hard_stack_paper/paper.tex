@@ -10,7 +10,7 @@
 % in the camera-ready version and ask you to change it back.
 
 \usepackage[leqno, fleqn]{amsmath}
-\usepackage[breaklinks, colorlinks, linkcolor=black, urlcolor=black, citecolor=black, draft]{hyperref}
+\usepackage[breaklinks, colorlinks, linkcolor=black, urlcolor=black, citecolor=black]{hyperref}
 \usepackage{natbib}
 % \usepackage{times}
 \usepackage{newtxtext,newtxmath}
@@ -224,31 +224,11 @@ At test time, the model uses whichever transition (i.e., \shift\ or \reduce) is 
 
 \subsection{Implementation issues}
 
-\begin{table}[t]
-\centering
-\begin{tabular}{c @{\hspace*{1.5em}}c @{\hspace*{1.5em}} lc}
-  \toprule
-  $t$ & $S$[$t$] & \multicolumn{1}{c}{$Q_t$} & $a_t$ \\
-  \midrule
-  0 &   & \underline{\hphantom{0} \hphantom{0}} & \shift \\
-  1 &  \word{Spot} & \hphantom{0} \underline{\hphantom{0} 1} & \shift \\
-  2 &  \word{sat} & \hphantom{0} \hphantom{0} \underline{1 2} & \shift \\
-  3  &   \word{down} & \hphantom{0} \hphantom{0} 1 \underline{2 3} & \reduce\\
-  4  &   (\word{sat down}) & \hphantom{0} \hphantom{0} \underline{1 4} & \reduce\\
-  5  & (\word{Spot} (\word{sat down})) & \hphantom{0} \underline{\hphantom{0} 5} &        \\
-  \bottomrule
-\end{tabular}
-\caption{The thin-stack algorithm operating on the input sequence $\mathbf x = \text{(\word{Spot}, \word{sat}, \word{down})}$ and the transition sequence shown in the second column. $S$ is shown in the third column and represents the top of the stack at each step $t$. The last two elements of $Q$ (underlined) specify which rows $t$ would be involved in a \reduce\ operation at the next step.}
-\label{tbl:thin-stack}
-\end{table}
-
 \paragraph{Representing the stack efficiently}
 
 A na\"ive implementation of SPINN needs to handle a size $O(N)$ stack at each timestep, any element of which may be involved in later computations. A na\"ive backpropagation implementation would then require storing each of the $O(N)$ stacks for a backward pass, leading to a per-example space requirement of $O(NTD)$ floats. This requirement is prohibitively large for significant batch sizes or sentence lengths $N$. Such a na\"ive implementation would also require copying a largely unchanged stack at each timestep, since each \shift\ or \reduce\ operation writes only one new representation to the top of the stack.
 
 We propose a space-efficient stack representation inspired by the zipper technique \citep{huet1997zipper} that we call \textit{thin stack}. For each input sentence, we represent the stack with a single $T \times D$ matrix $S$. Each row $S[t]$ (for $0<t\le T$) represents the top of the actual stack at timestep $t$. At each timestep we can \shift\ a new element onto the stack, or \reduce\ the top two elements of the stack into a single element. To shift an element from the buffer to the top of the stack at timestep $t$, we simply write it into the location $S[t]$. In order to perform the \reduce\ operation, we need to retrieve the top two elements of the actual stack. We maintain a queue $Q$ of pointers into $S$ which contains the row indices of $S$ which are still present in the actual stack. The top two elements of the stack can be found by using the final two pointers in the queue $Q$. These retrieved elements are used to perform the \reduce\ operation, which modifies $Q$ to mark that some rows of $S$ have now been replaced in the actual stack. Algorithm~\ref{alg:thin-stack} describes the full mechanics of a stack feedforward in this compressed representation. It operates on the single $T \times D$ matrix $S$ and a backpointer queue $Q$. Table~\ref{tbl:thin-stack} shows an example run.
-
-This stack representation requires substantially less space. It stores each element involved in the feedforward computation exactly once, meaning that this representation can still support efficient backpropagation. Furthermore, all of the updates to $S$ and $Q$ can be performed batched and in-place on a GPU, yielding substantial speed gains over both a more na\"ive SPINN implementation and a standard TreeRNN implementation. We describe speed results in Section~\ref{sec:speed}.
 
 \begin{algorithm}[t]
 \caption{The thin stack algorithm}
@@ -267,7 +247,27 @@ This stack representation requires substantially less space. It stores each elem
 \end{algorithmic}
 \end{algorithm}
 
+This stack representation requires substantially less space. It stores each element involved in the feedforward computation exactly once, meaning that this representation can still support efficient backpropagation. Furthermore, all of the updates to $S$ and $Q$ can be performed batched and in-place on a GPU, yielding substantial speed gains over both a more na\"ive SPINN implementation and a standard TreeRNN implementation. We describe speed results in Section~\ref{sec:speed}.
+
 \paragraph{Preparing the data} At training time, SPINN requires both a transition sequence $\mathbf a$  and a token sequence $\mathbf x$ as its inputs for each sentence. The token sequence is simply the words in the sentence in order. $\mathbf a$ can be obtained from any constituency parse for the sentence by first converting that parse into an unlabeled binary parse, then linearizing it (with the usual in-order traversal), then taking each word token as a \shift\ transition and each `)' as a \reduce\ transition, as here:
+
+\begin{table}[t]
+\centering
+\begin{tabular}{c @{\hspace*{1.5em}}c @{\hspace*{1.5em}} lc}
+  \toprule
+  $t$ & $S$[$t$] & \multicolumn{1}{c}{$Q_t$} & $a_t$ \\
+  \midrule
+  0 &   & \underline{\hphantom{0} \hphantom{0}} & \shift \\
+  1 &  \word{Spot} & \hphantom{0} \underline{\hphantom{0} 1} & \shift \\
+  2 &  \word{sat} & \hphantom{0} \hphantom{0} \underline{1 2} & \shift \\
+  3  &   \word{down} & \hphantom{0} \hphantom{0} 1 \underline{2 3} & \reduce\\
+  4  &   (\word{sat down}) & \hphantom{0} \hphantom{0} \underline{1 4} & \reduce\\
+  5  & (\word{Spot} (\word{sat down})) & \hphantom{0} \underline{\hphantom{0} 5} &        \\
+  \bottomrule
+\end{tabular}
+\caption{The thin-stack algorithm operating on the input sequence $\mathbf x = \text{(\word{Spot}, \word{sat}, \word{down})}$ and the transition sequence shown in the second column. $S$ is shown in the third column and represents the top of the stack at each step $t$. The last two elements of $Q$ (underlined) specify which rows $t$ would be involved in a \reduce\ operation at the next step.}
+\label{tbl:thin-stack}
+\end{table}
 
 \vspace{0.5em}
 {\noindent\small
