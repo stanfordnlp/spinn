@@ -416,19 +416,6 @@ Lexicalized classifier \citep{snli:emnlp2015}
                         & 3.7m                  & ---                &   89.2      &   \textbf{83.2}       \\
 300D SPINN (unparsed input) encoders
                         & 2.7m                  & 92.4           &   87.2    &   82.6      \\
-% \result{300D SPINN-PI, sequence-based attn.   }
-%                         & ?                  & --                &   ?      &   86.3dv         \\
-% \result{300D SPINN-PI, tree-based attn. }
-%                         & ?                  & --                &   ?      &   \textbf{?}\\
-% \midrule
-% \multicolumn{5}{c}{Other previous NN results}\\
-% \midrule
-% 100D LSTM w/ word-by-word attention \citep{rocktaschel2015reasoning}
-%                         & 252k               & --              &   85.3   &   83.5       \\
-% 300D mLSTM word-by-word attention model \citep{DBLP:journals/corr/WangJ15b}
-%                         & 1.9m               & --             &   92.0   &   86.1      \\
-% 300D LSTMN with deep attention fusion \citep{cheng2016long}
-%                         & 1.4m               & --                &   92.3   &   \textbf{89.1}      \\
     \bottomrule
   \end{tabular}
 \caption{\protect\label{tab:results}Results on SNLI 3-way inference classification. Params.\ is the approximate number of trained parameters (excluding word embeddings for all models). Trans.\ acc.\ is the model's accuracy in predicting parsing transitions at test time. Train and test are SNLI classification accuracy.}
