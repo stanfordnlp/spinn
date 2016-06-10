@@ -19,11 +19,27 @@ Full Python package requirements are listed in [`requirements.txt`][2].
 
 We use a modified version of Theano in order to support fast forward- and backward-prop in `thin-stack` (see the [`theano-hacked` repository][3]). While it isn't absolutely necessary to use this hacked Theano, it greatly improves `thin-stack` performance.
 
+To install everything you need, run the following to get our requirements specification (also available from GitHub) and install everything in it. *WARNING:* This installs our 
+custom branch of Theano, so it may be dangerous to run this in an environment where you'll also be running code that depends upon stock Theano.
+
+    wget https://raw.githubusercontent.com/stanfordnlp/spinn/master/python/requirements.txt
+    python -m pip install -r requirements.txt
+
 We also require CUDA >= 7.0 with CuDNN v4. (CuDNN v5 is not compatible with our fork of Theano.)
 
 ### Running the code
 
-TODO
+The main executable for the SNLI experiments in the paper is [fat_classifier.py](https://github.com/stanfordnlp/spinn/blob/master/python/spinn/models/fat_classifier.py), whose flags specify the hyperparameters of the model. You may also need to set Theano flags through the THEANO_FLAGS environment variable, which specifies compilation mode (set it to `fast_compile` during development, and delete it to use the default state for longer runs), `device`, which can be set to `cpu` or `gpu#`, and `cuda.root`, which specifies the location of CUDA when running on GPU. `floatX` should always be set to `float32`.
+
+Here's a sample command that runs a fast, low-dimensional CPU training run, training and testing only on the dev set. It assumes that you have a copy of [SNLI](http://nlp.stanford.edu/projects/snli/) available locally.
+
+    PYTHONPATH=spinn/python THEANO_FLAGS=optimizer=fast_compile,device=cpu,compiledir=/tmp/theano.tmp,floatX=float32 python2.7 -m spinn.models.fat_classifier --data_type snli --training_data_path snli_1.0/snli_1.0_dev.jsonl --eval_data_path snli_1.0/snli_1.0_dev.jsonl --embedding_data_path spinn/python/spinn/tests/test_embedding_matrix.5d.txt --word_embedding_dim 5 --model_dim 10
+
+For full runs, you'll also need a copy of the 840B word 300D [GloVe word vectors](http://nlp.stanford.edu/projects/glove/).
+
+The commands to reproduce our main results can be found [here](https://github.com/stanfordnlp/spinn/blob/master/checkpoints/commands.sh).
+
+
 
 ## C++ code
 
