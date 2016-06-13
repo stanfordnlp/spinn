@@ -10,7 +10,7 @@
 % in the camera-ready version and ask you to change it back.
 
 \usepackage[leqno, fleqn]{amsmath}
-\usepackage[breaklinks, colorlinks, linkcolor=black, urlcolor=black, citecolor=black, draft]{hyperref}
+\usepackage[breaklinks, colorlinks, linkcolor=black, urlcolor=black, citecolor=black]{hyperref}
 \usepackage{natbib}
 % \usepackage{times}
 \usepackage{newtxtext,newtxmath}
@@ -93,7 +93,7 @@ Raghav Gupta$^{2,3,6}$ \\
 Christopher D.\ Manning$^{1,2,3,6}$\\
 \texttt{\small manning@stanford.edu}\\
 \And
-Christopher Potts$^{1}$\\
+Christopher Potts$^{1,6}$\\
 \texttt{\small cgpotts@stanford.edu}
 \AND\\[-3ex]
 {$^{1}$Stanford Linguistics\quad
@@ -123,7 +123,7 @@ A wide range of current models in NLP are built around a neural network componen
 
 Of these, the TreeRNN appears to be the principled choice, since meaning in natural language sentences is known to be constructed recursively according to a tree structure \citep[][i.a.]{Dowty07DC}. TreeRNNs have shown promise \citep{tai2015improved,li2015tree,bowman2015trees}, but have largely been overlooked in favor of sequence-based RNNs because of their incompatibility with batched computation and their reliance on external parsers.  Batched computation---performing synchronized computation across many examples at once---yields order-of-magnitude improvements in model run time, and is crucial in enabling neural networks to be trained efficiently on large datasets. Because TreeRNNs use a different model structure for each sentence, as in Figure~\ref{fig:batching}, efficient batching is impossible in standard implementations. Partly to address efficiency problems, standard TreeRNN models commonly only operate on sentences that have already been processed by a syntactic parser, which slows and complicates the use of these models at test time for most applications.
 
-This paper introduces a new model to address both these issues: the Stack-augmented Parser-Interpreter Neural Network, or SPINN, shown in Figure~\ref{fig:m1-views}. SPINN executes the computations of a tree-structured model in a linearized sequence, and can incorporate a neural network parser that produces the required parse structure on the fly. This design improves upon the TreeRNN architecture in three ways: At test time, it can simultaneously parse and interpret unparsed sentences, removing the dependence on an external parser and saving its additional computational cost. Secondly, it supports batched computation for both parsed and unparsed sentences, yielding dramatic speedups over standard TreeRNNs. Finally, it supports a novel tree-sequence hybrid architecture for handling local linear context in sentence interpretation. This model is a basically plausible model of human sentence processing and yields substantial accuracy gains over pure sequence- or tree-based models. % TRIMMABLE
+This paper introduces a new model to address both these issues: the Stack-augmented Parser-Interpreter Neural Network, or SPINN, shown in Figure~\ref{fig:m1-views}. SPINN executes the computations of a tree-structured model in a linearized sequence, and can incorporate a neural network parser that produces the required parse structure on the fly. This design improves upon the TreeRNN architecture in three ways: At test time, it can simultaneously parse and interpret unparsed sentences, removing the dependence on an external parser at nearly no additional computational cost. Secondly, it supports batched computation for both parsed and unparsed sentences, yielding dramatic speedups over standard TreeRNNs. Finally, it supports a novel tree-sequence hybrid architecture for handling local linear context in sentence interpretation. This model is a basically plausible model of human sentence processing and yields substantial accuracy gains over pure sequence- or tree-based models. % TRIMMABLE
 
 We evaluate SPINN on the Stanford Natural Language Inference entailment task \citep[SNLI,][]{snli:emnlp2015}, and find that it significantly outperforms other sentence-encoding-based models, even with a relatively simple and underpowered implementation of the built-in parser. We also find that SPINN yields speed increases of up to 25$\times$ over a standard TreeRNN implementation.
 
@@ -139,7 +139,7 @@ There is a fairly long history of work on building neural network-based parsers 
 
 SPINN is inspired by shift-reduce parsing \citep{aho1972theory}, which builds a tree structure over a sequence (e.g., a natural language sentence) by a single left-to-right scan over its tokens. The formalism is widely used in natural language parsing \citep[e.g.,][]{shieber:1983:ACL,nivre2003efficient}.
 
-A shift-reduce parser accepts a sequence of input tokens $\mathbf x = (x_0, \dots, x_{N-1})$ and consumes transitions $\mathbf a = (a_0, \dots, a_{T-1})$, where each $a_t \in \{\shift, \reduce\}$ specifies one step of the parsing process. In general a parser may also generate these transitions on the fly as it reads the tokens. It proceeds left-to-right through a transition sequence, combining the input tokens $\mathbf x$ incrementally into a tree structure. For any binary-branching tree structure over $N$ words, this requires $T=2N-1$ transitions and $2N$ states.
+A shift-reduce parser accepts a sequence of input tokens $\mathbf x = (x_0, \dots, x_{N-1})$ and consumes transitions $\mathbf a = (a_0, \dots, a_{T-1})$, where each $a_t \in \{\shift, \reduce\}$ specifies one step of the parsing process. In general a parser may also generate these transitions on the fly as it reads the tokens. It proceeds left-to-right through a transition sequence, combining the input tokens $\mathbf x$ incrementally into a tree structure. For any binary-branching tree structure over $N$ words, this requires $T=2N-1$ transitions through a total of $T+1$ states.
 
 The parser uses two auxiliary data structures: a stack $S$ of partially completed subtrees and a buffer $B$ of tokens yet to be parsed. The parser is initialized with the stack empty and the buffer containing the tokens $\mathbf x$ of the sentence in order. Let $\langle S, B \rangle = \langle \emptyset, \mathbf x \rangle$ denote this starting state. It next proceeds through the transition sequence, where each transition $a_t$ selects one of the two following operations. Below, the $\mid$ symbol denotes the \textit{cons} (concatenation) operator. We arbitrarily choose to always \textit{cons} on the left in the notation below.
 \vspace*{-1ex} % dirty spacing trick that somehow seemed needed right now
@@ -147,7 +147,7 @@ The parser uses two auxiliary data structures: a stack $S$ of partially complete
 \begin{description}
   \item[\shift:] $\langle S, x \mid B \rangle \to \langle x \mid S, B \rangle$. This operation pops an element from the buffer and pushes it on to the top of the stack.
 \vspace*{-1ex}
-  \item[\reduce:] $\langle x \mid y \mid S, B \rangle \to \langle (x, y) \mid S, B \rangle$. This operation pops the top two elements from the stack, merges them into a binary tree with children $(x, y)$, and pushes the result back on to the stack.
+  \item[\reduce:] $\langle x \mid y \mid S, B \rangle \to \langle (x, y) \mid S, B \rangle$. This operation pops the top two elements from the stack, merges them, and pushes the result back on to the stack.
 \end{description}
 
 \subsection{Composition and representation}
@@ -157,7 +157,7 @@ SPINN is based on a shift-reduce parser, but it is designed to produce a vector 
 \paragraph{The composition function}
 When a \reduce\ operation is performed, the vector representations of two tree nodes are popped off of the stack and fed into a {\it composition function}, which is a neural network function that produces a representation for a new tree node that is the parent of the two popped nodes. This new node is pushed on to the stack.
 
-The TreeLSTM composition function \citep{tai2015improved} generalizes the LSTM neural network layer to tree- rather than sequence-based inputs, and it shares with the LSTM the idea of representing intermediate states as a pair of a fast-changing state representation $\vec{h}$ and a slower-changing memory representation $\vec{c}$. Our version is formulated as:
+The TreeLSTM composition function \citep{tai2015improved} generalizes the LSTM neural network layer to tree- rather than sequence-based inputs, and it shares with the LSTM the idea of representing intermediate states as a pair of an active state representation $\vec{h}$ and a memory representation $\vec{c}$. Our version is formulated as:
 \begin{gather}
 \colvec{5}
     {\vec{i}}
@@ -192,7 +192,7 @@ The stack and the buffer are arrays of $N$ elements each (for sentences of up to
 
 \paragraph{Word representations}
 
-We use word representations based on the standard 300D vectors provided with GloVe \citep{pennington2014glove}. We do not update these representations during training. Instead, we use a learned linear transformation to map each input word vector $\vec{x}_{\text{GloVe}}$ into a vector pair $\langle \vec{h}, \vec{c}\rangle$ that is stored in the buffer:
+We use word representations based on the 300D vectors provided with GloVe \citep{pennington2014glove}. We do not update these representations during training. Instead, we use a learned linear transformation to map each input word vector $\vec{x}_{\text{GloVe}}$ into a vector pair $\langle \vec{h}, \vec{c}\rangle$ that is stored in the buffer:
 \begin{equation}
 \colvec{2}
     {\vec{h}}
@@ -218,39 +218,17 @@ For SPINN to operate on unparsed inputs, it needs to produce its own transition 
 \begin{equation}
 \vec{p}_{\text{a}} = \text{softmax}(W_{\text{trans}}\vec{h}_{\text{tracking}} + \vec{b}_{\text{trans}})
 \end{equation}
-This is the close to being simplest viable implementation of a transition decision function. In contrast, the decision functions in sate-of-the-art transition-based parsers tend to use significantly richer feature sets as inputs, including features containing information about several upcoming words on the buffer instead of just one supplied to the tracking LSTM.
+The above model is nearly the simplest viable implementation of a transition decision function. In contrast, the decision functions in state-of-the-art transition-based parsers tend to use significantly richer feature sets as inputs, including features containing information about several upcoming words on the buffer. The value $\vec{h}_{\text{tracking}}$ is a function of only the very top of the buffer and the top two stack elements at each timestep.
 
-At test time, the model uses whichever transition (i.e., \shift\ or \reduce) is assigned a higher (unnormalized) probability. The prediction function is trained to mimic the decisions of an external parser. These decisions are used as the inputs to the model during training. For SNLI, we use the binary Stanford PCFG Parser parses that are included with the corpus. We did not find scheduled sampling \citep{bengio2015scheduled}---having the model use its own transition decisions sometimes at training time---to help.
+At test time, the model uses whichever transition (i.e., \shift\ or \reduce) is assigned a higher (unnormalized) probability. The prediction function is trained to mimic the decisions of an external parser. These decisions are used as inputs to the model during training. For SNLI, we use the binary Stanford PCFG Parser parses that are included with the corpus. We did not find scheduled sampling \citep{bengio2015scheduled}---having the model use its own transition decisions sometimes at training time---to help.
 
 \subsection{Implementation issues}
 
-\begin{table}[t]
-\centering
-\begin{tabular}{cc @{\hspace*{2em}}c @{\hspace*{2em}} l}
-  \toprule
-  $t$ & $a_t$ & $S$[$t$] & \multicolumn{1}{c}{$Q_t$} \\
-  \midrule
-  0 & \shift &  & \underline{\hphantom{0} \hphantom{0}} \\
-  1 & \shift & \word{Spot} & \hphantom{0} \underline{\hphantom{0} 1} \\
-  2 & \shift & \word{sat} & \hphantom{0} \hphantom{0} \underline{1 2} \\
-  3 & \reduce & \word{down} & \hphantom{0} \hphantom{0} 1 \underline{2 3} \\
-  4 & \reduce & \word{sat down} & \hphantom{0} \hphantom{0} \underline{1 4} \\
-  5 & & \word{Spot} (\word{sat down}) & \hphantom{0} \underline{\hphantom{0} 5} \\
-  \bottomrule
-\end{tabular}
-\caption{The thin-stack algorithm operating on the input sequence $\mathbf x = \text{(\word{Spot}, \word{sat}, \word{down})}$ and the transition sequence shown in the second column. $S$ is shown in the third column and represents the top of the stack at each step $t$. The last two elements of $Q$ (underlined) specify which rows $t$ would be involved in a \reduce\ operation at the next step.}
-\label{tbl:thin-stack}
-\end{table}
-
 \paragraph{Representing the stack efficiently}
 
-A na\"ive implementation of SPINN would require representing a stack of size $N$ for each timestep of each input sentence at training time to support backpropagation. This implies a per-example space requirement of $N \times T \times D$, which is prohibitively large for significant batch sizes or sentence lengths $N$. Such a na\"ive implementation would also require copying a largely unchanged stack at each timestep, since each \shift\ or \reduce\ operation writes only one new representation to the stack.
+A na\"ive implementation of SPINN needs to handle a size $O(N)$ stack at each timestep, any element of which may be involved in later computations. A na\"ive backpropagation implementation would then require storing each of the $O(N)$ stacks for a backward pass, leading to a per-example space requirement of $O(NTD)$ floats. This requirement is prohibitively large for significant batch sizes or sentence lengths $N$. Such a na\"ive implementation would also require copying a largely unchanged stack at each timestep, since each \shift\ or \reduce\ operation writes only one new representation to the top of the stack.
 
-We propose an alternative space-efficient stack representation inspired by the zipper technique \citep{huet1997zipper}, that we call \textit{thin stack}. For each input sentence, we represent the stack with a single $T \times D$ matrix $S$. Each row $S[t]$ (for $0<t\le T$) represents the top of the actual stack at timestep $t$. At each timestep we can \shift\ a new element onto the stack, or \reduce\ the top two elements of the stack into a single element. To shift an element from the buffer to the top of the stack at timestep $t$, we simply write it into the location $S[t]$. In order to perform the \reduce\ operation, we need to retrieve the top two elements of the actual stack. We maintain a queue $Q$ of pointers into $S$ which contains the row indices of $S$ which are still present in the actual stack. The top two elements of the stack can be found by using the final two pointers in the queue $Q$. These retrieved rows are used to perform the \reduce\ operation, which modifies $Q$ to mark that some rows of $S$ have now been replaced in the actual stack. Algorithm~\ref{alg:thin-stack} describes the full mechanics of a stack feedforward in this compressed representation. It operates on the single $T \times D$ matrix $S$ and a backpointer queue $Q$. Table~\ref{tbl:thin-stack} shows an example run.
-
-This stack representation requires substantially less space. It stores each element involved in the feedforward computation exactly once, meaning that this representation can still support efficient backpropagation. Furthermore, all of the updates to $S$ and $Q$ can be performed batched and in-place on a GPU, yielding substantial speed gains. We describe speed results in Section~\ref{sec:speed}.
-
-A simpler variant of this technique can be used to represent the buffer, since information is not written to the buffer during model operation. It can be stored as a single fixed matrix with a scalar pointer variable indicating which element is the head at each step.
+We propose a space-efficient stack representation inspired by the zipper technique \citep{huet1997zipper} that we call \textit{thin stack}. For each input sentence, we represent the stack with a single $T \times D$ matrix $S$. Each row $S[t]$ (for $0<t\le T$) represents the top of the actual stack at timestep $t$. At each timestep we can \shift\ a new element onto the stack, or \reduce\ the top two elements of the stack into a single element. To shift an element from the buffer to the top of the stack at timestep $t$, we simply write it into the location $S[t]$. In order to perform the \reduce\ operation, we need to retrieve the top two elements of the actual stack. We maintain a queue $Q$ of pointers into $S$ which contains the row indices of $S$ which are still present in the actual stack. The top two elements of the stack can be found by using the final two pointers in the queue $Q$. These retrieved elements are used to perform the \reduce\ operation, which modifies $Q$ to mark that some rows of $S$ have now been replaced in the actual stack. Algorithm~\ref{alg:thin-stack} describes the full mechanics of a stack feedforward in this compressed representation. It operates on the single $T \times D$ matrix $S$ and a backpointer queue $Q$. Table~\ref{tbl:thin-stack} shows an example run.
 
 \begin{algorithm}[t]
 \caption{The thin stack algorithm}
@@ -269,7 +247,27 @@ A simpler variant of this technique can be used to represent the buffer, since i
 \end{algorithmic}
 \end{algorithm}
 
+This stack representation requires substantially less space. It stores each element involved in the feedforward computation exactly once, meaning that this representation can still support efficient backpropagation. Furthermore, all of the updates to $S$ and $Q$ can be performed batched and in-place on a GPU, yielding substantial speed gains over both a more na\"ive SPINN implementation and a standard TreeRNN implementation. We describe speed results in Section~\ref{sec:speed}.
+
 \paragraph{Preparing the data} At training time, SPINN requires both a transition sequence $\mathbf a$  and a token sequence $\mathbf x$ as its inputs for each sentence. The token sequence is simply the words in the sentence in order. $\mathbf a$ can be obtained from any constituency parse for the sentence by first converting that parse into an unlabeled binary parse, then linearizing it (with the usual in-order traversal), then taking each word token as a \shift\ transition and each `)' as a \reduce\ transition, as here:
+
+\begin{table}[t]
+\centering
+\begin{tabular}{c @{\hspace*{1.5em}}c @{\hspace*{1.5em}} lc}
+  \toprule
+  $t$ & $S$[$t$] & \multicolumn{1}{c}{$Q_t$} & $a_t$ \\
+  \midrule
+  0 &   & \underline{\hphantom{0} \hphantom{0}} & \shift \\
+  1 &  \word{Spot} & \hphantom{0} \underline{\hphantom{0} 1} & \shift \\
+  2 &  \word{sat} & \hphantom{0} \hphantom{0} \underline{1 2} & \shift \\
+  3  &   \word{down} & \hphantom{0} \hphantom{0} 1 \underline{2 3} & \reduce\\
+  4  &   (\word{sat down}) & \hphantom{0} \hphantom{0} \underline{1 4} & \reduce\\
+  5  & (\word{Spot} (\word{sat down})) & \hphantom{0} \underline{\hphantom{0} 5} &        \\
+  \bottomrule
+\end{tabular}
+\caption{The thin-stack algorithm operating on the input sequence $\mathbf x = \text{(\word{Spot}, \word{sat}, \word{down})}$ and the transition sequence shown in the second column. $S$ is shown in the third column and represents the top of the stack at each step $t$. The last two elements of $Q$ (underlined) specify which rows $t$ would be involved in a \reduce\ operation at the next step.}
+\label{tbl:thin-stack}
+\end{table}
 
 \vspace{0.5em}
 {\noindent\small
@@ -294,7 +292,7 @@ In this section, we compare the test-time speed of our SPINN-PI-NT with an equiv
 \centering
 \resizebox{1\linewidth}{!}{
 \begin{tikzpicture}
-\begin{axis}[xmin=0, ymin=0, xlabel=Batch size, ylabel=Feedforward time (sec),
+\begin{axis}[ymin=0, xlabel=Batch size, ylabel=Feedforward time (sec),
              xticklabels={0,32,64,128,256,512,1024,2048}, xmode=log, log basis x=2,
              legend style={at={(0.55, 0.5)},anchor=north west}]
   \addplot table [x={Batch size}, y=GPU, col sep=tab] {runtime.tsv};
@@ -311,7 +309,7 @@ In this section, we compare the test-time speed of our SPINN-PI-NT with an equiv
 \end{figure}
 
 
-Each model is restricted to run on sentences of 30 tokens or fewer. We fix the model dimension $D$ and the word embedding dimension at 300. We run the CPU performance test on a 2.20-GHz 16-core Intel Xeon E5-2660 processor with hyperthreading enabled. We test our thin-stack implementation and the RNN model on an NVIDIA Titan X GPU.
+Each model is restricted to run on sentences of 30 tokens or fewer. We fix the model dimension $D$ and the word embedding dimension at 300. We run the CPU performance test on a 2.20 GHz 16-core Intel Xeon E5-2660 processor with hyperthreading enabled. We test our thin-stack implementation and the RNN model on an NVIDIA Titan X GPU.
 
 Figure~\ref{fig:speed} compares the sentence encoding speed of the three models on random input data. We observe a substantial difference in runtime between the CPU and thin-stack implementations that increases with batch size. With a large but practical batch size of 512, the largest on which we tested the TreeRNN, our model is about 25$\times$ faster than the standard CPU implementation, and about 4$\times$ slower than the RNN baseline.
 
@@ -319,15 +317,15 @@ Though this experiment only covers SPINN-PI-NT, the results should be similar fo
 
 \section{NLI Experiments}
 
-We evaluate SPINN on the task of natural language inference \citep[NLI, a.k.a.\ recognizing textual entailment, or RTE;][]{dagan2006pascal}. NLI is a sentence pair classification task, in which a model reads two sentences (a premise and a hypothesis), and outputs a judgment of {\it entailment}, {\it contradiction}, or {\it neutral}, reflecting the relationship between the meanings of the two sentences, as in this example from the SNLI corpus, which we use:
+We evaluate SPINN on the task of natural language inference \citep[NLI, a.k.a.\ recognizing textual entailment, or RTE;][]{dagan2006pascal}. NLI is a sentence pair classification task, in which a model reads two sentences (a premise and a hypothesis), and outputs a judgment of {\it entailment}, {\it contradiction}, or {\it neutral}, reflecting the relationship between the meanings of the two sentences. Below is an example sentence pair and judgment from the SNLI corpus which we use in our experiments:
 
 \snli{Girl in a red coat, blue head wrap and jeans is making a snow angel.}
 {A girl outside plays in the snow.}
 {entailment}
 
-Although NLI is framed as a simple three-way classification task, it is nonetheless an effective way of evaluating the ability of some model to extract broadly informative representations of sentence meaning. In order for a model to perform reliably well on NLI, it must be able to represent and reason with the core phenomena of natural language semantics, including quantification, coreference, scope, and several types of ambiguity.
+SNLI is a corpus of 570k human-labeled pairs of scene descriptions like this one. We use the standard train--test split and ignore unlabeled examples, which leaves about 549k examples for training, 9,842 for development, and 9,824 for testing. SNLI labels are roughly balanced, with the most frequent label, {\it entailment}, making up 34.2\% of the test set.
 
-SNLI is a corpus of 570k human-labeled pairs of scene descriptions like the one above. We use the standard train--test split and ignore unlabeled examples, which leaves about 549k examples for training, 9,842 for development, and 9,824 for testing. SNLI labels are roughly balanced, with the most frequent label, {\it entailment}, making up 34.2\% of the test set.
+Although NLI is framed as a simple three-way classification task, it is nonetheless an effective way of evaluating the ability of a model to extract broadly informative representations of sentence meaning. In order for a model to perform reliably well on NLI, it must be able to represent and reason with the core phenomena of natural language semantics, including quantification, coreference, scope, and several types of ambiguity.
 
 \subsection{Applying SPINN to SNLI}
 
@@ -336,13 +334,13 @@ SNLI is a corpus of 570k human-labeled pairs of scene descriptions like the one 
 \begin{center}
 \begin{tabular}{lrlrrrr}
 \toprule
-Param.     & Range & Strategy        & RNN       & SPINN-PI-NT   & SPINN-PI  & SPINN \\
+Param.     & Range & Strategy        & RNN       & SP.-PI-NT   & SP.-PI  & SP. \\
 \midrule 
-Initial LR & 2e-4--2e-2 & \textsc{log} & 5e-3  & 3e-4 & 7e-3  & 2e-3\\
-L2 regularization $\lambda$ & 8e-7--3e-5   & \textsc{log} & 4e-6  & 3e-6   & 2e-5  & 3e-5\\
+Initial LR & $2\times 10^{-4}$--$2\times 10^{-2}$ & \textsc{log} & $5\times 10^{-3}$  & $3\times 10^{-4}$ & $7\times 10^{-3}$  & $2\times 10^{-3}$\\
+L2 regularization $\lambda$ & $8\times 10^{-7}$--$3\times 10^{-5}$   & \textsc{log} & $4\times 10^{-6}$  & $3\times 10^{-6}$   & $2\times 10^{-5}$  & $3\times 10^{-5}$\\
 Transition cost $\alpha$  & 0.5--4.0 & \textsc{lin} & --- & --- & ---  & 3.9    \\
-Embedding transformation dropout keep rate & 80--95\% & \textsc{lin} & --- & 83\% & 92\%  & 86\%\\
-Classifier MLP dropout keep rate & 80--95\% & \textsc{lin} & 94\%  & 94\%   & 93\%  & 94\%\\
+Embedding transformation dropout & 80--95\% & \textsc{lin} & --- & 83\% & 92\%  & 86\%\\
+Classifier MLP dropout & 80--95\% & \textsc{lin} & 94\%  & 94\%   & 93\%  & 94\%\\
 Tracking LSTM size $D_\text{tracking}$ & 24--128 & \textsc{log} & --- & --- & 61  & 79\\
 Classifier MLP layers & 1--3 & \textsc{lin} & 2 & 2 & 2 & 1\\
 \bottomrule
@@ -350,7 +348,7 @@ Classifier MLP layers & 1--3 & \textsc{lin} & 2 & 2 & 2 & 1\\
 \end{center}
 \caption{
 \label{tab:hyperparams}
-Hyperparameter ranges and values. \ii{Range} shows the hyperparameter ranges explored during random search. \ii{Strategy} indicates whether sampling from the range was uniform, or log--uniform.
+Hyperparameter ranges and values. \ii{Range} shows the hyperparameter ranges explored during random search. \ii{Strategy} indicates whether sampling from the range was uniform, or log-uniform. Dropout parameters are expressed as keep rates rather than drop rates.
 }
 \end{table*}
 
@@ -418,27 +416,14 @@ Lexicalized classifier \citep{snli:emnlp2015}
                         & 3.7m                  & ---                &   89.2      &   \textbf{83.2}       \\
 300D SPINN (unparsed input) encoders
                         & 2.7m                  & 92.4           &   87.2    &   82.6      \\
-% \result{300D SPINN-PI, sequence-based attn.   }
-%                         & ?                  & --                &   ?      &   86.3dv         \\
-% \result{300D SPINN-PI, tree-based attn. }
-%                         & ?                  & --                &   ?      &   \textbf{?}\\
-% \midrule
-% \multicolumn{5}{c}{Other previous NN results}\\
-% \midrule
-% 100D LSTM w/ word-by-word attention \citep{rocktaschel2015reasoning}
-%                         & 252k               & --              &   85.3   &   83.5       \\
-% 300D mLSTM word-by-word attention model \citep{DBLP:journals/corr/WangJ15b}
-%                         & 1.9m               & --             &   92.0   &   86.1      \\
-% 300D LSTMN with deep attention fusion \citep{cheng2016long}
-%                         & 1.4m               & --                &   92.3   &   \textbf{89.1}      \\
     \bottomrule
   \end{tabular}
-\caption{\protect\label{tab:results}Results on SNLI 3-way inference classification. Params. is the approximate number of trained parameters (excluding word embeddings for all models). Trans. acc. is the model's accuracy in predicting parsing transitions at test time. Train and test are SNLI classification accuracy.}
+\caption{\protect\label{tab:results}Results on SNLI 3-way inference classification. Params.\ is the approximate number of trained parameters (excluding word embeddings for all models). Trans.\ acc.\ is the model's accuracy in predicting parsing transitions at test time. Train and test are SNLI classification accuracy.}
 \end{table*}
 
 \subsection{Results}
 
-Table~\ref{tab:results} shows our results on SNLI inference classification. For the full SPINN, we also report a measure of agreement between this model's parses and the parses included with SNLI, calculated as classification accuracy over transitions averaged across timesteps.
+Table~\ref{tab:results} shows our results on SNLI. For the full SPINN, we also report a measure of agreement between this model's parses and the parses included with SNLI, calculated as classification accuracy over transitions averaged across timesteps.
 
 We find that the bare SPINN-PI-NT model performs little better than the RNN baseline, but that SPINN-PI with the added tracking LSTM performs well. The success of SPINN-PI, which is the hybrid tree-sequence model, suggests that the tree- and sequence-based encoding methods are at least partially complementary, with the sequence model presumably providing useful local word disambiguation. The full SPINN model with its relatively weak internal parser performs slightly less well, but nonetheless robustly exceeds the performance of the RNN baseline.
 
@@ -460,14 +445,14 @@ While all four models under study have trouble with negation, the tree-structure
 {contradiction}
 \noindent Note that the presence of negation in the hypothesis is correlated with a label of \textit{contradiction} in SNLI, but not as strongly as one might intuit---only $45\%$ of these examples in the test set are labeled as contradictions.
 
-In addition, it seems that tree-structured models, and especially the tree-sequence hybrid models, are more effective than RNNs at extracting informative representations of long sentences. The RNN model falls off in test accuracy more quickly with increasing sentence length than SPINN-PI-NT, which in turn falls of substantially faster than the two hybrid models, repeating a pattern seen more dramatically on artificial data in \citet{bowman2015trees}. For example, all three SPINN models labeled this pair correctly, while the RNN did not:
+In addition, it seems that tree-structured models, and especially the tree-sequence hybrid models, are more effective than RNNs at extracting informative representations of long sentences. The RNN model falls off in test accuracy more quickly with increasing sentence length than SPINN-PI-NT, which in turn falls of substantially faster than the two hybrid models, repeating a pattern seen more dramatically on artificial data in \citet{bowman2015trees}. On pairs with premises of 20 or more words, the RNN's 76.7\% accuracy, while SPINN-PI reaches 80.2\%. All three SPINN models labeled the following example correctly, while the RNN did not:
 
 \snli
 {A man wearing glasses and a ragged costume is playing a Jaguar electric guitar and singing with the accompaniment of a drummer.}
 {A man with glasses and a disheveled outfit is playing a guitar and singing along with a drummer.}
 {entailment}
 
-We suspect that the hybrid nature of the full SPINN model is also responsible for its ability to perform better than an RNN baseline even when its internal parser is relatively ineffective at producing correct full-sentence parses. We suspect that it is acting somewhat like the tree-based CNN, only with access to larger trees: using tree structure to build up local phrase meanings, and then using the tracking LSTM, at least in part, to combine those meanings.
+We suspect that the hybrid nature of the full SPINN model is also responsible for its surprising ability to perform better than an RNN baseline even when its internal parser is relatively ineffective at producing correct full-sentence parses. It may act somewhat like the tree-based CNN, only with access to larger trees: using tree structure to build up local phrase meanings, and then using the tracking LSTM, at least in part, to combine those meanings.
 
 Finally, as is likely inevitable for models evaluated on SNLI, all four models under study did several percent worse on test examples whose ground truth label is \textit{neutral} than on examples of the other two classes. \textit{Entailment}--\textit{neutral} and \textit{neutral}--\textit{contradiction} confusions appear to be much harder to avoid than \textit{entailment}--\textit{contradiction} confusions, where relatively superficial cues might be more readily useful.
 
@@ -475,16 +460,16 @@ Finally, as is likely inevitable for models evaluated on SNLI, all four models u
 
 We introduce a model architecture (SPINN-PI-NT) that is equivalent to a TreeLSTM, but an order of magnitude faster at test time. We expand that architecture into a tree-sequence hybrid model (SPINN-PI), and show that this yields significant gains on the SNLI entailment task. Finally, we show that it is possible to exploit the strengths of this model without the need for an external parser by integrating a fast parser into the model (as in the full SPINN), and that the lack of external parse information yields little loss in accuracy.
 
-Because this paper aims to introduce a general purpose model for sentence encoding, we do not pursue the use of soft attention \citep{bahdanau2014neural,rocktaschel2015reasoning}, despite its demonstrated effectiveness on the SNLI task.\footnote{Attention based models like \citet{rocktaschel2015reasoning} and the unpublished \citet{cheng2016long} have shown accuracies as high as 89.0\% on SNLI, but are more narrowly engineered to suit the task, and do not yield sentence encodings.} However, we expect that it should be possible to productively combine our model with soft attention to reach state-of-the-art performance.
+Because this paper aims to introduce a general purpose model for sentence encoding, we do not pursue the use of soft attention \citep{bahdanau2014neural,rocktaschel2015reasoning}, despite its demonstrated effectiveness on the SNLI task.\footnote{Attention-based models like \citet{rocktaschel2015reasoning}, \citet{wang2015learning}, and the unpublished \citet{cheng2016long} have shown accuracies as high as 86.3\% on SNLI, but are more narrowly engineered to suit the task and do not yield sentence encodings.} However, we expect that it should be possible to productively combine our model with soft attention to reach state-of-the-art performance. 
 
 Our tracking LSTM uses only simple, quick-to-compute features drawn from the head of the buffer and the head of the stack. It is plausible that giving the tracking LSTM access to more information from the buffer and stack at each step would allow it to better represent the context at each tree node, yielding both better parsing and better sentence encoding. One promising way to pursue this goal would be to encode the full contents of the stack and buffer at each time step following the method used by \citet{dyer-EtAl:2015:ACL-IJCNLP}.
 
-For a more ambitious goal, we expect that it should be possible to implement a variant of SPINN on top of a modified stack data structure with differentiable \textsc{push} and \textsc{pop} operations \citep[as in][]{grefenstette2015learning,joulin2015inferring}. This would make it possible for the model to learn to parse using guidance from the semantic representation objective, essentially allowing it to learn to produce parses that are, in aggregate, better suited to supporting semantic interpretation than those supplied in the training data.
+For a more ambitious goal, we expect that it should be possible to implement a variant of SPINN on top of a modified stack data structure with differentiable \textsc{push} and \textsc{pop} operations \citep[as in][]{grefenstette2015learning,joulin2015inferring}. This would make it possible for the model to learn to parse using guidance from the semantic representation objective, which currently is blocked from influencing the key parsing parameters by our use of hard \shift/\reduce\ decisions. This change would allow the model to learn to produce parses that are, in aggregate, better suited to supporting semantic interpretation than those supplied in the training data.
 
 
 \subsubsection*{Acknowledgments}
 
-We acknowledge financial support from a Google Faculty Research Award, the Stanford Data Science Initiative, and the National Science Foundation under grant no.~BCS 1456077. Some of the Tesla K40s used for this research were donated by the NVIDIA Corporation. We also thank Kelvin Gu, Noah Goodman, and many others in the Stanford NLP group for helpful comments.
+We acknowledge financial support from a Google Faculty Research Award, the Stanford Data Science Initiative, and the National Science Foundation under grant nos.~BCS 1456077 and IIS 1514268. Some of the Tesla K40s used for this research were donated by the NVIDIA Corporation. We also thank Kelvin Guu, Noah Goodman, and many others in the Stanford NLP group for helpful comments.
 
 \bibliographystyle{../acl_natbib}
 \bibliography{../MLSemantics}

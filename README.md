@@ -1,7 +1,5 @@
 # Stack-augmented Parser-Interpreter Neural Network
 
-*NOTE:* This repository may be broken at head. A working snapshot is available here: https://github.com/stanfordnlp/spinn/tree/deadline
-
 This repository contains the source code described in our paper [A Fast Unified Model for Sentence Parsing and Understanding][1]. There are three separate implementations available:
 
 - A **Python/Theano** implementation of SPINN using a naïve stack representation (named `fat-stack`)
@@ -14,18 +12,39 @@ The Python code lives, quite intuitively, in the `python` folder. We used this c
 
 There is one enormous difference in the `fat-` and `thin-stack` implementations: `fat-stack` uses Theano's automatically generated symbolic backpropagation graphs, while `thin-stack` generates its own optimal backpropagation graph. This makes `thin-stack` oodles faster than its brother, but we have not yet implemented all SPINN variants to support this custom backpropagation.
 
-### Dependencies
+### Installation
 
-The Python code uses **Python 2.7** with the Theano symbolic math library.
-Full Python package requirements are listed in [`requirements.txt`][2].
+Requirements:
 
-We use a modified version of Theano in order to support fast forward- and backward-prop in `thin-stack` (see the [`theano-hacked` repository][3]). While it isn't absolutely necessary to use this hacked Theano, it greatly improves `thin-stack` performance.
+- Python 2.7
+- CUDA >= 7.0
+- CuDNN == v4 (v5 is not compatible with our Theano fork)
 
-We also require CUDA >= 7.0 with CuDNN v4. (CuDNN v5 is not compatible with our fork of Theano.)
+Install all required Python dependencies using the command below. (**WARNING:** This installs our custom Theano fork. We recommend installing in a virtual environment in order to avoid overwriting any stock Theano install you already have.)
+
+    pip install -r python/requirements.txt
+
+We use [a modified version of Theano][3] in order to support fast forward- and backward-prop in `thin-stack`. While it isn't absolutely necessary to use this hacked Theano, it greatly improves `thin-stack` performance.
 
 ### Running the code
 
-TODO
+The main executable for the SNLI experiments in the paper is [fat_classifier.py](https://github.com/stanfordnlp/spinn/blob/master/python/spinn/models/fat_classifier.py), whose flags specify the hyperparameters of the model. You may also need to set Theano flags through the THEANO_FLAGS environment variable, which specifies compilation mode (set it to `fast_compile` during development, and delete it to use the default state for longer runs), `device`, which can be set to `cpu` or `gpu#`, and `cuda.root`, which specifies the location of CUDA when running on GPU. `floatX` should always be set to `float32`.
+
+Here's a sample command that runs a fast, low-dimensional CPU training run, training and testing only on the dev set. It assumes that you have a copy of [SNLI](http://nlp.stanford.edu/projects/snli/) available locally.
+
+    PYTHONPATH=spinn/python \
+        THEANO_FLAGS=optimizer=fast_compile,device=cpu,floatX=float32 \
+        python2.7 -m spinn.models.fat_classifier --data_type snli \
+        --training_data_path snli_1.0/snli_1.0_dev.jsonl \
+        --eval_data_path snli_1.0/snli_1.0_dev.jsonl \
+        --embedding_data_path spinn/python/spinn/tests/test_embedding_matrix.5d.txt \
+        --word_embedding_dim 5 --model_dim 10
+
+For full runs, you'll also need a copy of the 840B word 300D [GloVe word vectors](http://nlp.stanford.edu/projects/glove/).
+
+The commands to reproduce our main results can be found [here](https://github.com/stanfordnlp/spinn/blob/master/checkpoints/commands.sh).
+
+
 
 ## C++ code
 
@@ -79,7 +98,19 @@ TODO
 
 ## License
 
-TODO
+Copyright 2016, Stanford University
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use these files except in compliance with the License.
+You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
 [1]: http://arxiv.org/abs/1603.06021
 [2]: https://github.com/stanfordnlp/spinn/blob/master/requirements.txt
