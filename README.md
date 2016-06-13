@@ -36,8 +36,20 @@ The Bash scripts in this directory will download the necessary data and launch t
     ./checkpoints/spinn_pi_nt.sh
     ./checkpoints/rnn.sh
 
-By default, these scripts will load their corresponding pretrained model file and continue training starting from the saved model data.
-Directions inside any of the script files describe how to run a test pass.
+All of the above scripts will by default launch a training run beginning with the recorded parameters of our best models. You can change their behavior using the arguments below:
+
+    $ ./checkpoints/spinn.sh -h
+    spinn.sh [-h] [-e] [-t] [-s] -- run a train or test run of a SPINN model
+
+    where:
+        -h    show this help text
+        -e    run in eval-only mode (evaluates on dev set by default)
+        -t    evaluate on test set
+        -s    skip the checkpoint loading; run with a randomly initialized model
+
+To evaluate our best SPINN-PI-NT model on the test set, for example, run
+
+    $ ./checkpoints/spinn_pi_nt.sh -e -t
 
 #### Custom model configurations
 
