@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 
+if [ -e README.md ]; then
+    cd checkpoints
+fi
+
 source _init.sh
 
 # The invocation below will load the pretrained models and continue training
