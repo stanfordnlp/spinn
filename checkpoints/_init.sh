@@ -81,6 +81,6 @@ else
     flags="$flags --eval_data_path $SNLI_DEV_JSONL"
 fi
 if [ ! "$skip_ckpt" = "true" ]; then
-    flags="$flags --ckpt_path checkpoints/${MODEL}.ckpt_best"
+    flags="$flags --ckpt_path ${MODEL}.ckpt_best"
 fi
 export BASE_FLAGS="$flags"
