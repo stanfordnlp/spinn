@@ -381,12 +381,12 @@ def evaluate_expanded(eval_fn, eval_set, eval_path, logger, step, sentence_pair_
                 # write each predicted transition to file
                 for orig_transitions, pred_logit_hyp, pred_logit_prem, tokens, true_class, example_sem_logits \
                         in zip(eval_transitions_batch, logits_pred_hyp,
-                               logits_pred_prem, eval_X_batch, eval_y_batch, sem_logit_values):    
+                               logits_pred_prem, eval_X_batch, eval_y_batch, sem_logit_values):
                     if predict_transitions:
                         orig_hyp_transitions, orig_prem_transitions = orig_transitions.T
                         pred_hyp_transitions = pred_logit_hyp.argmax(axis=1)
                         pred_prem_transitions = pred_logit_prem.argmax(axis=1)
-                    else: 
+                    else:
                         orig_hyp_transitions = orig_prem_transitions = pred_hyp_transitions = pred_prem_transitions = None
 
                     hyp_tokens, prem_tokens = tokens.T
@@ -609,13 +609,13 @@ def run(only_forward=False):
             eval_fn = theano.function(
                 [X, transitions, y, num_transitions, training_mode, ground_truth_transitions_visible, ss_prob],
                 [acc, action_acc, logits, predicted_hypothesis_transitions, predicted_premise_transitions],
-                on_unused_input='warn',
+                on_unused_input='ignore',
                 allow_input_downcast=True)
         else:
             eval_fn = theano.function(
                 [X, transitions, y, num_transitions, training_mode, ground_truth_transitions_visible, ss_prob],
                 [acc, action_acc, logits, predicted_transitions],
-                on_unused_input='warn',
+                on_unused_input='ignore',
                 allow_input_downcast=True)
 
         # Generate the inverse vocabulary lookup table.
@@ -643,11 +643,11 @@ def run(only_forward=False):
             [X, transitions, y, num_transitions, lr, training_mode, ground_truth_transitions_visible, ss_prob],
             [total_cost, xent_cost, transition_cost, action_acc, l2_cost, acc],
             updates=new_values,
-            on_unused_input='warn',
+            on_unused_input='ignore',
             allow_input_downcast=True)
         logger.Log("Building eval function.")
         eval_fn = theano.function([X, transitions, y, num_transitions, training_mode, ground_truth_transitions_visible, ss_prob], [acc, action_acc],
-            on_unused_input='warn',
+            on_unused_input='ignore',
             allow_input_downcast=True)
         logger.Log("Training.")
 
