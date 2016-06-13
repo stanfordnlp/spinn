@@ -50,6 +50,13 @@ All of the above scripts will by default launch a training run beginning with th
 To evaluate our best SPINN-PI-NT model on the test set, for example, run
 
     $ ./checkpoints/spinn_pi_nt.sh -e -t
+    ...
+    [1] Checkpointed model was trained for 156500 steps.
+    [1] Building forward pass.
+    [1] Writing eval output for ../snli_1.0/snli_1.0_test.jsonl.
+    [1] Written gold parses in spinn_pi_nt-snli_1.0_test.jsonl-parse.gld
+    [1] Written predicted parses in spinn_pi_nt-snli_1.0_test.jsonl-parse.tst
+    [1] Step: 156500    Eval acc: 0.808734   0.000000   ../snli_1.0/snli_1.0_test.jsonl
 
 #### Custom model configurations
 
