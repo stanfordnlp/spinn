@@ -28,6 +28,19 @@ We use [a modified version of Theano][3] in order to support fast forward- and b
 
 ### Running the code
 
+The easiest way to launch a train/test run is to use one of the [`checkpoints` directory](https://github.com/stanfordnlp/spinn/tree/master/checkpoints).
+The Bash scripts in this directory will download the necessary data and launch train/test runs of all models reported in our paper. You can run any of the following scripts:
+
+    ./checkpoints/spinn.sh
+    ./checkpoints/spinn_pi.sh
+    ./checkpoints/spinn_pi_nt.sh
+    ./checkpoints/rnn.sh
+
+By default, these scripts will load their corresponding pretrained model file and continue training starting from the saved model data.
+Directions inside any of the script files describe how to run a test pass.
+
+#### Custom model configurations
+
 The main executable for the SNLI experiments in the paper is [fat_classifier.py](https://github.com/stanfordnlp/spinn/blob/master/python/spinn/models/fat_classifier.py), whose flags specify the hyperparameters of the model. You may also need to set Theano flags through the THEANO_FLAGS environment variable, which specifies compilation mode (set it to `fast_compile` during development, and delete it to use the default state for longer runs), `device`, which can be set to `cpu` or `gpu#`, and `cuda.root`, which specifies the location of CUDA when running on GPU. `floatX` should always be set to `float32`.
 
 Here's a sample command that runs a fast, low-dimensional CPU training run, training and testing only on the dev set. It assumes that you have a copy of [SNLI](http://nlp.stanford.edu/projects/snli/) available locally.
@@ -41,10 +54,6 @@ Here's a sample command that runs a fast, low-dimensional CPU training run, trai
         --word_embedding_dim 5 --model_dim 10
 
 For full runs, you'll also need a copy of the 840B word 300D [GloVe word vectors](http://nlp.stanford.edu/projects/glove/).
-
-The commands to reproduce our main results can be found [here](https://github.com/stanfordnlp/spinn/blob/master/checkpoints/commands.sh).
-
-
 
 ## C++ code
 
@@ -91,10 +100,6 @@ The binary `cpp/bin/rnntest` runs a vanilla RNN (ReLU activations) with random i
     cd cpp
 
     BATCH_SIZE=512 ./bin/rnntest
-
-## Pretrained models
-
-TODO
 
 ## License
 
