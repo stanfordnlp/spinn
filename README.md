@@ -50,6 +50,8 @@ All of the above scripts will by default launch a training run beginning with th
 To evaluate our best SPINN-PI-NT model on the test set, for example, run
 
     $ ./checkpoints/spinn_pi_nt.sh -e -t
+    Running command:
+    python -m spinn.models.fat_classifier --data_type snli --embedding_data_path ../glove/glove.840B.300d.txt --log_path ../logs --training_data_path ../snli_1.0/snli_1.0_train.jsonl --experiment_name spinn_pi_nt --expanded_eval_only --eval_data_path ../snli_1.0/snli_1.0_test.jsonl --ckpt_path spinn_pi_nt.ckpt_best   --batch_size 32 --embedding_keep_rate 0.828528124124 --eval_seq_length 50 --init_range 0.005 --l2_lambda 3.45058959758e-06 --learning_rate 0.000297682444894 --model_dim 600 --model_type Model0 --noconnect_tracking_comp  --num_sentence_pair_combination_layers 2 --semantic_classifier_keep_rate 0.9437038157 --seq_length 50 --tracking_lstm_hidden_dim 57 --use_tracking_lstm  --word_embedding_dim 300
     ...
     [1] Checkpointed model was trained for 156500 steps.
     [1] Building forward pass.
