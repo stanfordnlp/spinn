@@ -3,7 +3,7 @@
 # Header script to prepare to perform a SPINN SNLI run.
 
 # The directory where logs should be stored.
-export LOG_DIR=logs
+export LOG_DIR=../logs
 mkdir -p $LOG_DIR
 
 # The path to pretrained embeddings.
