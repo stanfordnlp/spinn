@@ -12,20 +12,19 @@ The Python code lives, quite intuitively, in the `python` folder. We used this c
 
 There is one enormous difference in the `fat-` and `thin-stack` implementations: `fat-stack` uses Theano's automatically generated symbolic backpropagation graphs, while `thin-stack` generates its own optimal backpropagation graph. This makes `thin-stack` oodles faster than its brother, but we have not yet implemented all SPINN variants to support this custom backpropagation.
 
-### Dependencies
+### Installation
 
-The Python code uses **Python 2.7** with the Theano symbolic math library.
-Full Python package requirements are listed in [`requirements.txt`][2].
+Requirements:
 
-We use a modified version of Theano in order to support fast forward- and backward-prop in `thin-stack` (see the [`theano-hacked` repository][3]). While it isn't absolutely necessary to use this hacked Theano, it greatly improves `thin-stack` performance.
+- Python 2.7
+- CUDA >= 7.0
+- CuDNN == v4 (v5 is not compatible with our Theano fork)
 
-To install everything you need, run the following to get our requirements specification (also available from GitHub) and install everything in it. *WARNING:* This installs our 
-custom branch of Theano, so it may be dangerous to run this in an environment where you'll also be running code that depends upon stock Theano.
+Install all required Python dependencies using the command below. (**WARNING:** This installs our custom Theano fork. We recommend installing in a virtual environment in order to avoid overwriting any stock Theano install you already have.)
 
-    wget https://raw.githubusercontent.com/stanfordnlp/spinn/master/python/requirements.txt
-    python -m pip install -r requirements.txt
+    pip install -r python/requirements.txt
 
-We also require CUDA >= 7.0 with CuDNN v4. (CuDNN v5 is not compatible with our fork of Theano.)
+We use [a modified version of Theano][3] in order to support fast forward- and backward-prop in `thin-stack`. While it isn't absolutely necessary to use this hacked Theano, it greatly improves `thin-stack` performance.
 
 ### Running the code
 
@@ -33,7 +32,13 @@ The main executable for the SNLI experiments in the paper is [fat_classifier.py]
 
 Here's a sample command that runs a fast, low-dimensional CPU training run, training and testing only on the dev set. It assumes that you have a copy of [SNLI](http://nlp.stanford.edu/projects/snli/) available locally.
 
-    PYTHONPATH=spinn/python THEANO_FLAGS=optimizer=fast_compile,device=cpu,compiledir=/tmp/theano.tmp,floatX=float32 python2.7 -m spinn.models.fat_classifier --data_type snli --training_data_path snli_1.0/snli_1.0_dev.jsonl --eval_data_path snli_1.0/snli_1.0_dev.jsonl --embedding_data_path spinn/python/spinn/tests/test_embedding_matrix.5d.txt --word_embedding_dim 5 --model_dim 10
+    PYTHONPATH=spinn/python \
+        THEANO_FLAGS=optimizer=fast_compile,device=cpu,floatX=float32 \
+        python2.7 -m spinn.models.fat_classifier --data_type snli \
+        --training_data_path snli_1.0/snli_1.0_dev.jsonl \
+        --eval_data_path snli_1.0/snli_1.0_dev.jsonl \
+        --embedding_data_path spinn/python/spinn/tests/test_embedding_matrix.5d.txt \
+        --word_embedding_dim 5 --model_dim 10
 
 For full runs, you'll also need a copy of the 840B word 300D [GloVe word vectors](http://nlp.stanford.edu/projects/glove/).
 
