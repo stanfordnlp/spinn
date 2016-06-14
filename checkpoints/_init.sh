@@ -69,7 +69,8 @@ if [ ! -d "$SNLI_DIR" ]; then
 fi
 
 export PYTHONPATH=../python
-export THEANO_FLAGS=allow_gc=False,cuda.root=/usr/bin/cuda,warn_float64=warn,device=gpu,floatX=float32
+export THEANO_FLAGS="allow_gc=False,cuda.root=/usr/bin/cuda,warn_float64=warn,device=gpu,floatX=float32,$THEANO_FLAGS"
+echo "THEANO_FLAGS: $THEANO_FLAGS"
 
 flags="--data_type snli --embedding_data_path $EMBEDDING_PATH --log_path $LOG_DIR --training_data_path $SNLI_TRAIN_JSONL --experiment_name $MODEL"
 if [ "$eval_only" = true ]; then
