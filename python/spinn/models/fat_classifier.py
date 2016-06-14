@@ -88,6 +88,7 @@ def build_sentence_model(cls, vocab_size, seq_length, tokens, transitions,
     sentence_model = cls(
         FLAGS.model_dim, FLAGS.word_embedding_dim, vocab_size, seq_length,
         compose_network, embedding_projection_network, training_mode, ground_truth_transitions_visible, vs,
+        predict_use_cell=FLAGS.predict_use_cell,
         use_tracking_lstm=FLAGS.use_tracking_lstm,
         tracking_lstm_hidden_dim=FLAGS.tracking_lstm_hidden_dim,
         X=tokens,
@@ -175,6 +176,7 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
     premise_model = cls(
         FLAGS.model_dim, FLAGS.word_embedding_dim, vocab_size, seq_length,
         compose_network, embedding_projection_network, training_mode, ground_truth_transitions_visible, vs,
+        predict_use_cell=FLAGS.predict_use_cell,
         use_tracking_lstm=FLAGS.use_tracking_lstm,
         tracking_lstm_hidden_dim=FLAGS.tracking_lstm_hidden_dim,
         X=premise_tokens,
@@ -194,6 +196,7 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
     hypothesis_model = cls(
         FLAGS.model_dim, FLAGS.word_embedding_dim, vocab_size, seq_length,
         compose_network, embedding_projection_network, training_mode, ground_truth_transitions_visible, vs,
+        predict_use_cell=FLAGS.predict_use_cell,
         use_tracking_lstm=FLAGS.use_tracking_lstm,
         tracking_lstm_hidden_dim=FLAGS.tracking_lstm_hidden_dim,
         X=hypothesis_tokens,
@@ -714,6 +717,10 @@ if __name__ == '__main__':
     gflags.DEFINE_integer("tracking_lstm_hidden_dim", 4, "")
     gflags.DEFINE_boolean("use_tracking_lstm", True,
                           "Whether to use LSTM in the tracking unit")
+    gflags.DEFINE_boolean("predict_use_cell", False,
+                          "For models which predict parser actions, use "
+                          "both the tracking LSTM hidden and cell values as "
+                          "input to the prediction layer")
     gflags.DEFINE_enum("use_attention", "None",
                        ["None", "Rocktaschel", "WangJiang", "Thang", "TreeWangJiang", "TreeThang"],
                        "")

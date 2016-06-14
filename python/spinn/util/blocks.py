@@ -346,13 +346,48 @@ def BatchNorm(x, input_dim, vs, name, training_mode, axes=[0], momentum=0.9):
     return (x - effective_mean) * (g / effective_std) + b
 
 
-def TrackingUnit(state_prev, inp, inp_dim, hidden_dim, vs, name="track_unit", make_logits=True):
+def TrackingUnit(state_prev, inp, inp_dim, hidden_dim, vs,
+                 make_logits=True, logits_use_cell=False, name="track_unit"):
+    """
+    Defines a basic recurrent tracking unit that optionally predicts actions.
+
+    This is just an LSTM layer which combines given state and input, and
+    optionally uses the resulting state to predict parser actions.
+
+    Arguments:
+        state_prev: Theano batch of previous tracking state outputs
+        inp: Theano batch of inputs to tracking unit
+        inp_dim: Dimensionality of `inp`
+        hidden_dim: Size of complete LSTM state representation in `state_prev`
+            (both cell and hidden values)
+        vs: VariableStore
+        make_logits: If true, also compute an output layer from the generated
+            state representation.
+        logits_use_cell: When producing logits, use both the LSTM hidden value
+            and cell value. If false, just use the hidden value. Only has an
+            effect when `make_logits` is `True`.
+        name:
+
+    Returns:
+        state: Theano batch of state representations for this timestep; same
+            size as `state_prev`
+        logits: If `make_logits` is `True`, a Theano output layer batch of
+            dimension `batch_size * NUM_TRANSITION_TYPES`. Otherwise do not
+            use.
+    """
     # Pass previous state and input to an LSTM layer.
     state = LSTMLayer(state_prev, inp, inp_dim, 2 * hidden_dim, vs, name="%s/lstm" % name)
 
     if make_logits:
+        if logits_use_cell:
+            pred_inp = state
+            pred_inp_dim = hidden_dim * 2
+        else:
+            pred_inp = state[:, :hidden_dim]
+            pred_inp_dim = hidden_dim
+
         # Pass LSTM states through a Linear layer to predict the next transition.
-        logits = Linear(state[:, :hidden_dim], hidden_dim, NUM_TRANSITION_TYPES, vs, name="%s/linear" % name)
+        logits = Linear(pred_inp, pred_inp_dim, NUM_TRANSITION_TYPES, vs, name="%s/linear" % name)
     else:
         logits = 0.0
 

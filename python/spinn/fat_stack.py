@@ -71,6 +71,7 @@ class HardStack(object):
     def __init__(self, model_dim, word_embedding_dim, vocab_size, seq_length, compose_network,
                  embedding_projection_network, training_mode, ground_truth_transitions_visible, vs,
                  prediction_and_tracking_network=None,
+                 predict_use_cell=False,
                  predict_transitions=False,
                  train_with_predicted_transitions=False,
                  interpolate=False,
@@ -118,6 +119,10 @@ class HardStack(object):
             vs: VariableStore instance for parameter storage
             prediction_and_tracking_network: Blocks-like function which either maps values
               `3 * model_dim` to `action_dim` or uses the more complex TrackingUnit template.
+            predict_use_cell: Only applicable when using an LSTM tracking unit
+                for prediction (when `predict_transitions` is `True`). If
+                `True`, use both the LSTM cell and hidden value to make
+                predictions; use just the hidden value otherwise.
             predict_transitions: If set, predict transitions. If not, the tracking LSTM may still
               be used for other purposes.
             train_with_predicted_transitions: If `True`, use the predictions from the model
@@ -166,6 +171,7 @@ class HardStack(object):
         self._compose_network = compose_network
         self._embedding_projection_network = embedding_projection_network
         self._prediction_and_tracking_network = prediction_and_tracking_network
+        self._predict_use_cell = predict_use_cell
         self._predict_transitions = predict_transitions
         self.train_with_predicted_transitions = train_with_predicted_transitions
 
@@ -284,11 +290,13 @@ class HardStack(object):
                 tracking_hidden, actions_t = self._prediction_and_tracking_network(
                     tracking_hidden, predict_inp, h_dim * 3,
                     self.tracking_lstm_hidden_dim, self._vs,
+                    logits_use_cell=self._predict_use_cell,
                     name="prediction_and_tracking")
             else:
                 # Obtain predicted actions directly.
                 actions_t = self._prediction_and_tracking_network(
                     predict_inp, h_dim * 3, util.NUM_TRANSITION_TYPES, self._vs,
+                    logits_use_cell=self._predict_use_cell,
                     name="prediction_and_tracking")
 
         if self.train_with_predicted_transitions:
