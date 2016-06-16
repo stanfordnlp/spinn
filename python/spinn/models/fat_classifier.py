@@ -1,16 +1,16 @@
 """From the project root directory (containing data files), this can be run with:
 
 Boolean logic evaluation:
-python -m spinn.models.classifier --training_data_path bl-data/pbl_train.tsv \
-       --eval_data_path bl-data/pbl_dev.tsv
+python -m spinn.models.fat_classifier --training_data_path ../bl-data/pbl_train.tsv \
+       --eval_data_path ../bl-data/pbl_dev.tsv
 
 SST sentiment (Demo only, model needs a full GloVe embeddings file to do well):
-python -m spinn.models.classifier --data_type sst --training_data_path sst-data/train.txt \
+python -m spinn.models.fat_classifier --data_type sst --training_data_path sst-data/train.txt \
        --eval_data_path sst-data/dev.txt --embedding_data_path spinn/tests/test_embedding_matrix.5d.txt \
        --model_dim 10 --word_embedding_dim 5
 
 SNLI entailment (Demo only, model needs a full GloVe embeddings file to do well):
-python -m spinn.models.classifier --data_type snli --training_data_path snli_1.0/snli_1.0_dev.jsonl \
+python -m spinn.models.fat_classifier --data_type snli --training_data_path snli_1.0/snli_1.0_dev.jsonl \
        --eval_data_path snli_1.0/snli_1.0_dev.jsonl --embedding_data_path spinn/tests/test_embedding_matrix.5d.txt \
        --model_dim 10 --word_embedding_dim 5
 
@@ -37,6 +37,7 @@ from spinn.data.snli import load_snli_data
 
 import spinn.fat_stack
 import spinn.plain_rnn
+import spinn.cbow
 
 
 FLAGS = gflags.FLAGS
@@ -67,6 +68,9 @@ def build_sentence_model(cls, vocab_size, seq_length, tokens, transitions,
     if cls is spinn.plain_rnn.RNN:
         compose_network = partial(util.LSTMLayer,
                                       initializer=util.HeKaimingInitializer())
+        embedding_projection_network = None
+    elif cls is spinn.cbow.CBOW:
+        compose_network = None
         embedding_projection_network = None
     else:
         if FLAGS.lstm_composition:
@@ -149,6 +153,9 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
         compose_network = partial(util.LSTMLayer,
                                       initializer=util.HeKaimingInitializer())
         embedding_projection_network = None
+    elif cls is spinn.cbow.CBOW:
+        compose_network = None
+        embedding_projection_network = None
     else:
         if FLAGS.lstm_composition:
             compose_network = partial(util.TreeLSTMLayer,
@@ -192,7 +199,8 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
         initialize_hyp_tracking_state=FLAGS.initialize_hyp_tracking_state)
 
     premise_stack_tops = premise_model.stack_tops if FLAGS.use_attention != "None" else None
-    premise_tracking_c_state_final = premise_model.tracking_c_state_final if cls is not spinn.plain_rnn.RNN else None
+    premise_tracking_c_state_final = premise_model.tracking_c_state_final if cls not in [spinn.plain_rnn.RNN, 
+                                                                                            spinn.cbow.CBOW] else None
     hypothesis_model = cls(
         FLAGS.model_dim, FLAGS.word_embedding_dim, vocab_size, seq_length,
         compose_network, embedding_projection_network, training_mode, ground_truth_transitions_visible, vs,
@@ -219,7 +227,7 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
         premise_vector = premise_model.final_representations
         hypothesis_vector = hypothesis_model.final_representations
 
-        if FLAGS.lstm_composition or cls is spinn.plain_rnn.RNN:
+        if (FLAGS.lstm_composition and cls is not spinn.cbow.CBOW) or cls is spinn.plain_rnn.RNN:
             premise_vector = premise_vector[:,:FLAGS.model_dim / 2].reshape((-1, FLAGS.model_dim / 2))
             hypothesis_vector = hypothesis_vector[:,:FLAGS.model_dim / 2].reshape((-1, FLAGS.model_dim / 2))
             sentence_vector_dim = FLAGS.model_dim / 2
@@ -497,7 +505,7 @@ def run(only_forward=False):
     training_data = util.PreprocessDataset(
         raw_training_data, vocabulary, FLAGS.seq_length, data_manager, eval_mode=False, logger=logger,
         sentence_pair_data=data_manager.SENTENCE_PAIR_DATA,
-        for_rnn=FLAGS.model_type == "RNN")
+        for_rnn=FLAGS.model_type == "RNN" or FLAGS.model_type == "CBOW")
     training_data_iter = util.MakeTrainingIterator(
         training_data, FLAGS.batch_size)
 
@@ -507,7 +515,7 @@ def run(only_forward=False):
         e_X, e_transitions, e_y, e_num_transitions = util.PreprocessDataset(
             raw_eval_set, vocabulary, FLAGS.seq_length, data_manager, eval_mode=True, logger=logger,
             sentence_pair_data=data_manager.SENTENCE_PAIR_DATA,
-            for_rnn=FLAGS.model_type == "RNN")
+            for_rnn=FLAGS.model_type == "RNN" or FLAGS.model_type == "CBOW")
         eval_iterators.append((filename,
             util.MakeEvalIterator((e_X, e_transitions, e_y, e_num_transitions), FLAGS.batch_size)))
 
@@ -522,7 +530,9 @@ def run(only_forward=False):
     vs = util.VariableStore(
         default_initializer=util.UniformInitializer(FLAGS.init_range), logger=logger)
 
-    if FLAGS.model_type == "RNN":
+    if FLAGS.model_type == "CBOW":
+        model_cls = spinn.cbow.CBOW
+    elif FLAGS.model_type == "RNN":
         model_cls = spinn.plain_rnn.RNN
     else:
         model_cls = getattr(spinn.fat_stack, FLAGS.model_type)
@@ -565,9 +575,9 @@ def run(only_forward=False):
         l2_cost += FLAGS.l2_lambda * T.sum(T.sqr(vs.vars[var]))
 
     # Compute cross-entropy cost on action predictions.
-    if (not data_manager.SENTENCE_PAIR_DATA) and FLAGS.model_type not in ["Model0", "RNN"]:
+    if (not data_manager.SENTENCE_PAIR_DATA) and FLAGS.model_type not in ["Model0", "RNN", "CBOW"]:
         transition_cost, action_acc = build_transition_cost(predicted_transitions, transitions, num_transitions)
-    elif data_manager.SENTENCE_PAIR_DATA and FLAGS.model_type not in ["Model0", "RNN"]:
+    elif data_manager.SENTENCE_PAIR_DATA and FLAGS.model_type not in ["Model0", "RNN", "CBOW"]:
         p_transition_cost, p_action_acc = build_transition_cost(predicted_premise_transitions, transitions[:, :, 0],
             num_transitions[:, 0])
         h_transition_cost, h_action_acc = build_transition_cost(predicted_hypothesis_transitions, transitions[:, :, 1],
@@ -706,7 +716,7 @@ if __name__ == '__main__':
 
     # Model architecture settings.
     gflags.DEFINE_enum("model_type", "Model0",
-                       ["RNN", "Model0", "Model1", "Model2", "Model2S"],
+                       ["CBOW", "RNN", "Model0", "Model1", "Model2", "Model2S"],
                        "")
     gflags.DEFINE_boolean("allow_gt_transitions_in_eval", False,
         "Whether to use ground truth transitions in evaluation when appropriate "
