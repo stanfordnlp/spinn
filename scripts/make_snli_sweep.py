@@ -97,5 +97,5 @@ for run_id in range(sweep_runs):
                 val_disp = "%.2g" % value
             name += "-" + param + val_disp
     flags += " --experiment_name " + name
-    print "export SPINN_FLAGS=\"" + flags + "\"; export DEVICE=gpuX; qsub -v SPINN_FLAGS,DEVICE scripts/train_spinn_classifier.sh -q " + queue + " -l host=jagupardX"
+    print "export SPINN_FLAGS=\"" + flags + "\"; export DEVICE=gpuX; qsub -v SPINN_FLAGS,DEVICE ../scripts/train_spinn_classifier.sh -q " + queue + " -l host=jagupardX"
     print
