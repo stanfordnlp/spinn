@@ -638,7 +638,7 @@ def run(only_forward=False):
         for eval_set, eval_out_path in zip(eval_iterators, eval_output_paths):
             logger.Log("Writing eval output for %s." % (eval_set[0],))
             evaluate_expanded(eval_fn, eval_set, eval_out_path, logger, step,
-                              data_manager.SENTENCE_PAIR_DATA, ind_to_word, FLAGS.model_type not in ["Model0", "RNN"])
+                              data_manager.SENTENCE_PAIR_DATA, ind_to_word, FLAGS.model_type not in ["Model0", "RNN", "CBOW"])
     else:
          # Train
 
