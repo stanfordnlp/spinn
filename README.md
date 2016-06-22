@@ -26,6 +26,8 @@ Install all required Python dependencies using the command below. (**WARNING:** 
 
 We use [a modified version of Theano][3] in order to support fast forward- and backward-prop in `thin-stack`. While it isn't absolutely necessary to use this hacked Theano, it greatly improves `thin-stack` performance.
 
+Alternatively, you can use a custom Docker image that we've prepared, as discussed in this [CodaLab worksheet](https://worksheets.codalab.org/worksheets/0xa85b2da5365f423d952f800370ebb9b5/).
+
 ### Running the code
 
 The easiest way to launch a train/test run is to use one of the [`checkpoints` directory](https://github.com/stanfordnlp/spinn/tree/master/checkpoints).
