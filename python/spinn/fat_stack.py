@@ -191,8 +191,6 @@ class HardStack(object):
 
         # Mask for scheduled sampling.
         self.ss_mask_gen = ss_mask_gen
-        # Flag for scheduled sampling.
-        self.interpolate = interpolate
         # Training step number.
         self.ss_prob = ss_prob
         # Connect tracking unit and composition unit.
@@ -446,6 +444,7 @@ class HardStack(object):
         self.embeddings = self.final_stack[:, 0]
 
         if self._predict_transitions:
+            # dimshuffle to batch_size * num_timesteps * num_actions
             self.transitions_pred = scan_ret[0][-1].dimshuffle(1, 0, 2)
         else:
             self.transitions_pred = T.zeros((batch_size, 0))
