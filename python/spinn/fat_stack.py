@@ -344,7 +344,7 @@ class HardStack(object):
         buffer_cur_next = buffer_cur_t + (1 - mask)
 
         if self._predict_transitions:
-            ret_val = stack_next, buffer_cur_next, tracking_hidden, attention_hidden, actions_t
+            ret_val = stack_next, buffer_cur_next, tracking_hidden, attention_hidden, actions_t, mask
         else:
             ret_val = stack_next, buffer_cur_next, tracking_hidden, attention_hidden
 
@@ -445,8 +445,11 @@ class HardStack(object):
 
         if self._predict_transitions:
             # dimshuffle to batch_size * num_timesteps * num_actions
-            self.transitions_pred = scan_ret[0][-1].dimshuffle(1, 0, 2)
+            self.p_transitions = scan_ret[0][-2].dimshuffle(1, 0, 2)
+            # dimshuffle to batch_size * num_timesteps
+            self.transitions_pred = scan_ret[0][-1].dimshuffle(1, 0)
         else:
+            assert False # TODO hack
             self.transitions_pred = T.zeros((batch_size, 0))
 
 

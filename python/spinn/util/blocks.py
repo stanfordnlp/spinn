@@ -616,3 +616,42 @@ def AttentionUnitInit(premise_stack_tops, attention_dim, vs, initializer=None, n
     return T.dot(premise_stack_tops, W_y)
 
 
+def reinforce_episodic_gradients(p_outputs, sampled_outputs, rewards, params,
+                                 baseline=False, tau=0.9, name="reinforce"):
+    """
+    Args:
+        p_outputs: batch_size * num_timesteps * num_actions matrix of
+            per-timestep action probabilities
+        sampled_outputs: batch_size * num_timesteps ints: actions sampled
+            at each timestep in this rollout
+        rewards: batch_size ints
+        params:
+    """
+
+    batch_size, num_timesteps, num_actions = p_outputs.shape[2]
+
+    if baseline:
+        avg_reward = vs.add_param("%s/avg_reward", (1,),
+                initializer=ZeroInitializer(), trainable=False)
+
+        new_avg_reward = tau * avg_reward + (1. - tau) * rewards.mean()
+        vs.add_nongradient_update(avg_reward, new_avg_reward)
+    else:
+        avg_reward = T.constant(0.0)
+
+    # Baseline empirical rewards
+    rewards -= avg_reward
+
+    p_outputs = T.log(p_outputs)
+
+    # Fetch p(sampled_output) for each timestep.
+    flat_outputs = p_outputs.reshape((-1,))
+    flat_sampled_outputs = sampled_outputs.reshape((-1,))
+    p_sampled_out = flat_outputs[flat_sampled_outputs + T.arange(num_actions)]
+    # Calculate p(sampled_outputs) by chain rule. We can merge these ahead of
+    # time, since we only have a single episode-level reward.
+    p_sampled_out = p_sampled_out.reshape((batch_size, num_timesteps)).sum(axis=1)
+
+    # Main REINFORCE gradient equation.
+    objective = -1. * p_sampled_out * rewards
+    return T.grad(objective.mean(), params)

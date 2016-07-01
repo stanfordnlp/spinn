@@ -199,7 +199,7 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
         initialize_hyp_tracking_state=FLAGS.initialize_hyp_tracking_state)
 
     premise_stack_tops = premise_model.stack_tops if FLAGS.use_attention != "None" else None
-    premise_tracking_c_state_final = premise_model.tracking_c_state_final if cls not in [spinn.plain_rnn.RNN, 
+    premise_tracking_c_state_final = premise_model.tracking_c_state_final if cls not in [spinn.plain_rnn.RNN,
                                                                                             spinn.cbow.CBOW] else None
     hypothesis_model = cls(
         FLAGS.model_dim, FLAGS.word_embedding_dim, vocab_size, seq_length,
@@ -274,7 +274,7 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
         prev_features, prev_features_dim, num_classes, vs,
         name="semantic_classifier", use_bias=True)
 
-    return premise_model.transitions_pred, hypothesis_model.transitions_pred, logits
+    return premise_model, hypothesis_model, logits
 
 
 def build_cost(logits, targets):
@@ -334,6 +334,12 @@ def build_transition_cost(logits, targets, num_transitions):
     # transitions right.
     cost = T.mean(costs)
     return cost, acc
+
+
+def build_rewards(logits, y):
+    """Generate a reward batch for the given logit predictions."""
+    # TODO probably a more efficient way to retrieve this
+    return logits[:, y]
 
 
 def evaluate(eval_fn, eval_set, logger, step):
@@ -549,12 +555,25 @@ def run(only_forward=False):
         transitions = T.itensor3("transitions")
         num_transitions = T.imatrix("num_transitions")
 
-        predicted_premise_transitions, predicted_hypothesis_transitions, logits = build_sentence_pair_model(
+        premise_model, hypothesis_model, logits = build_sentence_pair_model(
             model_cls, len(vocabulary), FLAGS.seq_length,
             X, transitions, len(data_manager.LABEL_MAP), training_mode, ground_truth_transitions_visible, vs,
             initial_embeddings=initial_embeddings, project_embeddings=(not train_embeddings),
             ss_mask_gen=ss_mask_gen,
             ss_prob=ss_prob)
+
+        # Build "reward" batch -- p(correct_class)
+        rewards = build_rewards(logits, y)
+
+        # Calculate REINFORCE gradients
+        premise_rl_gradients = util.reinforce_episodic_gradients(
+                premise_model.transitions_pred, premise_model.p_transitions,
+                rewards, vs.trainable_vars.values(), baseline=True,
+                tau=FLAGS.tau)
+        hypothesis_rl_gradients = util.reinforce_episodic_gradients(
+                hypothesis_model.transitions_pred, hypothesis_model.p_transitions,
+                rewards, vs.trainable_vars.values(), baseline=True,
+                tau=FLAGS.tau)
     else:
         X = T.matrix("X", dtype="int32")
         transitions = T.imatrix("transitions")
@@ -641,6 +660,8 @@ def run(only_forward=False):
                               data_manager.SENTENCE_PAIR_DATA, ind_to_word, FLAGS.model_type not in ["Model0", "RNN", "CBOW"])
     else:
          # Train
+
+        # TODO: Merge REINFORCE gradients with those of xent.
 
         new_values = util.RMSprop(total_cost, vs.trainable_vars.values(), lr)
         new_values += [(key, vs.nongradient_updates[key]) for key in vs.nongradient_updates]
@@ -767,6 +788,8 @@ if __name__ == '__main__':
     gflags.DEFINE_float("l2_lambda", 1e-5, "")
     gflags.DEFINE_float("init_range", 0.005, "Mainly used for softmax parameters. Range for uniform random init.")
     gflags.DEFINE_float("transition_cost_scale", 1.0, "Multiplied by the transition cost.")
+
+    gflags.DEFINE_float("tau", 0.9, "Exponential moving average decay rate for REINFORCE baselining")
 
     # Display settings.
     gflags.DEFINE_integer("statistics_interval_steps", 100, "Print training set results at this interval.")
