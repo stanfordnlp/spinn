@@ -257,9 +257,9 @@ class HardStack(object):
         self.X = self.X or T.imatrix("X")
         self.transitions = self.transitions or T.imatrix("transitions")
 
-    def _step(self, transitions_t, ss_mask_gen_matrix_t, stack_t, buffer_cur_t,
-            tracking_hidden, attention_hidden, buffer,
-            ground_truth_transitions_visible, premise_stack_tops, projected_stack_tops):
+    def _step(self, transitions_t, stack_t, buffer_cur_t, tracking_hidden,
+              attention_hidden, buffer, ground_truth_transitions_visible,
+              premise_stack_tops, projected_stack_tops):
         """TODO document"""
         batch_size, _ = self.X.shape
 
@@ -299,25 +299,9 @@ class HardStack(object):
                     logits_use_cell=self._predict_use_cell,
                     name="prediction_and_tracking")
 
-        if self.train_with_predicted_transitions:
-            # Model 2 case.
-            if self.interpolate:
-                # Only use ground truth transitions if they are marked as visible to the model.
-                effective_ss_mask_gen_matrix_t = ss_mask_gen_matrix_t * ground_truth_transitions_visible
-                # Interpolate between truth and prediction using bernoulli RVs
-                # generated prior to the step.
-                mask = (transitions_t * effective_ss_mask_gen_matrix_t
-                        + actions_t.argmax(axis=1) * (1 - effective_ss_mask_gen_matrix_t))
-            else:
-                # Use predicted actions to build a mask.
-                mask = actions_t.argmax(axis=1)
-        elif self._predict_transitions:
-            # Use transitions provided from external parser when not masked out
-            mask = (transitions_t * ground_truth_transitions_visible
-                        + actions_t.argmax(axis=1) * (1 - ground_truth_transitions_visible))
-        else:
-            # Model 0 case.
-            mask = transitions_t
+        # Sample parsing transitions according to predicted distribution.
+        actions_t = theano.nnet.softmax(actions_t)
+        mask = self.ss_mask_gen.multinomial(pvals=actions_t).nonzero()[1]
 
         # Now update the stack: first precompute reduce results.
         if self.model_dim != self.stack_dim:
@@ -365,10 +349,6 @@ class HardStack(object):
             ret_val = stack_next, buffer_cur_next, tracking_hidden, attention_hidden, actions_t
         else:
             ret_val = stack_next, buffer_cur_next, tracking_hidden, attention_hidden
-
-        if not self.interpolate:
-            # Use ss_mask as a redundant return value.
-            ret_val = (ss_mask_gen_matrix_t,) + ret_val
 
         return ret_val
 
@@ -442,18 +422,6 @@ class HardStack(object):
 
         # Prepare data to scan over.
         sequences = [transitions]
-        if self.interpolate:
-            # Generate Bernoulli RVs to simulate scheduled sampling
-            # if the interpolate flag is on.
-            ss_mask_gen_matrix = self.ss_mask_gen.binomial(
-                                transitions.shape, p=self.ss_prob)
-            # Take in the RV sequence as input.
-            sequences.append(ss_mask_gen_matrix)
-        else:
-            # Take in the RV sequqnce as a dummy output. This is
-            # done to avaid defining another step function.
-            outputs_info = [DUMMY] + outputs_info
-
         non_sequences = [buffer_t, self.ground_truth_transitions_visible]
 
         if self.use_attention != "None" and self.is_hypothesis:
@@ -472,7 +440,7 @@ class HardStack(object):
                 n_steps=self.seq_length,
                 name="stack_fwd")
 
-        stack_ind = 0 if self.interpolate else 1
+        stack_ind = 0 # TODO check?
         self.final_stack = scan_ret[0][stack_ind][-1]
         self.final_representations = self.final_stack[:, 0, :self.model_dim]
         self.embeddings = self.final_stack[:, 0]
