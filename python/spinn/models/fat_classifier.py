@@ -259,7 +259,8 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
         features_dim = mlp_input_dim
         for layer in range(FLAGS.num_sentence_pair_combination_layers):
             features = util.HeKaimingResidualLayerSet(features, features_dim, vs, training_mode, name="combining_stack/" + str(layer), 
-                dropout_keep_rate=FLAGS.semantic_classifier_keep_rate, depth=FLAGS.sentence_pair_combination_layer_dim) # Temporary flag hack
+                dropout_keep_rate=FLAGS.semantic_classifier_keep_rate, depth=FLAGS.sentence_pair_combination_layer_dim, 
+                initializer=util.HeKaimingInitializer()) # Temporary flag hack
     else:    
         # Apply a combining MLP
         mlp_input = util.BatchNorm(mlp_input, mlp_input_dim, vs, "sentence_vectors", training_mode)

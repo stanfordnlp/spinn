@@ -68,7 +68,7 @@ def DoubleIdentityInitializer(range):
     return init
 
 
-def HeKaimingResidualLayerSet(inp, inp_dim, vs, training_mode, name="resnet_stack", dropout_keep_rate=1.0, depth=2):
+def HeKaimingResidualLayerSet(inp, inp_dim, vs, training_mode, name="resnet_stack", dropout_keep_rate=1.0, depth=2, initializer=None):
     # From http://arxiv.org/pdf/1603.05027v2.pdf
     addin = inp
     for i in range(depth):
@@ -76,7 +76,7 @@ def HeKaimingResidualLayerSet(inp, inp_dim, vs, training_mode, name="resnet_stac
         if dropout_keep_rate < 1.0:
             addin = Dropout(addin, dropout_keep_rate, training_mode) 
         addin = T.maximum(addin, 0) # ReLU
-        addin = Linear(addin, inp_dim, inp_dim, vs, name=name + "/" + str(i))
+        addin = Linear(addin, inp_dim, inp_dim, vs, name=name + "/" + str(i), initializer=initializer)
     return inp + addin
 
 
