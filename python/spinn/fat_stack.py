@@ -298,7 +298,7 @@ class HardStack(object):
                     name="prediction_and_tracking")
 
         # Sample parsing transitions according to predicted distribution.
-        actions_t = theano.nnet.softmax(actions_t)
+        actions_t = T.nnet.softmax(actions_t)
         mask = self.ss_mask_gen.multinomial(pvals=actions_t).nonzero()[1]
 
         # Now update the stack: first precompute reduce results.
