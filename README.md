@@ -1,3 +1,5 @@
+*NOTE:* This codebase is under active development. To exactly reproduce the experiments published in ACL 2016, use [this release][7].
+
 # Stack-augmented Parser-Interpreter Neural Network
 
 This repository contains the source code described in our paper [A Fast Unified Model for Sentence Parsing and Understanding][1]. There are three separate implementations available:
@@ -146,3 +148,4 @@ limitations under the License.
 [4]: https://github.com/google/googletest
 [5]: https://github.com/oir/deep-recursive
 [6]: https://github.com/stanfordnlp/spinn/blob/5d4257f4cd15cf7213d2ff87f6f3d7f6716e2ea1/cpp/bin/stacktest.cc#L33
+[7]: https://github.com/stanfordnlp/spinn/releases/tag/ACL2016

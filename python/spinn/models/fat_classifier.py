@@ -257,21 +257,30 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
     mlp_input = util.BatchNorm(mlp_input, mlp_input_dim, vs, "sentence_vectors", training_mode)
     mlp_input = util.Dropout(mlp_input, FLAGS.semantic_classifier_keep_rate, training_mode)
 
-    # Apply a combining MLP
-    prev_features = mlp_input
-    prev_features_dim = mlp_input_dim
-    for layer in range(FLAGS.num_sentence_pair_combination_layers):
-        prev_features = util.ReLULayer(prev_features, prev_features_dim, FLAGS.sentence_pair_combination_layer_dim, vs,
-            name="combining_mlp/" + str(layer),
-            initializer=util.HeKaimingInitializer())
-        prev_features_dim = FLAGS.sentence_pair_combination_layer_dim
+    if FLAGS.resnet:
+        features = mlp_input
+        features_dim = mlp_input_dim
+        for layer in range(FLAGS.num_sentence_pair_combination_layers):
+            features = util.HeKaimingResidualLayerSet(features, features_dim, vs, training_mode, name="combining_stack/" + str(layer), 
+                dropout_keep_rate=FLAGS.semantic_classifier_keep_rate, depth=FLAGS.sentence_pair_combination_layer_dim) # Temporary flag hack
+    else:    
+        # Apply a combining MLP
+        prev_features = mlp_input
+        prev_features_dim = mlp_input_dim
+        for layer in range(FLAGS.num_sentence_pair_combination_layers):
+            prev_features = util.ReLULayer(prev_features, prev_features_dim, FLAGS.sentence_pair_combination_layer_dim, vs,
+                name="combining_mlp/" + str(layer),
+                initializer=util.HeKaimingInitializer())
+            prev_features_dim = FLAGS.sentence_pair_combination_layer_dim
 
-        prev_features = util.BatchNorm(prev_features, prev_features_dim, vs, "combining_mlp/" + str(layer), training_mode)
-        prev_features = util.Dropout(prev_features, FLAGS.semantic_classifier_keep_rate, training_mode)
+            prev_features = util.BatchNorm(prev_features, prev_features_dim, vs, "combining_mlp/" + str(layer), training_mode)
+            prev_features = util.Dropout(prev_features, FLAGS.semantic_classifier_keep_rate, training_mode)
+        features = prev_features
+        features_dim = prev_features_dim    
 
     # Feed forward through a single output layer
     logits = util.Linear(
-        prev_features, prev_features_dim, num_classes, vs,
+        features, features_dim, num_classes, vs,
         name="semantic_classifier", use_bias=True)
 
     return premise_model.transitions_pred, hypothesis_model.transitions_pred, logits
@@ -743,6 +752,7 @@ if __name__ == '__main__':
     gflags.DEFINE_float("embedding_keep_rate", 0.5,
         "Used for dropout on transformed embeddings.")
     gflags.DEFINE_boolean("lstm_composition", True, "")
+    gflags.DEFINE_boolean("resnet", False, "")
     # gflags.DEFINE_integer("num_composition_layers", 1, "")
     gflags.DEFINE_integer("num_sentence_pair_combination_layers", 2, "")
     gflags.DEFINE_integer("sentence_pair_combination_layer_dim", 1024, "")
