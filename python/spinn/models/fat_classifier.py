@@ -568,13 +568,11 @@ def run(only_forward=False):
 
         # Calculate REINFORCE gradients
         premise_rl_gradients = util.reinforce_episodic_gradients(
-                premise_model.transitions_pred, premise_model.p_transitions,
-                rewards, vs.trainable_vars.values(), baseline=True,
-                tau=FLAGS.tau)
+                premise_model.p_transitions, premise_model.transitions_pred,
+                rewards, vs, tau=FLAGS.tau)
         hypothesis_rl_gradients = util.reinforce_episodic_gradients(
-                hypothesis_model.transitions_pred, hypothesis_model.p_transitions,
-                rewards, vs.trainable_vars.values(), baseline=True,
-                tau=FLAGS.tau)
+                premise_model.p_transitions, premise_model.transitions_pred,
+                rewards, vs, tau=FLAGS.tau)
     else:
         X = T.matrix("X", dtype="int32")
         transitions = T.imatrix("transitions")

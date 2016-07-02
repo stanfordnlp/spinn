@@ -616,31 +616,33 @@ def AttentionUnitInit(premise_stack_tops, attention_dim, vs, initializer=None, n
     return T.dot(premise_stack_tops, W_y)
 
 
-def reinforce_episodic_gradients(p_outputs, sampled_outputs, rewards, params,
-                                 baseline=False, tau=0.9, name="reinforce"):
+def reinforce_episodic_gradients(p_outputs, sampled_outputs, rewards, vs,
+                                 tau=0.9, params=None, name="reinforce"):
     """
     Args:
         p_outputs: batch_size * num_timesteps * num_actions matrix of
             per-timestep action probabilities
         sampled_outputs: batch_size * num_timesteps ints: actions sampled
             at each timestep in this rollout
-        rewards: batch_size ints
-        params:
+        rewards: batch_size floats of episode-level rewards
+        vs:
+        tau: exponential decay rate for reward baseline
     """
 
-    batch_size, num_timesteps, num_actions = p_outputs.shape[2]
+    batch_size, num_timesteps, num_actions = p_outputs.shape
 
-    if baseline:
-        avg_reward = vs.add_param("%s/avg_reward", (1,),
-                initializer=ZeroInitializer(), trainable=False)
+    if params is None:
+        params = vs.trainable_vars.values()
 
-        new_avg_reward = tau * avg_reward + (1. - tau) * rewards.mean()
-        vs.add_nongradient_update(avg_reward, new_avg_reward)
-    else:
-        avg_reward = T.constant(0.0)
+    # Baseline, updated by exponential moving average
+    avg_reward = vs.add_param("%s/avg_reward" % name, (1,),
+            initializer=ZeroInitializer(), trainable=False)
+
+    new_avg_reward = tau * avg_reward + (1. - tau) * rewards.mean()
+    vs.add_nongradient_update(avg_reward, new_avg_reward)
 
     # Baseline empirical rewards
-    rewards -= avg_reward
+    rewards -= theano.gradient.disconnected_grad(avg_reward)
 
     p_outputs = T.log(p_outputs)
 
