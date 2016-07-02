@@ -254,9 +254,6 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
         mlp_input = T.concatenate([mlp_input, premise_vector * hypothesis_vector], axis=1)
         mlp_input_dim += sentence_vector_dim
 
-    mlp_input = util.BatchNorm(mlp_input, mlp_input_dim, vs, "sentence_vectors", training_mode)
-    mlp_input = util.Dropout(mlp_input, FLAGS.semantic_classifier_keep_rate, training_mode)
-
     if FLAGS.resnet:
         features = mlp_input
         features_dim = mlp_input_dim
@@ -265,6 +262,9 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
                 dropout_keep_rate=FLAGS.semantic_classifier_keep_rate, depth=FLAGS.sentence_pair_combination_layer_dim) # Temporary flag hack
     else:    
         # Apply a combining MLP
+        mlp_input = util.BatchNorm(mlp_input, mlp_input_dim, vs, "sentence_vectors", training_mode)
+        mlp_input = util.Dropout(mlp_input, FLAGS.semantic_classifier_keep_rate, training_mode)
+
         prev_features = mlp_input
         prev_features_dim = mlp_input_dim
         for layer in range(FLAGS.num_sentence_pair_combination_layers):
