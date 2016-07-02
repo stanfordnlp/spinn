@@ -338,8 +338,9 @@ def build_transition_cost(logits, targets, num_transitions):
 
 def build_rewards(logits, y):
     """Generate a reward batch for the given logit predictions."""
-    # TODO probably a more efficient way to retrieve this
-    return logits[:, y]
+    # TODO probably a more efficient way to retrieve this -- might incur an
+    # D->H copy of the whole logits array as-is
+    return theano.nnet.softmax(logits)[:, y]
 
 
 def evaluate(eval_fn, eval_set, logger, step):
