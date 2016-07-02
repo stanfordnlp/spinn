@@ -53,7 +53,10 @@ if [ ! -e "$EMBEDDING_PATH" ]; then
     mkdir -p `dirname "$EMBEDDING_PATH"`
     wget http://nlp.stanford.edu/data/glove.840B.300d.zip -O glove.zip \
         || (echo "Failed to download GloVe embeddings." >&2 && exit 1)
-    unzip -d `dirname "$EMBEDDING_PATH"` glove.zip && rm glove.zip
+
+    tar -xvC `dirname "$EMBEDDING_PATH"` -f glove.zip \
+        || (echo "Failed to extract GloVe embeddings." >&2 && exit 1)
+    rm glove.zip
 fi
 
 # Prepare SNLI data.
