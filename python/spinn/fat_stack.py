@@ -414,7 +414,7 @@ class HardStack(object):
 
         # Set up the output list for scanning over _step().
         if self._predict_transitions:
-            outputs_info = [stack_init, buffer_cur_init, hidden_init, attention_init, None]
+            outputs_info = [stack_init, buffer_cur_init, hidden_init, attention_init, None, None]
         else:
             outputs_info = [stack_init, buffer_cur_init, hidden_init, attention_init]
 
