@@ -392,13 +392,13 @@ class HardStack(object):
         else:
             # Allocate a "buffer" stack initialized with projected embeddings,
             # and maintain a cursor in this buffer.
+            if self.use_input_dropout:
+                raw_embeddings = util.Dropout(raw_embeddings, self.embedding_dropout_keep_rate, self.training_mode)
             buffer_t = self._embedding_projection_network(
                 raw_embeddings, self.word_embedding_dim, self.model_dim, self._vs, name="project")
             if self.use_input_batch_norm:
                 buffer_t = util.BatchNorm(buffer_t, self.model_dim, self._vs, "buffer",
                     self.training_mode, axes=[0, 1])
-            if self.use_input_dropout:
-                buffer_t = util.Dropout(buffer_t, self.embedding_dropout_keep_rate, self.training_mode)
             buffer_emb_dim = self.model_dim
 
         # Collapse buffer to (batch_size * buffer_size) * emb_dim for fast indexing.
