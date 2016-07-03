@@ -18,7 +18,6 @@ theano_random = MRG_RandomStreams(numpy_random.randint(999999))
 def UniformInitializer(range):
     return lambda shape, **kwargs: np.random.uniform(-range, range, shape)
 
-
 def HeKaimingInitializer():
     def HeKaimingInit(shape, real_shape=None):
         # Calculate fan-in / fan-out using real shape if given as override
@@ -39,6 +38,10 @@ def ZeroInitializer():
 
 def OneInitializer():
     return lambda shape, **kwargs: np.ones(shape, dtype=theano.config.floatX)
+
+
+def ValueInitializer(value):
+    return lambda shape, **kwargs: np.ones(shape, dtype=theano.config.floatX) * value
 
 
 def TreeLSTMBiasInitializer():
@@ -68,6 +71,19 @@ def DoubleIdentityInitializer(range):
     return init
 
 
+def HighwayLayer(inp, inp_dim, vs, training_mode, name="highway", dropout_keep_rate=1.0, initializer=None):
+    # From http://arxiv.org/pdf/1603.05027v2.pdf
+    addin = BatchNorm(inp, inp_dim, vs, name, training_mode)
+    if dropout_keep_rate < 1.0:
+        addin = Dropout(addin, dropout_keep_rate, training_mode) 
+    addin = ReLULayer(addin, inp_dim, inp_dim, vs, name=name + "/addin", initializer=initializer)
+
+    gate = T.nnet.sigmoid(Linear(inp, inp_dim, inp_dim, vs, name=name + "/gate", initializer=initializer,
+        bias_initializer=ValueInitializer(-5.0)))
+
+    return addin * gate + inp * (1 - gate)
+
+
 def HeKaimingResidualLayerSet(inp, inp_dim, vs, training_mode, name="resnet_stack", dropout_keep_rate=1.0, depth=2, initializer=None):
     # From http://arxiv.org/pdf/1603.05027v2.pdf
     addin = inp
@@ -88,7 +104,7 @@ def ReLULayer(inp, inp_dim, outp_dim, vs, name="relu_layer", use_bias=True, init
     return outp
 
 
-def Linear(inp, inp_dim, outp_dim, vs, name="linear_layer", use_bias=True, initializer=None):
+def Linear(inp, inp_dim, outp_dim, vs, name="linear_layer", use_bias=True, initializer=None, bias_initializer=None):
     if isinstance(inp, tuple):
         assert isinstance(inp_dim, tuple)
         # Build initializers which are aware of the real shape of the overall
@@ -118,7 +134,7 @@ def Linear(inp, inp_dim, outp_dim, vs, name="linear_layer", use_bias=True, initi
 
     if use_bias:
         b = vs.add_param("%s_b" % name, (outp_dim,),
-                         initializer=ZeroInitializer())
+                         initializer=bias_initializer or ZeroInitializer())
         outp += b
 
     return outp
