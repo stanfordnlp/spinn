@@ -267,6 +267,8 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
             features = util.HeKaimingResidualLayerSet(features, features_dim, vs, training_mode, name="resnet/" + str(layer), 
                 dropout_keep_rate=FLAGS.semantic_classifier_keep_rate, depth=FLAGS.resnet_unit_depth, 
                 initializer=util.HeKaimingInitializer())
+            features = util.BatchNorm(features, prev_features_dim, vs, "combining_mlp/" + str(layer), training_mode)
+            features = util.Dropout(features, FLAGS.semantic_classifier_keep_rate, training_mode)
     elif FLAGS.classifier_type == "Highway":
         features = util.Linear(
             mlp_input, mlp_input_dim, FLAGS.sentence_pair_combination_layer_dim, vs,
@@ -277,6 +279,8 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
             features = util.HighwayLayer(features, features_dim, vs, training_mode, name="highway/" + str(layer), 
                 dropout_keep_rate=FLAGS.semantic_classifier_keep_rate,
                 initializer=util.HeKaimingInitializer())
+            features = util.BatchNorm(features, prev_features_dim, vs, "combining_mlp/" + str(layer), training_mode)
+            features = util.Dropout(features, FLAGS.semantic_classifier_keep_rate, training_mode)
     else:    
         # Apply a combining MLP
         prev_features = mlp_input
