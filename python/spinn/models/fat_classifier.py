@@ -254,7 +254,7 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
         mlp_input = T.concatenate([mlp_input, premise_vector * hypothesis_vector], axis=1)
         mlp_input_dim += sentence_vector_dim
 
-    if FLAGS.resnet:
+    if FLAGS.classifier_type == "ResNet":
         features = util.Linear(
             mlp_input, mlp_input_dim, FLAGS.sentence_pair_combination_layer_dim, vs,
             name="resnet/linear", use_bias=True)
@@ -263,7 +263,17 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
         for layer in range(FLAGS.num_sentence_pair_combination_layers):
             features = util.HeKaimingResidualLayerSet(features, features_dim, vs, training_mode, name="resnet/" + str(layer), 
                 dropout_keep_rate=FLAGS.semantic_classifier_keep_rate, depth=FLAGS.resnet_unit_depth, 
-                initializer=util.HeKaimingInitializer()) # Temporary flag hack
+                initializer=util.HeKaimingInitializer())
+    elif FLAGS.classifier_type == "Highway":
+        features = util.Linear(
+            mlp_input, mlp_input_dim, FLAGS.sentence_pair_combination_layer_dim, vs,
+            name="resnet/linear", use_bias=True)
+        features_dim = FLAGS.sentence_pair_combination_layer_dim
+
+        for layer in range(FLAGS.num_sentence_pair_combination_layers):
+            features = util.HighwayLayer(features, features_dim, vs, training_mode, name="highway/" + str(layer), 
+                dropout_keep_rate=FLAGS.semantic_classifier_keep_rate,
+                initializer=util.HeKaimingInitializer())
     else:    
         # Apply a combining MLP
         mlp_input = util.BatchNorm(mlp_input, mlp_input_dim, vs, "sentence_vectors", training_mode)
@@ -756,7 +766,7 @@ if __name__ == '__main__':
     gflags.DEFINE_float("embedding_keep_rate", 0.5,
         "Used for dropout on transformed embeddings.")
     gflags.DEFINE_boolean("lstm_composition", True, "")
-    gflags.DEFINE_boolean("resnet", False, "")
+    gflags.DEFINE_enum("classifier_type", "MLP", ["MLP", "Highway", "ResNet"], "")
     gflags.DEFINE_integer("resnet_unit_depth", 2, "")
     # gflags.DEFINE_integer("num_composition_layers", 1, "")
     gflags.DEFINE_integer("num_sentence_pair_combination_layers", 2, "")
