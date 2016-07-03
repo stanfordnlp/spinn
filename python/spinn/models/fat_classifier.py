@@ -267,7 +267,7 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
             features = util.HeKaimingResidualLayerSet(features, features_dim, vs, training_mode, name="resnet/" + str(layer), 
                 dropout_keep_rate=FLAGS.semantic_classifier_keep_rate, depth=FLAGS.resnet_unit_depth, 
                 initializer=util.HeKaimingInitializer())
-            features = util.BatchNorm(features, prev_features_dim, vs, "combining_mlp/" + str(layer), training_mode)
+            features = util.BatchNorm(features, features_dim, vs, "combining_mlp/" + str(layer), training_mode)
             features = util.Dropout(features, FLAGS.semantic_classifier_keep_rate, training_mode)
     elif FLAGS.classifier_type == "Highway":
         features = util.Linear(
@@ -279,22 +279,20 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
             features = util.HighwayLayer(features, features_dim, vs, training_mode, name="highway/" + str(layer), 
                 dropout_keep_rate=FLAGS.semantic_classifier_keep_rate,
                 initializer=util.HeKaimingInitializer())
-            features = util.BatchNorm(features, prev_features_dim, vs, "combining_mlp/" + str(layer), training_mode)
+            features = util.BatchNorm(features, features_dim, vs, "combining_mlp/" + str(layer), training_mode)
             features = util.Dropout(features, FLAGS.semantic_classifier_keep_rate, training_mode)
     else:    
         # Apply a combining MLP
-        prev_features = mlp_input
-        prev_features_dim = mlp_input_dim
+        features = mlp_input
+        features_dim = mlp_input_dim
         for layer in range(FLAGS.num_sentence_pair_combination_layers):
-            prev_features = util.ReLULayer(prev_features, prev_features_dim, FLAGS.sentence_pair_combination_layer_dim, vs,
+            features = util.ReLULayer(features, features_dim, FLAGS.sentence_pair_combination_layer_dim, vs,
                 name="combining_mlp/" + str(layer),
                 initializer=util.HeKaimingInitializer())
-            prev_features_dim = FLAGS.sentence_pair_combination_layer_dim
+            features_dim = FLAGS.sentence_pair_combination_layer_dim
 
-            prev_features = util.BatchNorm(prev_features, prev_features_dim, vs, "combining_mlp/" + str(layer), training_mode)
-            prev_features = util.Dropout(prev_features, FLAGS.semantic_classifier_keep_rate, training_mode)
-        features = prev_features
-        features_dim = prev_features_dim    
+            features = util.BatchNorm(features, features_dim, vs, "combining_mlp/" + str(layer), training_mode)
+            features = util.Dropout(features, FLAGS.semantic_classifier_keep_rate, training_mode) 
 
     # Feed forward through a single output layer
     logits = util.Linear(
