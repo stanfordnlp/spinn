@@ -255,11 +255,14 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
         mlp_input_dim += sentence_vector_dim
 
     if FLAGS.resnet:
-        features = mlp_input
-        features_dim = mlp_input_dim
+        features = util.Linear(
+            mlp_input, mlp_input_dim, FLAGS.sentence_pair_combination_layer_dim, vs,
+            name="resnet/linear", use_bias=True)
+        features_dim = FLAGS.sentence_pair_combination_layer_dim
+
         for layer in range(FLAGS.num_sentence_pair_combination_layers):
-            features = util.HeKaimingResidualLayerSet(features, features_dim, vs, training_mode, name="combining_stack/" + str(layer), 
-                dropout_keep_rate=FLAGS.semantic_classifier_keep_rate, depth=FLAGS.sentence_pair_combination_layer_dim, 
+            features = util.HeKaimingResidualLayerSet(features, features_dim, vs, training_mode, name="resnet/" + str(layer), 
+                dropout_keep_rate=FLAGS.semantic_classifier_keep_rate, depth=FLAGS.resnet_unit_depth, 
                 initializer=util.HeKaimingInitializer()) # Temporary flag hack
     else:    
         # Apply a combining MLP
@@ -754,6 +757,7 @@ if __name__ == '__main__':
         "Used for dropout on transformed embeddings.")
     gflags.DEFINE_boolean("lstm_composition", True, "")
     gflags.DEFINE_boolean("resnet", False, "")
+    gflags.DEFINE_integer("resnet_unit_depth", 2, "")
     # gflags.DEFINE_integer("num_composition_layers", 1, "")
     gflags.DEFINE_integer("num_sentence_pair_combination_layers", 2, "")
     gflags.DEFINE_integer("sentence_pair_combination_layer_dim", 1024, "")
