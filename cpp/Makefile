@@ -56,6 +56,11 @@ rnntest: bin/rnntest.cc $(SOURCES)
 	  -std=c++11 -I. -o bin/rnntest \
 	  $^
 
+spinn: bin/spinn.cc $(SOURCES)
+	nvcc -g -O0 -lcublas -lcurand \
+		-std=c++11 -I. -o bin/spinn \
+		$^
+
 clean:
 	rm -f bin/unittest bin/stacktest bin/rnntest
 	rm -f *.a *.o *.cu_o
