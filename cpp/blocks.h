@@ -12,9 +12,9 @@ typedef struct BatchNormedMLPParameters {
   float *bn_b;
   float *bn_ts;
   float *bn_tm;
-}
+} BatchNormedMLPParameters;
 
-void batch_normed_mlp(int m, int n, BatchNormedMLPParameters params
+void batch_normed_mlp(int m, int n, BatchNormedMLPParameters params,
                       const float *inp, float *out, cublasHandle_t handle);
 
 

@@ -1,6 +1,7 @@
 #ifndef _util_
 #define _util_
 
+#include <assert.h>
 #include <cstddef>
 #include <iostream>
 #include <fstream>

@@ -3,6 +3,7 @@
 
 #include <cstddef>
 #include <fstream>
+#include <vector>
 
 #include "blocks.h"
 #include "sequence-model.h"
@@ -10,15 +11,28 @@
 #include "util.h"
 
 
-typedef struct SpinnSpec {
+struct SpinnSpec {
   size_t num_classes;
-  ModelSpec ts_spec;
+  size_t batch_size;
+  size_t model_dim;
   size_t num_combination_layers;
   size_t combination_layer_dim;
 
+  ThinStackSpec ts_spec;
+
   bool use_difference_feature;
   bool use_product_feature;
-}
+
+  SpinnSpec(size_t num_classes, size_t num_combination_layers,
+            size_t combination_layer_dim, ThinStackSpec ts_spec,
+            bool use_difference_feature, bool use_product_feature)
+      : num_classes(num_classes), num_combination_layers(num_combination_layers),
+        combination_layer_dim(combination_layer_dim), ts_spec(ts_spec),
+        use_difference_feature(use_difference_feature),
+        use_product_feature(use_product_feature),
+
+        batch_size(ts_spec.batch_size), model_dim(ts_spec.model_dim) {};
+};
 
 typedef struct SpinnParameters {
   BatchNormedMLPParameters projection;
@@ -35,7 +49,7 @@ typedef struct SpinnParameters {
 
   float *classifier_W;
   float *classifier_b;
-}
+} SpinnParameters;
 
 
 class Spinn {
@@ -46,6 +60,7 @@ class Spinn {
   public:
     Spinn(SpinnSpec spec, SpinnParameters params, cublasHandle_t handle);
 
+    SpinnSpec spec;
     SpinnParameters params;
     cublasHandle_t handle;
 
@@ -60,10 +75,10 @@ class Spinn {
     ThinStack ts;
 
     // Feedforward containers
-    float **sentence_combinations;
+    vector<float *> sentence_combinations;
     float *logits;
 
-}
+};
 
 
 BatchNormedMLPParameters load_projection_params(int m, int n, ifstream& file) {
@@ -82,7 +97,7 @@ BatchNormedMLPParameters load_projection_params(int m, int n, ifstream& file) {
 }
 
 
-ThinStackParameters load_ts_params(ModelSpec spec, ifstream& file) {
+ThinStackParameters load_ts_params(ThinStackSpec spec, ifstream& file) {
   size_t hidden_dim = spec.model_dim / 2;
   float *tracking_b = load_weights_cuda(file, spec.tracking_lstm_dim * 4);
   float *tracking_W_inp = load_weights_cuda(file, (hidden_dim * 3) * spec.tracking_lstm_dim);
@@ -165,16 +180,16 @@ void destroy_params(SpinnSpec spec, SpinnParameters params) {
   destroy_params(params.projection);
   destroy_params(params.ts_params);
 
-  cudaFree(sentence_bn_g);
-  cudaFree(sentence_bn_b);
-  cudaFree(sentence_bn_ts);
-  cudaFree(sentence_bn_tm);
+  cudaFree(params.sentence_bn_g);
+  cudaFree(params.sentence_bn_b);
+  cudaFree(params.sentence_bn_ts);
+  cudaFree(params.sentence_bn_tm);
 
   for (int i = 0; i < spec.num_combination_layers; i++)
     destroy_params(params.mlp_params[i]);
 
-  cudaFree(classifier_W);
-  cudaFree(classifier_b);
+  cudaFree(params.classifier_W);
+  cudaFree(params.classifier_b);
 }
 
 
