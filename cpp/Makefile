@@ -37,7 +37,7 @@ gmock_main.a : gmock-all.o gtest-all.o gmock_main.o
 ######
 
 SOURCES = thin-stack.cc rnn.cc \
-		  kernels.cu util.cc
+		  kernels.cu util.cc blocks.cc
 
 test: gtest_main.a gmock_main.a test.cc $(SOURCES)
 	rm -f bin/unittest

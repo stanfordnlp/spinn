@@ -33,7 +33,7 @@ void xw_plus_b(int m, int n, const float *W, const float *b, const float *x,
   float alpha = 1.0f;
   float beta = 0.0f;
   cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, m, n, m, &alpha, W,
-      n, inp, n, &beta, out, n);
+      n, x, n, &beta, out, n);
 
   // out += b
   k::addi_mv(out, b, 1.0, m, n);
