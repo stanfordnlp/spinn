@@ -27,36 +27,31 @@ namespace k = kernels;
 ThinStack::ThinStack(ThinStackSpec spec, ThinStackParameters params,
     cublasHandle_t handle)
   : SequenceModel(spec), params(params), stack_size(spec.seq_length),
-    handle(handle) {
+    handle(handle),
 
-  stack_total_size = (stack_size * spec.batch_size) * spec.model_dim;
-  buffer_total_size = spec.batch_size * spec.seq_length * spec.model_dim;
-  queue_total_size = spec.batch_size * spec.seq_length;
-  cursors_total_size = spec.batch_size;
+    // Allocate inputs.
+    transitions(spec.batch_size, spec.seq_length),
 
-  // Pre-allocate inputs.
-  cudaMalloc(&X_indices, spec.batch_size * spec.seq_length * sizeof(float));
-  cudaMalloc(&X, spec.batch_size * spec.seq_length * spec.model_dim * sizeof(float));
-  cudaMalloc(&transitions, spec.batch_size * spec.seq_length * sizeof(float));
+    // Allocate auxiliary data structures.
+    stack(stack_size * spec.batch_size, spec.model_dim),
+    queue(spec.batch_size, spec.seq_length),
+    cursors(spec.batch_size),
 
-  // Pre-allocate auxiliary data structures.
-  cudaMalloc(&stack, stack_total_size * sizeof(float));
-  cudaMalloc(&queue, queue_total_size * sizeof(float));
-  cudaMalloc(&cursors, cursors_total_size * sizeof(float));
-  cudaMalloc(&buffer, buffer_total_size * sizeof(float));
+    // Allocate temporary containers.
+    buffer_top_idxs_t(spec.batch_size),
+    buffer_top_t(spec.model_dim, spec.batch_size),
+    stack_1_ptrs(spec.batch_size),
+    stack_1_t(spec.model_dim, spec.batch_size),
+    stack_2_ptrs(spec.batch_size),
+    stack_2_t(spec.model_dim, spec.batch_size),
+    push_output(spec.model_dim, spec.batch_size),
+    merge_output(spec.model_dim, spec.batch_size),
 
-  // Pre-allocate temporary containers.
-  cudaMalloc(&buffer_top_idxs_t, spec.batch_size * sizeof(float));
-  cudaMalloc(&buffer_top_t, spec.batch_size * spec.model_dim * sizeof(float));
-  cudaMalloc(&stack_1_ptrs, spec.batch_size * sizeof(float));
-  cudaMalloc(&stack_1_t, spec.model_dim * spec.batch_size * sizeof(float));
-  cudaMalloc(&stack_2_ptrs, spec.batch_size * sizeof(float));
-  cudaMalloc(&stack_2_t, spec.model_dim * spec.batch_size * sizeof(float));
-  cudaMalloc(&push_output, spec.batch_size * spec.model_dim * sizeof(float));
-  cudaMalloc(&merge_output, spec.batch_size * spec.model_dim * sizeof(float));
+    // Allocate accumulators.
+    buffer_cur_t(spec.batch_size),
 
-  // Pre-allocate accumulators.
-  cudaMalloc(&buffer_cur_t, spec.batch_size * sizeof(float));
+    // Allocate helpers.
+    batch_ones(spec.batch_size), batch_range(spec.batch_size) {
 
   init_helpers();
 
@@ -64,9 +59,6 @@ ThinStack::ThinStack(ThinStackSpec spec, ThinStackParameters params,
 
 
 void ThinStack::init_helpers() {
-  cudaMalloc(&batch_range, spec.batch_size * sizeof(float));
-  cudaMalloc(&batch_ones, spec.batch_size * sizeof(float));
-
   float h_batch_ones[spec.batch_size];
   float h_batch_range[spec.batch_size];
   for (int i = 0; i < spec.batch_size; i++) {
@@ -74,17 +66,11 @@ void ThinStack::init_helpers() {
     h_batch_range[i] = (float) i;
   }
 
-  cudaMemcpy(batch_range, h_batch_range, spec.batch_size * sizeof(float),
+  cudaMemcpy(batch_range.data, h_batch_range, spec.batch_size * sizeof(float),
       cudaMemcpyHostToDevice);
-  cudaMemcpy(batch_ones, h_batch_ones, spec.batch_size * sizeof(float),
+  cudaMemcpy(batch_ones.data, h_batch_ones, spec.batch_size * sizeof(float),
       cudaMemcpyHostToDevice);
   cudaDeviceSynchronize();
-}
-
-
-void ThinStack::free_helpers() {
-  cudaFree(batch_ones);
-  cudaFree(batch_range);
 }
 
 
@@ -93,25 +79,6 @@ ThinStack::~ThinStack() {
   cout << "!!!!!!!!!!!!!!!!" << endl;
   cout << "ThinStack dying!" << endl;
   cout << "!!!!!!!!!!!!!!!!" << endl;
-  free_helpers();
-
-  cudaFree(X_indices);
-  cudaFree(X);
-  cudaFree(transitions);
-
-  cudaFree(stack);
-  cudaFree(queue);
-  cudaFree(cursors);
-  cudaFree(buffer);
-
-  cudaFree(buffer_top_idxs_t);
-  cudaFree(buffer_top_t);
-  cudaFree(stack_1_ptrs);
-  cudaFree(stack_2_ptrs);
-  cudaFree(push_output);
-  cudaFree(merge_output);
-
-  cudaFree(buffer_cur_t);
 
 }
 
@@ -119,7 +86,6 @@ ThinStack::~ThinStack() {
 void ThinStack::forward() {
 
   // TODO embedding projection
-  buffer = X;
   reset();
   cudaDeviceSynchronize();
 
@@ -144,33 +110,29 @@ void ThinStack::forward() {
 
 void ThinStack::step(int t) {
 
-  float *transitions_t = &transitions[t * spec.batch_size];
+  vec transitions_t = transitions.slice1_vec(t);
 #if DEBUG
   cout << "transitions " << t << endl;
   print_device_matrix(transitions_t, 1, spec.batch_size);
 #endif
 
   // buffer_top = buffer[buffer_cur_t * batch_size + batch_range]
-  k::subtensor1(buffer_top_t, buffer, buffer_cur_t,
-          spec.batch_size * spec.model_dim, spec.batch_size,
-          spec.model_dim, 0.0f, spec.batch_size, 1.0f, batch_range);
+  X.subtensor1(buffer_top_t, buffer_cur_t, 0.0f, spec.batch_size, 1.0f, &batch_range);
 #if DEBUG
   cout << "buffer_top after:" << endl;
   print_device_matrix(buffer_top_t, spec.model_dim, spec.batch_size);
 #endif
 
   // stack_2_ptrs = (cursors - 1) + batch_range * seq_length
-  k::subtensor1(stack_2_ptrs, queue, cursors, spec.batch_size,
-          spec.batch_size, 1, -1.0f, 1.0f, spec.seq_length,
-          batch_range);
+  queue.subtensor1(stack_2_ptrs, cursors, -1.0f, 1.0f, spec.seq_length, &batch_range);
 #if DEBUG
   cout << "stack_2_ptrs #1" << endl;
   print_device_matrix(stack_2_ptrs, 1, spec.batch_size);
 #endif
 
   // stack_2_ptrs = stack_2_ptrs * batch_size + batch_range * 1
-  k::addi_vv(handle, stack_2_ptrs, batch_range, spec.batch_size, 1,
-          spec.batch_size);
+  stack_2_ptrs.muli(spec.batch_size);
+  stack_2_ptrs.addi(batch_range, 1.0f);
 #if DEBUG
   cout << "stack_2_ptrs" << endl;
   print_device_matrix(stack_2_ptrs, 1, spec.batch_size);
@@ -178,14 +140,10 @@ void ThinStack::step(int t) {
 
   // stack_1, stack_2
   // stack_1_t = stack[batch_range + (t - 1) * spec.batch_size]
-  k::subtensor1(stack_1_t, stack, batch_range,
-          spec.batch_size * spec.seq_length, spec.batch_size,
-          spec.model_dim, (float) (t - 1) * spec.batch_size, 1.0f, 0.0f,
-          NULL);
+  stack.subtensor1(stack_1_t, batch_range, (float) (t - 1) * spec.batch_size,
+      1.0f, 0.0f, NULL);
 
-  k::subtensor1(stack_2_t, stack, stack_2_ptrs,
-          spec.batch_size * spec.seq_length, spec.batch_size,
-          spec.model_dim, 0.0f, 1.0f, 0.0f, NULL);
+  stack.subtensor1(stack_2_t, stack_2_ptrs, 0.0f, 1.0f, 0.0f, NULL);
 
   // Run recurrence, which writes into `push_output`, `merge_output`.
   recurrence(stack_1_t, stack_2_t, buffer_top_t);
@@ -193,7 +151,7 @@ void ThinStack::step(int t) {
   // Write in the next stack top.
   mask_and_update_stack(buffer_top_t, merge_output, transitions_t, t);
 
-  mask_and_update_cursors(cursors, transitions_t, t);
+  mask_and_update_cursors(cursors, transitions_t);
 #if DEBUG
   cout << "cursors after" << endl;
   print_device_matrix(cursors, 1, spec.batch_size);
@@ -201,15 +159,14 @@ void ThinStack::step(int t) {
 
 
   // queue[cursors + 0 + batch_range * spec.seq_length] = t
-  k::set_subtensor1i_s(queue, t, cursors, spec.batch_size, 0, spec.seq_length,
-          batch_range);
+  queue.set_subtensor1i_s(t, cursors, 0.0f, spec.seq_length, &batch_range);
 #if DEBUG
   cout << "queue after" << endl;
   print_device_matrix(queue, 1, spec.seq_length * spec.batch_size);
 #endif
 
   // buffer_cur += (1 - transitions)
-  update_buffer_cur(buffer_cur_t, transitions_t, t);
+  update_buffer_cur(buffer_cur_t, transitions_t);
 #if DEBUG
   cout << "buffer cur after" << endl;
   print_device_matrix(buffer_cur_t, 1, spec.batch_size);
@@ -218,8 +175,8 @@ void ThinStack::step(int t) {
 }
 
 
-void ThinStack::recurrence(const float *stack_1_t, const float *stack_2_t,
-    const float *buffer_top_t) {
+void ThinStack::recurrence(const mat& stack_1_t, const mat& stack_2_t,
+    const mat& buffer_top_t) {
 
 #if DEBUG
   cout << "left child:" << endl;
@@ -230,28 +187,20 @@ void ThinStack::recurrence(const float *stack_1_t, const float *stack_2_t,
 #endif
 
   // merge_out = W_l l
-  float alpha = 1.0f;
-  float beta = 0.0f;
-  cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, spec.model_dim, spec.batch_size,
-      spec.model_dim, &alpha, params.compose_W_l, spec.model_dim, stack_2_t,
-      spec.model_dim, &beta, merge_output, spec.model_dim);
+  params.compose_W_l.mul(stack_2_t, merge_output);
   // merge_out += W_r r
-  float beta2 = 1.0f;
-  cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, spec.model_dim, spec.batch_size,
-      spec.model_dim, &alpha, params.compose_W_r, spec.model_dim, stack_1_t,
-      spec.model_dim, &beta2, merge_output, spec.model_dim);
+  params.compose_W_r.mul_inc(stack_1_t, merge_output);
 
   // merge_out += b
-  k::addi_mv(merge_output, params.compose_b, 1.0, spec.model_dim,
-          spec.batch_size);
+  merge_output.addi(params.compose_b, 1.0f);
 
-  k::relu(merge_output, spec.model_dim, spec.batch_size);
+  merge_output.relui();
 
 }
 
 
-void ThinStack::mask_and_update_stack(const float *push_value,
-    const float *merge_value, const float *transitions, int t) {
+void ThinStack::mask_and_update_stack(const mat& push_value, const mat& merge_value,
+    const vec& transitions_t, int t) {
 
   // Find start position of write destination (next-top corresponding to
   // timestep `t`).
@@ -264,7 +213,7 @@ void ThinStack::mask_and_update_stack(const float *push_value,
   print_device_matrix(push_value, spec.model_dim, spec.batch_size);
 #endif
 
-  k::switch_m(&stack[stack_offset], transitions, merge_value, push_value,
+  k::switch_m(&stack.data[stack_offset], transitions.data, merge_value.data, push_value.data,
               spec.batch_size, spec.model_dim);
 
 #if DEBUG
@@ -275,29 +224,24 @@ void ThinStack::mask_and_update_stack(const float *push_value,
 }
 
 
-void ThinStack::mask_and_update_cursors(float *cursors, const float *transitions,
-    int t) {
+void ThinStack::mask_and_update_cursors(vec& cursors, const vec& transitions_t) {
 
   // cursors += 1
-  float alpha1 = 1.0f;
-  cublasSaxpy(handle, spec.batch_size, &alpha1, batch_ones, 1, cursors, 1);
+  cursors.addi(batch_ones, 1.0f);
 
   // cursors -= 2*transitions
-  float alpha2 = -2.0f;
-  cublasSaxpy(handle, spec.batch_size, &alpha2, transitions, 1, cursors, 1);
+  cursors.addi(transitions_t, -2.0f);
 
 }
 
 
-void ThinStack::update_buffer_cur(float *buffer_cur_t, float *transitions, int t) {
+void ThinStack::update_buffer_cur(vec& buffer_cur_t, const vec& transitions_t) {
 
   // buffer_cur += 1
-  float alpha1 = 1.0;
-  cublasSaxpy(handle, spec.batch_size, &alpha1, batch_ones, 1, buffer_cur_t, 1);
+  buffer_cur_t.addi(batch_ones, 1.0f);
 
   // buffer_cur -= transitions
-  float alpha2 = -1.0;
-  cublasSaxpy(handle, spec.batch_size, &alpha2, transitions, 1, buffer_cur_t, 1);
+  buffer_cur_t.addi(transitions_t, -1.0f);
 
 }
 
@@ -307,17 +251,17 @@ void ThinStack::reset() {
   // every feedforward. They just get overwritten and their bad values are
   // never used, provided that the feedforward uses a valid transition
   // sequence.
-  cudaMemset(stack, 0, stack_total_size * sizeof(float));
-  cudaMemset(queue, 0, queue_total_size * sizeof(float));
+  stack.zero();
+  queue.zero();
 
+  cursors.zero();
+  cursors.addi(batch_ones, -1.0f);
   float alpha = -1.0f;
-  cudaMemset(cursors, 0, cursors_total_size * sizeof(float));
-  cublasSaxpy(handle, spec.batch_size, &alpha, batch_ones, 1, cursors, 1);
 
-  cudaMemset(buffer_cur_t, 0, spec.batch_size * sizeof(float));
+  buffer_cur_t.zero();
 }
 
 
-float *ThinStack::final_representations() {
-  return &stack[(spec.seq_length - 1) * spec.model_dim * spec.batch_size];
+mat ThinStack::final_representations() {
+  return stack.slice1((spec.seq_length - 1) * spec.model_dim);
 }

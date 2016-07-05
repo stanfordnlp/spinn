@@ -4,6 +4,7 @@
 #include <cuda_runtime.h>
 #include "cublas_v2.h"
 
+#include "blocks.h"
 #include "sequence-model.h"
 #include "util.h"
 
@@ -23,13 +24,13 @@ struct ThinStackSpec : public SequenceModelSpec {
 
 
 typedef struct ThinStackParameters {
-  float *tracking_W_inp;
-  float *tracking_W_hid;
-  float *tracking_b;
-  float *compose_W_l;
-  float *compose_W_r;
-  float *compose_W_ext;
-  float *compose_b;
+  mat tracking_W_inp;
+  mat tracking_W_hid;
+  mat tracking_b;
+  mat compose_W_l;
+  mat compose_W_r;
+  mat compose_W_ext;
+  mat compose_b;
 } ThinStackParameters;
 
 class ThinStack : public SequenceModel {
@@ -47,14 +48,13 @@ class ThinStack : public SequenceModel {
 
     void forward();
 
-    float *transitions;
-
-    float *stack;
+    mat transitions;
+    mat stack;
 
     // Return the final representations at the top of the stack after running a
     // feedforward.
     // Matrix of dimension spec.model_dim * spec.batch_size
-    float *final_representations();
+    mat final_representations();
 
   private:
 
@@ -64,16 +64,14 @@ class ThinStack : public SequenceModel {
     // feedforward.
     void reset();
 
-    void recurrence(const float *stack_1_t, const float *stack_2_t,
-            const float *buffer_top_t);
-    void mask_and_update_stack(const float *push_value,
-            const float *merge_value, const float *transitions, int t);
-    void mask_and_update_cursors(float *cursors, const float *transitions,
-                                 int t);
-    void update_buffer_cur(float *buffer_cur_t, float *transitions, int t);
+    void recurrence(const mat& stack_1_t, const mat& stack_2_t,
+                    const mat& buffer_top_t);
+    void mask_and_update_stack(const mat& push_value, const mat& merge_value,
+            const vec& transitions_t, int t);
+    void mask_and_update_cursors(vec& cursors, const vec& transitions_t);
+    void update_buffer_cur(vec& buffer_cur_t, const vec& transitions_t);
 
     void init_helpers();
-    void free_helpers();
 
     size_t stack_size;
 
@@ -83,27 +81,24 @@ class ThinStack : public SequenceModel {
     size_t cursors_total_size;
 
     // Containers for temporary (per-step) data
-    float *buffer_top_idxs_t;
-    float *buffer_top_t;
-    float *stack_1_ptrs;
-    float *stack_1_t;
-    float *stack_2_ptrs;
-    float *stack_2_t;
-    float *push_output;
-    float *merge_output;
+    vec buffer_top_idxs_t;
+    mat buffer_top_t;
+    vec stack_1_ptrs;
+    mat stack_1_t;
+    vec stack_2_ptrs;
+    mat stack_2_t;
+    mat push_output;
+    mat merge_output;
 
     // Per-step accumulators
-    float *buffer_cur_t;
+    vec buffer_cur_t;
 
     // Dumb helpers
-    float *batch_ones;
-    float *batch_range;
+    vec batch_ones;
+    vec batch_range;
 
-    // `model_dim * (batch_size * seq_length)`
-    // `seq_length`-many `model_dim * batch_size` matrices, flattened into one.
-    float *buffer;
-    float *queue;
-    float *cursors;
+    mat queue;
+    vec cursors;
 
 };
 

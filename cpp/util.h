@@ -8,12 +8,32 @@
 
 #include <cuda_runtime.h>
 #include <curand.h>
+#include <helper_cuda.h>
 #include "cublas_v2.h"
 
 using namespace std;
 
 
 #define DEBUG 0
+
+class CUBLAS_HANDLE {
+  public:
+    static cublasHandle_t& getInstance() {
+      static CUBLAS_HANDLE h;
+      return h._handle;
+    }
+
+  private:
+    CUBLAS_HANDLE() {
+      cublasStatus_t stat = cublasCreate(&_handle);
+      if (stat != CUBLAS_STATUS_SUCCESS) {
+        cout << "CUBLAS initialization failed (" << stat << ")" << endl;
+      }
+    }
+    ~CUBLAS_HANDLE() { cublasDestroy(_handle); }
+
+    cublasHandle_t _handle;
+};
 
 float *load_weights(string filename, int N);
 float *load_weights(ifstream& file, int N);
