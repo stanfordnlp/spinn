@@ -3,6 +3,9 @@ GMOCK_DIR = lib/googletest/googlemock
 CPPFLAGS += -isystem $(GTEST_DIR)/include -isystem $(GMOCK_DIR)/include
 CXXFLAGS += -g -Wall -Wextra -pthread
 
+CUDA_HOME = /usr/local/cuda
+CUDA_INCLUDE = -I $(CUDA_HOME)/samples/common/inc -I $(CUDA_HOME)/include
+
 ######
 # gtest directives
 GTEST_SRCS_ = $(GTEST_DIR)/src/*.cc $(GTEST_DIR)/src/*.h $(GTEST_HEADERS)
@@ -36,7 +39,7 @@ gmock_main.a : gmock-all.o gtest-all.o gmock_main.o
 	$(AR) $(ARFLAGS) $@ $^
 ######
 
-SOURCES = thin-stack.cc rnn.cc \
+SOURCES = thin-stack.cc \
 		  kernels.cu util.cc blocks.cc
 
 test: gtest_main.a gmock_main.a test.cc $(SOURCES)
@@ -51,14 +54,14 @@ stacktest: bin/stacktest.cc $(SOURCES)
 	  -std=c++11 -I. -o bin/stacktest \
 	  $^
 
-rnntest: bin/rnntest.cc $(SOURCES)
+rnntest: rnn.cc bin/rnntest.cc $(SOURCES)
 	nvcc -g -O0 -lcublas -lcurand \
 	  -std=c++11 -I. -o bin/rnntest \
 	  $^
 
 spinn: bin/spinn.cc $(SOURCES)
 	nvcc -g -O0 -lcublas -lcurand \
-		-std=c++11 -I. -o bin/spinn \
+		-std=c++11 -I. $(CUDA_INCLUDE) -o bin/spinn \
 		$^
 
 clean:
