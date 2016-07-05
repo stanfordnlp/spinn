@@ -18,4 +18,9 @@ void batch_normed_mlp(int m, int n, BatchNormedMLPParameters params
                       const float *inp, float *out, cublasHandle_t handle);
 
 
+void xw_plus_b(int m, int n, const float *W, const float *b, const float *x,
+               float *out, cublasHandle_t handle);
+
+
+
 #endif

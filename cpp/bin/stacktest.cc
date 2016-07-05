@@ -111,9 +111,8 @@ int main() {
 
   // Print the top of the stack.
   cout << "Stack top:" << endl;
-  print_device_matrix(
-      &ts.stack[(spec.seq_length - 1) * spec.model_dim * spec.batch_size],
-      spec.model_dim, spec.batch_size);
+  print_device_matrix(ts.final_representations(), spec.model_dim,
+      spec.batch_size);
 
   cout << "Total time elapsed: " << time_elapsed.count() << endl;
 

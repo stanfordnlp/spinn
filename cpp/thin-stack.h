@@ -51,6 +51,11 @@ class ThinStack : public SequenceModel {
 
     float *stack;
 
+    // Return the final representations at the top of the stack after running a
+    // feedforward.
+    // Matrix of dimension spec.model_dim * spec.batch_size
+    float *final_representations();
+
   private:
 
     void step(int t);

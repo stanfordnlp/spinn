@@ -4,12 +4,14 @@
 #include <cstddef>
 #include <fstream>
 
+#include "blocks.h"
 #include "sequence-model.h"
 #include "thin-stack.h"
 #include "util.h"
 
 
 typedef struct SpinnSpec {
+  size_t num_classes;
   ModelSpec ts_spec;
   size_t num_combination_layers;
   size_t combination_layer_dim;

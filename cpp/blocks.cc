@@ -8,14 +8,7 @@ namespace k = kernels;
 void batch_normed_mlp(int m, int n, BatchNormedMLPParameters params,
                       const float *inp, float *out, cublasHandle_t handle) {
 
-  // out = W x
-  float alpha = 1.0f;
-  float beta = 0.0f;
-  cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, m, n, m, &alpha, params.W,
-      n, inp, n, &beta, out, n);
-
-  // out += b
-  k::addi_mv(out, params.b, 1.0, m, n);
+  xw_plus_b(m, n, params.W, params.b, inp, out, handle);
 
   // relu
   k::relu(out, m, n);
@@ -31,3 +24,19 @@ void batch_normed_mlp(int m, int n, BatchNormedMLPParameters params,
   k::addi_mv(out, params.bn_b, 1.0, m, n);
 
 }
+
+
+void xw_plus_b(int m, int n, const float *W, const float *b, const float *x,
+               float *out, cublasHandle_t handle) {
+
+  // out = W x
+  float alpha = 1.0f;
+  float beta = 0.0f;
+  cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, m, n, m, &alpha, W,
+      n, inp, n, &beta, out, n);
+
+  // out += b
+  k::addi_mv(out, b, 1.0, m, n);
+
+}
+

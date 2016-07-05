@@ -316,3 +316,8 @@ void ThinStack::reset() {
 
   cudaMemset(buffer_cur_t, 0, spec.batch_size * sizeof(float));
 }
+
+
+float *ThinStack::final_representations() {
+  return &stack[(spec.seq_length - 1) * spec.model_dim * spec.batch_size];
+}
