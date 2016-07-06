@@ -300,7 +300,7 @@ class HardStack(object):
 
         # Sample parsing transitions according to predicted distribution.
         actions_t = T.nnet.softmax(actions_t)
-        mask = multinomial.MultinomialFromUniform("int32")(actions_t, uniform_t, 1).flatten()
+        mask = multinomial.MultinomialFromUniform("int32")(actions_t, uniform_t, 1).nonzero()[1]
         mask = theano.gradient.disconnected_grad(mask)
 
         # Now update the stack: first precompute reduce results.
