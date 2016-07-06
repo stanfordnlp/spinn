@@ -627,6 +627,13 @@ def reinforce_episodic_gradients(p_outputs, sampled_outputs, rewards, vs,
         rewards: batch_size floats of episode-level rewards
         vs:
         tau: exponential decay rate for reward baseline
+        params: if not provided, then all trainable variables in `vs`
+
+    Returns:
+        rl_gradients: List of REINFORCE gradients w.r.t. the provided `params`
+        batch_rewards: batch of reward values
+        avg_reward: shared variable storing average reward tracked by this
+            model
     """
 
     batch_size, num_timesteps, num_actions = p_outputs.shape
@@ -642,6 +649,7 @@ def reinforce_episodic_gradients(p_outputs, sampled_outputs, rewards, vs,
     vs.add_nongradient_update(avg_reward, new_avg_reward)
 
     # Baseline empirical rewards
+    original_rewards = rewards
     rewards -= avg_reward
 
     p_outputs = T.log(p_outputs)
@@ -656,4 +664,5 @@ def reinforce_episodic_gradients(p_outputs, sampled_outputs, rewards, vs,
 
     # Main REINFORCE gradient equation.
     objective = -1. * p_sampled_out * rewards
-    return T.grad(objective.mean(), params)
+
+    return T.grad(objective.mean(), params), original_rewards, avg_reward

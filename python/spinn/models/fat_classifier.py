@@ -570,10 +570,10 @@ def run(only_forward=False):
         rewards = build_rewards(logits, y)
 
         # Calculate REINFORCE gradients
-        premise_rl_gradients = util.reinforce_episodic_gradients(
+        premise_rl_gradients, _, _ = util.reinforce_episodic_gradients(
                 premise_model.p_transitions, premise_model.transitions_pred,
                 rewards, vs, tau=FLAGS.tau)
-        hypothesis_rl_gradients = util.reinforce_episodic_gradients(
+        hypothesis_rl_gradients, _, _ = util.reinforce_episodic_gradients(
                 premise_model.p_transitions, premise_model.transitions_pred,
                 rewards, vs, tau=FLAGS.tau)
         rl_gradients = util.merge_update_lists(premise_rl_gradients, hypothesis_rl_gradients)
@@ -590,7 +590,7 @@ def run(only_forward=False):
             ss_prob=ss_prob)
 
         rewards = build_rewards(logits, y)
-        rl_gradients = util.reinforce_episodic_gradients(
+        rl_gradients, batch_rewards, avg_reward = util.reinforce_episodic_gradients(
                 model.p_transitions, model.transitions_pred,
                 rewards, vs, tau=FLAGS.tau)
 
