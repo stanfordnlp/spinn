@@ -13,6 +13,7 @@ from functools import partial
 
 import numpy as np
 import theano
+from theano.sandbox import multinomial
 
 from theano import tensor as T
 from spinn import util
@@ -255,7 +256,7 @@ class HardStack(object):
         self.X = self.X or T.imatrix("X")
         self.transitions = self.transitions or T.imatrix("transitions")
 
-    def _step(self, transitions_t, stack_t, buffer_cur_t, tracking_hidden,
+    def _step(self, transitions_t, uniform_t, stack_t, buffer_cur_t, tracking_hidden,
               attention_hidden, buffer, ground_truth_transitions_visible,
               premise_stack_tops, projected_stack_tops):
         """TODO document"""
@@ -299,7 +300,7 @@ class HardStack(object):
 
         # Sample parsing transitions according to predicted distribution.
         actions_t = T.nnet.softmax(actions_t)
-        mask = self.ss_mask_gen.multinomial(pvals=actions_t).nonzero()[1]
+        mask = multinomial.MultinomialFromUniform("int32")(actions_t, uniform_t, 1).flatten()
         mask = theano.gradient.disconnected_grad(mask)
 
         # Now update the stack: first precompute reduce results.
@@ -419,8 +420,13 @@ class HardStack(object):
         else:
             outputs_info = [stack_init, buffer_cur_init, hidden_init, attention_init]
 
+        # Sample from uniform distribution in advance. Sampling within _step
+        # breaks things. We'll use the uniform values to draw from the multinomial
+        # predicted during training.
+        uniform_samples = self.ss_mask_gen.uniform((self.seq_length, batch_size)) # HACK
+
         # Prepare data to scan over.
-        sequences = [transitions]
+        sequences = [transitions, uniform_samples]
         non_sequences = [buffer_t, self.ground_truth_transitions_visible]
 
         if self.use_attention != "None" and self.is_hypothesis:
