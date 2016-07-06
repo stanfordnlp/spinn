@@ -123,7 +123,7 @@ def build_sentence_model(cls, vocab_size, seq_length, tokens, transitions,
         sentence_vector, sentence_vector_dim, num_classes, vs,
         name="semantic_classifier", use_bias=True)
 
-    return sentence_model.transitions_pred, logits
+    return sentence_model, logits
 
 
 
@@ -576,17 +576,23 @@ def run(only_forward=False):
         hypothesis_rl_gradients = util.reinforce_episodic_gradients(
                 premise_model.p_transitions, premise_model.transitions_pred,
                 rewards, vs, tau=FLAGS.tau)
+        rl_gradients = util.merge_update_lists(premise_rl_gradients, hypothesis_rl_gradients)
     else:
         X = T.matrix("X", dtype="int32")
         transitions = T.imatrix("transitions")
         num_transitions = T.vector("num_transitions", dtype="int32")
 
-        predicted_transitions, logits = build_sentence_model(
+        model, logits = build_sentence_model(
             model_cls, len(vocabulary), FLAGS.seq_length,
             X, transitions, len(data_manager.LABEL_MAP), training_mode, ground_truth_transitions_visible, vs,
             initial_embeddings=initial_embeddings, project_embeddings=(not train_embeddings),
             ss_mask_gen=ss_mask_gen,
             ss_prob=ss_prob)
+
+        rewards = build_rewards(logits, y)
+        rl_gradients = util.reinforce_episodic_gradients(
+                model.p_transitions, model.transitions_pred,
+                rewards, vs, tau=FLAGS.tau)
 
     xent_cost, acc = build_cost(logits, y)
 
@@ -650,9 +656,12 @@ def run(only_forward=False):
     else:
          # Train
 
-        # TODO: Merge REINFORCE gradients with those of xent.
+        # TODO: separate learning rate on RL gradients
+        grads = T.grad(total_cost, vs.trainable_vars.values())
+        grads = util.merge_update_lists(grads, rl_gradients)
 
-        new_values = util.RMSprop(total_cost, vs.trainable_vars.values(), lr)
+        new_values = util.RMSprop(total_cost, vs.trainable_vars.values(), lr,
+                                  grads=grads)
         new_values += [(key, vs.nongradient_updates[key]) for key in vs.nongradient_updates]
         # Training open-vocabulary embeddings is a questionable idea right now. Disabled:
         # new_values.append(
