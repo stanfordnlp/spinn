@@ -664,7 +664,10 @@ def run(only_forward=False):
     else:
          # Train
 
-        # TODO: separate learning rate on RL gradients
+        # Scale RL gradients by a factor before combining
+        rl_gradients = [grad * FLAGS.rl_scale if grad is not None else grad
+                        for grad in rl_gradients]
+
         grads = T.grad(total_cost, vs.trainable_vars.values())
         grads = util.merge_update_lists(grads, rl_gradients)
 
@@ -796,6 +799,7 @@ if __name__ == '__main__':
     gflags.DEFINE_float("transition_cost_scale", 1.0, "Multiplied by the transition cost.")
 
     gflags.DEFINE_float("tau", 0.9, "Exponential moving average decay rate for REINFORCE baselining")
+    gflags.DEFINE_float("rl_scale", 1.0, "Scale RL gradients by a mult factor before passing to RMSprop")
 
     # Display settings.
     gflags.DEFINE_integer("statistics_interval_steps", 100, "Print training set results at this interval.")
