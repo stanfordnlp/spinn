@@ -642,7 +642,7 @@ def reinforce_episodic_gradients(p_outputs, sampled_outputs, rewards, vs,
         params = vs.trainable_vars.values()
 
     # Baseline, updated by exponential moving average
-    avg_reward = vs.add_param("%s/avg_reward" % name, (1,),
+    avg_reward = vs.add_param("%s/avg_reward" % name, (),
             initializer=ZeroInitializer(), trainable=False)
 
     new_avg_reward = tau * avg_reward + (1. - tau) * rewards.mean()
@@ -657,7 +657,9 @@ def reinforce_episodic_gradients(p_outputs, sampled_outputs, rewards, vs,
     # Fetch p(sampled_output) for each timestep.
     flat_outputs = p_outputs.reshape((-1,))
     flat_sampled_outputs = sampled_outputs.reshape((-1,))
-    p_sampled_out = flat_outputs[flat_sampled_outputs + T.arange(num_actions)]
+
+    idx_offset = T.arange(num_timesteps * batch_size) * num_actions
+    p_sampled_out = flat_outputs[flat_sampled_outputs + idx_offset]
     # Calculate p(sampled_outputs) by chain rule. We can merge these ahead of
     # time, since we only have a single episode-level reward.
     p_sampled_out = p_sampled_out.reshape((batch_size, num_timesteps)).sum(axis=1)
