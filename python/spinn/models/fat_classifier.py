@@ -303,7 +303,7 @@ def build_transition_cost(p_transitions, targets, num_transitions):
     """
 
     # swap seq_length dimension to front so that we can scan per timestep
-    logits = T.swapaxes(p_transitions, 0, 1)
+    p_transitions = T.swapaxes(p_transitions, 0, 1)
     targets = targets.T
 
     def cost_t(p_transitions_t, tgt, num_transitions):
@@ -311,7 +311,7 @@ def build_transition_cost(p_transitions, targets, num_transitions):
         # sequence?
         cost = T.nnet.categorical_crossentropy(p_transitions_t, tgt)
 
-        pred = T.argmax(logits, axis=1)
+        pred = T.argmax(p_transitions_t, axis=1)
         error = T.neq(pred, tgt)
         return cost, error
 
