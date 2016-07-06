@@ -296,26 +296,26 @@ def build_cost(logits, targets):
     return cost, acc
 
 
-def build_transition_cost(logits, targets, num_transitions):
+def build_transition_cost(p_transitions, targets, num_transitions):
     """
     Build a parse action prediction cost function.
     """
 
     # swap seq_length dimension to front so that we can scan per timestep
-    logits = T.swapaxes(logits, 0, 1)
+    logits = T.swapaxes(p_transitions, 0, 1)
     targets = targets.T
 
-    def cost_t(logits, tgt, num_transitions):
+    def cost_t(p_transitions_t, tgt, num_transitions):
         # TODO(jongauthier): Taper down xent cost as we proceed through
         # sequence?
-        predicted_dist = T.nnet.softmax(logits)
-        cost = T.nnet.categorical_crossentropy(predicted_dist, tgt)
+        cost = T.nnet.categorical_crossentropy(p_transitions_t, tgt)
 
         pred = T.argmax(logits, axis=1)
         error = T.neq(pred, tgt)
         return cost, error
 
-    results, _ = theano.scan(cost_t, [logits, targets], non_sequences=[num_transitions])
+    results, _ = theano.scan(cost_t, [p_transitions, targets],
+                             non_sequences=[num_transitions])
     costs, errors = results
 
     # Create a mask that selects only transitions that involve real data.
@@ -592,22 +592,9 @@ def run(only_forward=False):
     for var in vs.trainable_vars:
         l2_cost += FLAGS.l2_lambda * T.sum(T.sqr(vs.vars[var]))
 
-    # Compute cross-entropy cost on action predictions.
-    if (not data_manager.SENTENCE_PAIR_DATA) and FLAGS.model_type not in ["Model0", "RNN", "CBOW"]:
-        transition_cost, action_acc = build_transition_cost(predicted_transitions, transitions, num_transitions)
-    elif data_manager.SENTENCE_PAIR_DATA and FLAGS.model_type not in ["Model0", "RNN", "CBOW"]:
-        p_transition_cost, p_action_acc = build_transition_cost(predicted_premise_transitions, transitions[:, :, 0],
-            num_transitions[:, 0])
-        h_transition_cost, h_action_acc = build_transition_cost(predicted_hypothesis_transitions, transitions[:, :, 1],
-            num_transitions[:, 1])
-        transition_cost = p_transition_cost + h_transition_cost
-        action_acc = (p_action_acc + h_action_acc) / 2.0  # TODO(SB): Average over transitions, not words.
-    else:
-        transition_cost = T.constant(0.0)
-        action_acc = T.constant(0.0)
-    transition_cost = transition_cost * FLAGS.transition_cost_scale
-
-    total_cost = xent_cost + l2_cost + transition_cost
+    transition_cost, action_acc = T.constant(0.0), T.constant(0.0) # HACK
+    # TODO: rebuild action_acc
+    total_cost = xent_cost + l2_cost
 
     if ".ckpt" in FLAGS.ckpt_path:
         checkpoint_path = FLAGS.ckpt_path
@@ -639,7 +626,7 @@ def run(only_forward=False):
         if data_manager.SENTENCE_PAIR_DATA:
             eval_fn = theano.function(
                 [X, transitions, y, num_transitions, training_mode, ground_truth_transitions_visible, ss_prob],
-                [acc, action_acc, logits, predicted_hypothesis_transitions, predicted_premise_transitions],
+                [acc, action_acc, logits, hypothesis_model.transitions_pred, premise_model.transitions_pred],
                 on_unused_input='ignore',
                 allow_input_downcast=True)
         else:

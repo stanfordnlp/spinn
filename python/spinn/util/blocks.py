@@ -642,7 +642,7 @@ def reinforce_episodic_gradients(p_outputs, sampled_outputs, rewards, vs,
     vs.add_nongradient_update(avg_reward, new_avg_reward)
 
     # Baseline empirical rewards
-    rewards -= theano.gradient.disconnected_grad(avg_reward)
+    rewards -= avg_reward
 
     p_outputs = T.log(p_outputs)
 
