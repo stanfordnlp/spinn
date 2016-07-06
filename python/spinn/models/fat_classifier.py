@@ -601,8 +601,16 @@ def run(only_forward=False):
     for var in vs.trainable_vars:
         l2_cost += FLAGS.l2_lambda * T.sum(T.sqr(vs.vars[var]))
 
-    transition_cost, action_acc = T.constant(0.0), T.constant(0.0) # HACK
-    # TODO: rebuild action_acc
+    transition_cost = T.constant(0.0) # HACK
+    if FLAGS.model_type not in ["Model0", "RNN", "CBOW"]:
+        if data_manager.SENTENCE_PAIR_DATA:
+            # TODO
+            pass
+        else:
+            transition_cost, action_acc = build_transition_cost(model.p_transitions, model.transitions_pred, num_transitions)
+    else:
+        action_acc = T.constant(0.0)
+
     total_cost = xent_cost + l2_cost
 
     if ".ckpt" in FLAGS.ckpt_path:
