@@ -6,22 +6,29 @@
 #
 # Example:
 # sentence_label	( ( word word ) ( ( word word ) word ) )
+
+import random
+from collections import deque
+
 import numpy as np
 
 from spinn import util
 
-NUM_CLASSES = 39
-
 SENTENCE_PAIR_DATA = False
 
-FIXED_VOCABULARY = {str(x): x + 1 for x in range(20)}
+NUMBERS = range(-10, 11)
+OUTPUTS = range(-100, 101)
+NUM_CLASSES = len(OUTPUTS)
+
+FIXED_VOCABULARY = {str(x): x + min(NUMBERS) for x in NUMBERS}
 FIXED_VOCABULARY.update({
-    util.PADDING_TOKEN: 0,
-    "+": len(FIXED_VOCABULARY) + 1
+    util.PADDING_TOKEN: len(FIXED_VOCABULARY) + 0,
+    "+": len(FIXED_VOCABULARY) + 1,
+    "-": len(FIXED_VOCABULARY) + 2
 })
 assert len(set(FIXED_VOCABULARY.values())) == len(FIXED_VOCABULARY.values())
 
-LABEL_MAP = {str(x): x for x in range(NUM_CLASSES)}
+LABEL_MAP = {str(x): x - min(OUTPUTS) for x in OUTPUTS}
 
 
 def convert_binary_bracketed_data(filename):
