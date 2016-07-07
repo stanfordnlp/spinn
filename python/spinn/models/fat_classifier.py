@@ -82,12 +82,8 @@ def build_sentence_model(cls, vocab_size, seq_length, tokens, transitions,
             compose_network = partial(util.ReLULayer,
                                       initializer=util.HeKaimingInitializer())
 
-        if project_embeddings:
-            embedding_projection_network = util.Linear
-        else:
-            assert FLAGS.word_embedding_dim == FLAGS.model_dim, \
-                "word_embedding_dim must equal model_dim unless a projection layer is used."
-            embedding_projection_network = util.IdentityLayer
+        # HACK: always project embeddings
+        embedding_projection_network = util.Linear
 
     # Build hard stack which scans over input sequence.
     sentence_model = cls(
