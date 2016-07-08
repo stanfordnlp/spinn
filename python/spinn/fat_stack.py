@@ -427,7 +427,7 @@ class HardStack(object):
         uniform_samples = self.ss_mask_gen.uniform((self.seq_length, batch_size))
         # Multinomial sampler will bork on input values at upper bound. Guard
         # against this.
-        uniform_samples = T.min(uniform_samples, 0.99)
+        uniform_samples = T.minimum(uniform_samples, 0.99)
 
         # Prepare data to scan over.
         sequences = [transitions, uniform_samples]
