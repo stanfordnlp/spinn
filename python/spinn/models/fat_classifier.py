@@ -337,7 +337,7 @@ def build_rewards(logits, y):
     """Generate a reward batch for the given logit predictions."""
     # TODO probably a more efficient way to retrieve this -- might incur an
     # D->H copy of the whole logits array as-is
-    return T.cast(T.eq(T.argmax(logits, axis=1), y), theano.config.floatX)
+    return T.eq(T.argmax(logits, axis=1), y) - 0.5
 
 
 def evaluate(eval_fn, eval_set, logger, step):
