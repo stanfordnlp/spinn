@@ -2,7 +2,10 @@
 
 # Stack-augmented Parser-Interpreter Neural Network
 
-This repository contains the source code described in our paper [A Fast Unified Model for Sentence Parsing and Understanding][1]. There are three separate implementations available:
+This repository contains the source code described in our paper [A Fast Unified Model for Sentence Parsing and Understanding][1]. For a more informal introduction to the ideas behind the model, see this [Stanford NLP blog post][8].
+
+
+There are three separate implementations available:
 
 - A **Python/Theano** implementation of SPINN using a naïve stack representation (named `fat-stack`)
 - A **Python/Theano** implementation of SPINN using the `thin-stack` representation described in our paper
@@ -149,3 +152,4 @@ limitations under the License.
 [5]: https://github.com/oir/deep-recursive
 [6]: https://github.com/stanfordnlp/spinn/blob/5d4257f4cd15cf7213d2ff87f6f3d7f6716e2ea1/cpp/bin/stacktest.cc#L33
 [7]: https://github.com/stanfordnlp/spinn/releases/tag/ACL2016
+[8]: http://nlp.stanford.edu/blog/hybrid-tree-sequence-neural-networks-with-spinn/
