@@ -12,12 +12,14 @@ echo Flags: $SPINN_FLAGS
 echo Device: $DEVICE
 
 # Log what we're running and where.
-echo $PBS_JOBID - `hostname` - $DEVICE - at `git log --pretty=format:'%h' -n 1` - $SPINN_FLAGS >> ~/spinn_machine_assignments.txt
 
 # Use Jon's Theano install.
 source /u/nlp/packages/anaconda/bin/activate conda-common
 export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
 export PYTHONPATH=/scr/jgauthie/tmp/theano-nshrdlu:$PYTHONPATH
 export PATH=/usr/local/cuda/bin:$PATH
+export THEANO_FLAGS=allow_gc=False,cuda.root=/usr/bin/cuda,warn_float64=warn,device=gpu0,floatX=float32
 
-THEANO_FLAGS=allow_gc=False,cuda.root=/usr/bin/cuda,warn_float64=warn,device=$DEVICE,floatX=float32 python -m spinn.models.fat_classifier $SPINN_FLAGS
+echo $PBS_JOBID - `hostname` - at `git log --pretty=format:'%h' -n 1` - $SPINN_FLAGS >> ~/spinn_machine_assignments.txt
+
+stake.py -g $MEM "python -m spinn.models.fat_classifier $SPINN_FLAGS"
