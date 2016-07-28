@@ -182,7 +182,7 @@ W_{\text{comp}}
 \\
 \vec{c} = \vec{f}_l \odot \vec{c}_s^{\,2} + \vec{f}_r \odot \vec{c}_s^{\,1} + \vec{i} \odot \vec{g}
 \\
-\vec{h} = \vec{o} \odot \vec{c}
+\vec{h} = \vec{o} \odot \tanh(\vec{c})
 \end{gather}
 where $\sigma$ is the sigmoid activation function, $\odot$ is the elementwise product, the pairs $\langle\vec{h}^1_s, \vec{c}^{\,1}_s\rangle$ and $\langle\vec{h}^2_s, \vec{c}^{\,2}_s\rangle$ are the two input tree nodes popped off the stack, and $\vec{e}$ is an optional vector-valued input argument which is either empty or comes from an external source like the tracking LSTM (see Section~\ref{sec:tracking}). The result of this function, the pair $\langle\vec{h}, \vec{c}\rangle$, is placed back on the stack. Each vector-valued variable listed is of dimension $D$ except $\vec{e}$, of the independent dimension $D_{\text{tracking}}$.
 
