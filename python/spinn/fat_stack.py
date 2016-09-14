@@ -296,7 +296,6 @@ class HardStack(object):
                 # Obtain predicted actions directly.
                 actions_t = self._prediction_and_tracking_network(
                     predict_inp, h_dim * 3, util.NUM_TRANSITION_TYPES, self._vs,
-                    logits_use_cell=self._predict_use_cell,
                     name="prediction_and_tracking")
 
         if self.train_with_predicted_transitions:

@@ -221,6 +221,58 @@ def TreeLSTMLayer(lstm_prev, external_state, full_memory_dim, vs, name="tree_lst
     return T.concatenate([h_t, c_t], axis=1)
 
 
+def TreeGRULayer(h_prev, external_state, full_memory_dim, vs, name="tree_gru", initializer=None, external_state_dim=0):
+    hidden_dim = full_memory_dim
+
+    assert isinstance(h_prev, tuple)
+    l_h_prev, r_h_prev = h_prev
+
+    real_shape = (hidden_dim * 2, hidden_dim * 5)
+    initializer_children = partial(initializer or vs.default_initializer,
+                                   real_shape=real_shape)
+    W_l = vs.add_param("%s/W_l" % name, (hidden_dim, hidden_dim * 5),
+                       initializer=initializer_children)
+    W_r = vs.add_param("%s/W_r" % name, (hidden_dim, hidden_dim * 5),
+                       initializer=initializer_children)
+    # TODO(mrdrozdov): Implement tracking LSTM for TreeGRU.
+    # if external_state_dim > 0:
+    #     W_ext = vs.add_param("%s/W_ext" % name, (external_state_dim, hidden_dim * 5),
+    #                          initializer=initializer_children)
+    # TODO(mrdrozdov): Use b (bias) as is used for LSTM.
+    # b = vs.add_param("%s/b" % name, (hidden_dim * 5,),
+    #                  initializer=TreeLSTMBiasInitializer())
+
+    def slice_gate(gate_data, i):
+        return gate_data[:, i * hidden_dim:(i + 1) * hidden_dim]
+
+    X_l = W_l[:, 0:4 * hidden_dim]
+    X_r = W_r[:, 0:4 * hidden_dim]
+    V_l = slice_gate(W_l, 4)
+    V_r = slice_gate(W_r, 4)
+
+    gates = T.dot(l_h_prev, X_l) + T.dot(r_h_prev, X_r)
+    # TODO(mrdrozdov): Implement tracking LSTM for TreeGRU.
+    # if external_state_dim > 0:
+    #     gates += T.dot(external_state, W_ext)
+
+    # Compute and slice gate values
+    r_l_gate, r_r_gate, z_l_gate, z_r_gate = [slice_gate(gates, i) for i in range(4)]
+
+    # Apply nonlinearities
+    r_l_gate = T.nnet.sigmoid(r_l_gate)
+    r_r_gate = T.nnet.sigmoid(r_r_gate)
+    z_l_gate = T.nnet.sigmoid(z_l_gate)
+    z_r_gate = T.nnet.sigmoid(z_r_gate)
+
+    # Compute new hidden values
+    h_t_l = T.tanh(T.dot(r_l_gate, V_l))
+    h_t_r = T.tanh(T.dot(r_r_gate, V_r))
+    h_next = l_h_prev + z_l_gate * (h_t_l - l_h_prev) + \
+             r_h_prev + z_r_gate * (h_t_r - r_h_prev)
+
+    return T.concatenate([h_next], axis=1)
+
+
 def LSTMLayer(lstm_prev, inp, inp_dim, full_memory_dim, vs, name="lstm", initializer=None):
     assert full_memory_dim % 2 == 0, "Input is concatenated (h, c); dim must be even."
     hidden_dim = full_memory_dim / 2
@@ -260,6 +312,45 @@ def LSTMLayer(lstm_prev, inp, inp_dim, full_memory_dim, vs, name="lstm", initial
     h_t = o_gate * T.tanh(c_t)
 
     return T.concatenate([h_t, c_t], axis=1)
+
+
+def GRULayer(h_prev, inp, inp_dim, full_memory_dim, vs, name="gru", initializer=None):
+    hidden_dim = full_memory_dim
+
+    # gate biases
+    # TODO(mrdrozdov): use b (bias) same as is done in LSTM
+    # b = vs.add_param("%s_b" % name, (hidden_dim * 3,),
+    #                  initializer=GRUBiasInitializer())
+
+    def slice_gate(gate_data, i):
+        return gate_data[:, i * hidden_dim:(i + 1) * hidden_dim]
+
+    # Compute and slice gate values
+    # input -> hidden mapping
+    i2h = Linear(inp, inp_dim, hidden_dim * 3, vs,
+                   name="%s/inp/linear" % name,
+                   initializer=initializer, use_bias=False)
+    # hidden -> hidden mapping
+    h2h = Linear(h_prev, hidden_dim, hidden_dim * 3, vs,
+                    name="%s/hid/linear" % name,
+                    initializer=initializer, use_bias=False)
+
+    gates = i2h[:, 0:2*hidden_dim] + h2h[:, 0:2*hidden_dim]
+
+    z_gate = gates[:, 0:hidden_dim]
+    r_gate = gates[:, hidden_dim:2*hidden_dim]
+
+    # Apply nonlinearities
+    z_gate = T.nnet.sigmoid(z_gate)
+    r_gate = T.nnet.sigmoid(r_gate)
+
+    i2h_gate = i2h[:, 2*hidden_dim:3*hidden_dim]
+    h2h_gate = h2h[:, 2*hidden_dim:3*hidden_dim]
+
+    h_t = T.tanh(i2h_gate + r_gate * h2h_gate)
+    h_next = h_prev + z_gate * (h_t - h_prev)
+
+    return T.concatenate([h_next], axis=1)
 
 
 def MLP(inp, inp_dim, outp_dim, vs, layer=ReLULayer, hidden_dims=None,

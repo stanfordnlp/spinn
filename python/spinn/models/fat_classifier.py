@@ -66,16 +66,24 @@ def build_sentence_model(cls, vocab_size, seq_length, tokens, transitions,
 
     # Prepare layer which performs stack element composition.
     if cls is spinn.plain_rnn.RNN:
-        compose_network = partial(util.LSTMLayer,
-                                      initializer=util.HeKaimingInitializer())
+        if FLAGS.use_gru:
+            compose_network = partial(util.GRULayer,
+                                          initializer=util.HeKaimingInitializer())
+        else:
+            compose_network = partial(util.LSTMLayer,
+                                          initializer=util.HeKaimingInitializer())
         embedding_projection_network = None
     elif cls is spinn.cbow.CBOW:
         compose_network = None
         embedding_projection_network = None
     else:
         if FLAGS.lstm_composition:
-            compose_network = partial(util.TreeLSTMLayer,
+            if FLAGS.use_gru:
+                compose_network = partial(util.TreeGRULayer,
                                       initializer=util.HeKaimingInitializer())
+            else:
+                compose_network = partial(util.TreeLSTMLayer,
+                                          initializer=util.HeKaimingInitializer())
         else:
             assert not FLAGS.connect_tracking_comp, "Can only connect tracking and composition unit while using TreeLSTM"
             compose_network = partial(util.ReLULayer,
@@ -150,16 +158,24 @@ def build_sentence_pair_model(cls, vocab_size, seq_length, tokens, transitions,
 
     # Prepare layer which performs stack element composition.
     if cls is spinn.plain_rnn.RNN:
-        compose_network = partial(util.LSTMLayer,
-                                      initializer=util.HeKaimingInitializer())
+        if FLAGS.use_gru:
+            compose_network = partial(util.GRULayer,
+                                          initializer=util.HeKaimingInitializer())
+        else:
+            compose_network = partial(util.LSTMLayer,
+                                          initializer=util.HeKaimingInitializer())
         embedding_projection_network = None
     elif cls is spinn.cbow.CBOW:
         compose_network = None
         embedding_projection_network = None
     else:
         if FLAGS.lstm_composition:
-            compose_network = partial(util.TreeLSTMLayer,
-                                      initializer=util.HeKaimingInitializer())
+            if FLAGS.use_gru:
+                compose_network = partial(util.TreeGRULayer,
+                                          initializer=util.HeKaimingInitializer())
+            else:
+                compose_network = partial(util.TreeLSTMLayer,
+                                          initializer=util.HeKaimingInitializer())
         else:
             assert not FLAGS.connect_tracking_comp, "Can only connect tracking and composition unit while using TreeLSTM"
             compose_network = partial(util.ReLULayer,
@@ -784,6 +800,8 @@ if __name__ == '__main__':
     gflags.DEFINE_boolean("initialize_hyp_tracking_state", False,
         "Initialize the c state of the tracking unit of hypothesis model with the final"
         "tracking unit c state of the premise model.")
+    gflags.DEFINE_boolean("use_gru", False,
+                          "Use GRU units instead of LSTM units.")
 
     # Optimization settings.
     gflags.DEFINE_integer("training_steps", 500000, "Stop training after this point.")
