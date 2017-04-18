@@ -1,737 +1,713 @@
-"""High-level modular Theano-based network components."""
-
-from collections import OrderedDict
-from functools import partial
-
 import numpy as np
-import theano
-from theano import tensor as T
-from theano.sandbox.rng_mrg import MRG_RandomStreams
+import random
+import math
 
-from spinn.util import NUM_TRANSITION_TYPES
+# PyTorch
+import torch
+import torch.nn as nn
+from torch.autograd import Variable
+import torch.nn.functional as F
+import torch.optim as optim
 
-
-numpy_random = np.random.RandomState(1234)
-theano_random = MRG_RandomStreams(numpy_random.randint(999999))
-
-
-def UniformInitializer(range):
-    return lambda shape, **kwargs: np.random.uniform(-range, range, shape)
-
-def HeKaimingInitializer():
-    def HeKaimingInit(shape, real_shape=None):
-        # Calculate fan-in / fan-out using real shape if given as override
-        fan = real_shape or shape
-
-        return np.random.normal(scale=np.sqrt(4.0/(fan[0] + fan[1])),
-                                size=shape)
-    return HeKaimingInit
+from spinn.util.misc import recursively_set_device
 
 
-def NormalInitializer(std):
-    return lambda shape, **kwargs: np.random.normal(0.0, std, shape)
+def debug_gradient(model, losses):
+    model.zero_grad()
+
+    for name, loss in losses:
+        print(name)
+        loss.backward(retain_variables=True)
+        stats = [(p.grad.norm().data[0], p.grad.max().data[0], p.grad.min().data[0], p.size())
+                 for p in model.parameters()]
+        for s in stats:
+            print(s)
+        print
+
+        model.zero_grad()
 
 
-def ZeroInitializer():
-    return lambda shape, **kwargs: np.zeros(shape, dtype=theano.config.floatX)
+def reverse_tensor(var, dim):
+    dim_size = var.size(dim)
+    index = [i for i in range(dim_size - 1, -1, -1)]
+    index = torch.LongTensor(index)
+    if isinstance(var, Variable):
+        index = to_gpu(Variable(index, volatile=var.volatile))
+    inverted_tensor = var.index_select(dim, index)
+    return inverted_tensor
 
 
-def OneInitializer():
-    return lambda shape, **kwargs: np.ones(shape, dtype=theano.config.floatX)
+def l2_cost(model, l2_lambda):
+    cost = 0.0
+    for w in model.parameters():
+        cost += l2_lambda * torch.sum(torch.pow(w, 2))
+    return cost
 
 
-def ValueInitializer(value):
-    return lambda shape, **kwargs: np.ones(shape, dtype=theano.config.floatX) * value
-
-
-def TreeLSTMBiasInitializer():
-    def init(shape):
-        hidden_dim = shape[0] / 5
-        value = np.zeros(shape)
-        value[hidden_dim:3*hidden_dim] = 1
-        return value
-    return init
-
-
-def LSTMBiasInitializer():
-    def init(shape):
-        hidden_dim = shape[0] / 4
-        value = np.zeros(shape)
-        value[hidden_dim:2*hidden_dim] = 1
-        return value
-    return init
-
-
-def DoubleIdentityInitializer(range):
-    def init(shape):
-        half_d = shape[0] / 2
-        double_identity = np.concatenate((
-            np.identity(half_d), np.identity(half_d)))
-        return double_identity + UniformInitializer(range)(shape)
-    return init
-
-
-def HighwayLayer(inp, inp_dim, vs, training_mode, name="highway", dropout_keep_rate=1.0, initializer=None):
-    # From http://arxiv.org/pdf/1603.05027v2.pdf
-    addin = BatchNorm(inp, inp_dim, vs, name, training_mode)
-    if dropout_keep_rate < 1.0:
-        addin = Dropout(addin, dropout_keep_rate, training_mode) 
-    addin = ReLULayer(addin, inp_dim, inp_dim, vs, name=name + "/addin", initializer=initializer)
-
-    gate = T.nnet.sigmoid(Linear(inp, inp_dim, inp_dim, vs, name=name + "/gate", initializer=initializer,
-        bias_initializer=ValueInitializer(-5.0)))
-
-    return addin * gate + inp * (1 - gate)
-
-
-def HeKaimingResidualLayerSet(inp, inp_dim, vs, training_mode, name="resnet_stack", dropout_keep_rate=1.0, depth=2, initializer=None):
-    # From http://arxiv.org/pdf/1603.05027v2.pdf
-    addin = inp
-    for i in range(depth):
-        addin = BatchNorm(addin, inp_dim, vs, name + "/" + str(i), training_mode)
-        if dropout_keep_rate < 1.0:
-            addin = Dropout(addin, dropout_keep_rate, training_mode) 
-        addin = T.maximum(addin, 0) # ReLU
-        addin = Linear(addin, inp_dim, inp_dim, vs, name=name + "/" + str(i), initializer=initializer)
-    return inp + addin
-
-
-def ReLULayer(inp, inp_dim, outp_dim, vs, name="relu_layer", use_bias=True, initializer=None):
-    pre_nl = Linear(inp, inp_dim, outp_dim, vs, name, use_bias, initializer)
-    # ReLU isn't present in this version of Theano.
-    outp = T.maximum(pre_nl, 0)
-
-    return outp
-
-
-def Linear(inp, inp_dim, outp_dim, vs, name="linear_layer", use_bias=True, initializer=None, bias_initializer=None):
-    if isinstance(inp, tuple):
-        assert isinstance(inp_dim, tuple)
-        # Build initializers which are aware of the real shape of the overall
-        # (unsplit) matrix.
-        real_inp_dim = sum(inp_dim)
-        initializer = partial(initializer or vs.default_initializer,
-                              real_shape=(real_inp_dim, outp_dim))
-
-        try:
-            Ws = [vs.add_param("%s_W%i" % (name, i), (dim_i, outp_dim),
-                               initializer=initializer)
-                  for i, dim_i in enumerate(inp_dim)]
-        except TypeError, e:
-            raise RuntimeError(
-                "TypeError in vs initialization for split Gemm. Does the "
-                "initializer you provided (%s) support real_shape?"
-                % initializer, e)
-
-        outp = T.dot(inp[0], Ws[0])
-        for inp_i, W_i in zip(inp[1:], Ws[1:]):
-            # TODO inplace add?
-            outp += T.dot(inp_i, W_i)
+def flatten(l):
+    if hasattr(l, '__len__'):
+        return reduce(lambda x, y: x + flatten(y), l, [])
     else:
-        W = vs.add_param("%s_W" %
-                         name, (inp_dim, outp_dim), initializer=initializer)
-        outp = inp.dot(W)
-
-    if use_bias:
-        b = vs.add_param("%s_b" % name, (outp_dim,),
-                         initializer=bias_initializer or ZeroInitializer())
-        outp += b
-
-    return outp
+        return [l]
 
 
-def Dropout(inp, keep_rate, apply_dropout, dropout_mask=None,
-            return_mask=False):
-    """Apply dropout to a set of activations.
+def the_gpu():
+    return the_gpu.gpu
+
+the_gpu.gpu = -1
+
+def to_cuda(var, gpu):
+    if gpu >= 0:
+        return var.cuda()
+    return var
+
+# Chainer already has a method for moving a variable to/from GPU in-place,
+# but that messes with backpropagation. So I do it with a copy. Note that
+# cuda.get_device() actually returns the dummy device, not the current one
+# -- but F.copy will move it to the active GPU anyway (!)
+def to_gpu(var):
+    return to_cuda(var, the_gpu())
+
+
+def to_cpu(var):
+    return to_cuda(var, -1)
+
+
+def arr_to_gpu(arr):
+    if the_gpu() >= 0:
+        return torch.cuda.FloatTensor(arr)
+    else:
+        return arr
+
+
+class LSTMState:
+    """Class for intelligent LSTM state object.
+
+    It can be initialized from either a tuple ``(c, h)`` or a single variable
+    `both`, and provides lazy attribute access to ``c``, ``h``, and ``both``.
+    Since the SPINN conducts all LSTM operations on GPU and all tensor
+    shuffling on CPU, ``c`` and ``h`` are automatically moved to GPU while
+    ``both`` is automatically moved to CPU.
 
     Args:
-      inp: Input vector.
-      keep_rate: Dropout parameter. 1.0 entails no dropout.
-      apply_dropout: A Theano scalar indicating whether to apply dropout (1.0)
-        or eval-mode rescaling (0.0).
+        inpt: Either a tuple of ~chainer.Variable objects``(c, h)`` or a single
+        concatenated ~chainer.Variable containing both.
+
+    Attributes:
+        c (~chainer.Variable): LSTM memory state, moved to GPU if necessary.
+        h (~chainer.Variable): LSTM hidden state, moved to GPU if necessary.
+        both (~chainer.Variable): Concatenated LSTM state, moved to CPU if
+            necessary.
+
     """
-    # TODO(SB): Investigate whether a Theano conditional would be faster than the linear combination below.
+    def __init__(self, inpt):
+        if isinstance(inpt, tuple):
+            self._c, self._h = inpt
+        else:
+            self._both = inpt
+            self.size = inpt.data.size()[1] // 2
 
-    dropout_mask = (dropout_mask or
-                    theano_random.binomial(n=1, p=keep_rate, size=inp.shape,
-                                           dtype=theano.config.floatX))
+    @property
+    def h(self):
+        if not hasattr(self, '_h'):
+            self._h = to_gpu(get_h(self._both, self.size))
+        return self._h
 
-    dropout_candidate = dropout_mask * inp
-    rescaling_candidate = keep_rate * inp
-    result = apply_dropout * dropout_candidate + (1 - apply_dropout) * rescaling_candidate
+    @property
+    def c(self):
+        if not hasattr(self, '_c'):
+            self._c = to_gpu(get_c(self._both, self.size))
+        return self._c
 
-    if return_mask:
-        return result, dropout_mask
-    return result
+    @property
+    def both(self):
+        if not hasattr(self, '_both'):
+            self._both = torch.cat(
+                (to_cpu(self._c), to_cpu(self._h)), 1)
+        return self._both
 
 
-def IdentityLayer(inp, inp_dim, outp_dim, vs, name="identity_layer", use_bias=True, initializer=None):
-    """An identity function that takes the same parameters as the above layers."""
-    assert inp_dim == outp_dim, "Identity layer requires inp_dim == outp_dim."
-    return inp
+def get_seq_h(state, hidden_dim):
+    return state[:, :, hidden_dim:]
 
+def get_seq_c(state, hidden_dim):
+    return state[:, :, :hidden_dim]
 
-def TreeLSTMLayer(lstm_prev, external_state, full_memory_dim, vs, name="tree_lstm", initializer=None, external_state_dim=0):
-    assert full_memory_dim % 2 == 0, "Input is concatenated (h, c); dim must be even."
-    hidden_dim = full_memory_dim / 2
+def get_seq_state(c, h):
+    return torch.cat([h, c], 2)
 
-    assert isinstance(lstm_prev, tuple)
-    l_prev, r_prev = lstm_prev
 
-    real_shape = (hidden_dim * 2 + external_state_dim, hidden_dim * 5)
-    initializer_children = partial(initializer or vs.default_initializer,
-                                   real_shape=real_shape)
-    W_l = vs.add_param("%s/W_l" % name, (hidden_dim, hidden_dim * 5),
-                       initializer=initializer_children)
-    W_r = vs.add_param("%s/W_r" % name, (hidden_dim, hidden_dim * 5),
-                       initializer=initializer_children)
-    if external_state_dim > 0:
-        W_ext = vs.add_param("%s/W_ext" % name, (external_state_dim, hidden_dim * 5),
-                             initializer=initializer_children)
-    b = vs.add_param("%s/b" % name, (hidden_dim * 5,),
-                     initializer=TreeLSTMBiasInitializer())
+def get_h(state, hidden_dim):
+    return state[:, hidden_dim:]
 
-    def slice_gate(gate_data, i):
-        return gate_data[:, i * hidden_dim:(i + 1) * hidden_dim]
+def get_c(state, hidden_dim):
+    return state[:, :hidden_dim]
 
-    # Decompose previous LSTM value into hidden and cell value
-    l_h_prev = l_prev[:, :hidden_dim]
-    l_c_prev = l_prev[:,  hidden_dim:]
-    r_h_prev = r_prev[:, :hidden_dim]
-    r_c_prev = r_prev[:,  hidden_dim:]
+def get_state(c, h):
+    return torch.cat([h, c], 1)
 
-    gates = T.dot(l_h_prev, W_l) + T.dot(r_h_prev, W_r) + b
-    if external_state_dim > 0:
-        gates += T.dot(external_state, W_ext)
 
-    # Compute and slice gate values
-    i_gate, fl_gate, fr_gate, o_gate, cell_inp = [slice_gate(gates, i) for i in range(5)]
+def bundle(lstm_iter):
+    """Bundle an iterable of concatenated LSTM states into a batched LSTMState.
 
-    # Apply nonlinearities
-    i_gate = T.nnet.sigmoid(i_gate)
-    fl_gate = T.nnet.sigmoid(fl_gate)
-    fr_gate = T.nnet.sigmoid(fr_gate)
-    o_gate = T.nnet.sigmoid(o_gate)
-    cell_inp = T.tanh(cell_inp)
+    Used between CPU and GPU computation. Reversed by :func:`~unbundle`.
 
-    # Compute new cell and hidden value
-    c_t = fl_gate * l_c_prev + fr_gate * r_c_prev + i_gate * cell_inp
-    h_t = o_gate * T.tanh(c_t)
-
-    return T.concatenate([h_t, c_t], axis=1)
-
-
-def TreeGRULayer(h_prev, external_state, full_memory_dim, vs, name="tree_gru", initializer=None, external_state_dim=0):
-    hidden_dim = full_memory_dim
-
-    assert isinstance(h_prev, tuple)
-    l_h_prev, r_h_prev = h_prev
-
-    real_shape = (hidden_dim * 2, hidden_dim * 5)
-    initializer_children = partial(initializer or vs.default_initializer,
-                                   real_shape=real_shape)
-    W_l = vs.add_param("%s/W_l" % name, (hidden_dim, hidden_dim * 5),
-                       initializer=initializer_children)
-    W_r = vs.add_param("%s/W_r" % name, (hidden_dim, hidden_dim * 5),
-                       initializer=initializer_children)
-    # TODO(mrdrozdov): Implement tracking LSTM for TreeGRU.
-    # if external_state_dim > 0:
-    #     W_ext = vs.add_param("%s/W_ext" % name, (external_state_dim, hidden_dim * 5),
-    #                          initializer=initializer_children)
-    # TODO(mrdrozdov): Use b (bias) as is used for LSTM.
-    # b = vs.add_param("%s/b" % name, (hidden_dim * 5,),
-    #                  initializer=TreeLSTMBiasInitializer())
-
-    def slice_gate(gate_data, i):
-        return gate_data[:, i * hidden_dim:(i + 1) * hidden_dim]
-
-    X_l = W_l[:, 0:4 * hidden_dim]
-    X_r = W_r[:, 0:4 * hidden_dim]
-    V_l = slice_gate(W_l, 4)
-    V_r = slice_gate(W_r, 4)
-
-    gates = T.dot(l_h_prev, X_l) + T.dot(r_h_prev, X_r)
-    # TODO(mrdrozdov): Implement tracking LSTM for TreeGRU.
-    # if external_state_dim > 0:
-    #     gates += T.dot(external_state, W_ext)
-
-    # Compute and slice gate values
-    r_l_gate, r_r_gate, z_l_gate, z_r_gate = [slice_gate(gates, i) for i in range(4)]
-
-    # Apply nonlinearities
-    r_l_gate = T.nnet.sigmoid(r_l_gate)
-    r_r_gate = T.nnet.sigmoid(r_r_gate)
-    z_l_gate = T.nnet.sigmoid(z_l_gate)
-    z_r_gate = T.nnet.sigmoid(z_r_gate)
-
-    # Compute new hidden values
-    h_t_l = T.tanh(T.dot(r_l_gate, V_l))
-    h_t_r = T.tanh(T.dot(r_r_gate, V_r))
-    h_next = l_h_prev + z_l_gate * (h_t_l - l_h_prev) + \
-             r_h_prev + z_r_gate * (h_t_r - r_h_prev)
-
-    return T.concatenate([h_next], axis=1)
-
-
-def LSTMLayer(lstm_prev, inp, inp_dim, full_memory_dim, vs, name="lstm", initializer=None):
-    assert full_memory_dim % 2 == 0, "Input is concatenated (h, c); dim must be even."
-    hidden_dim = full_memory_dim / 2
-
-    # gate biases
-    # TODO(jgauthier): support excluding params from regularization
-    b = vs.add_param("%s_b" % name, (hidden_dim * 4,),
-                     initializer=LSTMBiasInitializer())
-
-    def slice_gate(gate_data, i):
-        return gate_data[:, i * hidden_dim:(i + 1) * hidden_dim]
-
-    # Decompose previous LSTM value into hidden and cell value
-    h_prev = lstm_prev[:, :hidden_dim]
-    c_prev = lstm_prev[:, hidden_dim:]
-
-    # Compute and slice gate values
-    # input -> hidden mapping
-    gates = Linear(inp, inp_dim, hidden_dim * 4, vs,
-                   name="%s/inp/linear" % name,
-                   initializer=initializer, use_bias=False)
-    # hidden -> hidden mapping
-    gates += Linear(h_prev, hidden_dim, hidden_dim * 4, vs,
-                    name="%s/hid/linear" % name,
-                    initializer=initializer, use_bias=False)
-    gates += b
-    i_gate, f_gate, o_gate, cell_inp = [slice_gate(gates, i) for i in range(4)]
-
-    # Apply nonlinearities
-    i_gate = T.nnet.sigmoid(i_gate)
-    f_gate = T.nnet.sigmoid(f_gate)
-    o_gate = T.nnet.sigmoid(o_gate)
-    cell_inp = T.tanh(cell_inp)
-
-    # Compute new cell and hidden value
-    c_t = f_gate * c_prev + i_gate * cell_inp
-    h_t = o_gate * T.tanh(c_t)
-
-    return T.concatenate([h_t, c_t], axis=1)
-
-
-def GRULayer(h_prev, inp, inp_dim, full_memory_dim, vs, name="gru", initializer=None):
-    hidden_dim = full_memory_dim
-
-    # gate biases
-    # TODO(mrdrozdov): use b (bias) same as is done in LSTM
-    # b = vs.add_param("%s_b" % name, (hidden_dim * 3,),
-    #                  initializer=GRUBiasInitializer())
-
-    def slice_gate(gate_data, i):
-        return gate_data[:, i * hidden_dim:(i + 1) * hidden_dim]
-
-    # Compute and slice gate values
-    # input -> hidden mapping
-    i2h = Linear(inp, inp_dim, hidden_dim * 3, vs,
-                   name="%s/inp/linear" % name,
-                   initializer=initializer, use_bias=False)
-    # hidden -> hidden mapping
-    h2h = Linear(h_prev, hidden_dim, hidden_dim * 3, vs,
-                    name="%s/hid/linear" % name,
-                    initializer=initializer, use_bias=False)
-
-    gates = i2h[:, 0:2*hidden_dim] + h2h[:, 0:2*hidden_dim]
-
-    z_gate = gates[:, 0:hidden_dim]
-    r_gate = gates[:, hidden_dim:2*hidden_dim]
-
-    # Apply nonlinearities
-    z_gate = T.nnet.sigmoid(z_gate)
-    r_gate = T.nnet.sigmoid(r_gate)
-
-    i2h_gate = i2h[:, 2*hidden_dim:3*hidden_dim]
-    h2h_gate = h2h[:, 2*hidden_dim:3*hidden_dim]
-
-    h_t = T.tanh(i2h_gate + r_gate * h2h_gate)
-    h_next = h_prev + z_gate * (h_t - h_prev)
-
-    return T.concatenate([h_next], axis=1)
-
-
-def MLP(inp, inp_dim, outp_dim, vs, layer=ReLULayer, hidden_dims=None,
-        name="mlp", initializer=None):
-    if hidden_dims is None:
-        hidden_dims = []
-
-    prev_val = inp
-    dims = [inp_dim] + hidden_dims + [outp_dim]
-    for i, (src_dim, tgt_dim) in enumerate(zip(dims, dims[1:])):
-        prev_val = layer(prev_val, src_dim, tgt_dim, vs,
-                         use_bias=True,
-                         name="%s/%i" % (name, i),
-                         initializer=initializer)
-    return prev_val
-
-
-def SGD(cost, params, lr=0.01):
-    grads = T.grad(cost, params)
-
-    new_values = OrderedDict()
-    for param, grad in zip(params, grads):
-        new_values[param] = param - lr * grad
-
-    return new_values
-
-
-def EmbeddingSGD(cost, embedding_matrix, lr=0.01, used_embeddings=None):
-    new_values = OrderedDict()
-
-    if used_embeddings:
-        grads = T.grad(cost, wrt=used_embeddings)
-        new_value = (used_embeddings,
-                     T.inc_subtensor(used_embeddings, -lr * grads))
-    else:
-        new_values = SGD(cost, [embedding_matrix], lr)
-        new_value = (embedding_matrix, new_values[embedding_matrix])
-
-    return new_value
-
-
-def Momentum(cost, params, lr=0.01, momentum=0.9):
-    grads = T.grad(cost, params)
-
-    new_values = OrderedDict()
-    for param, grad in zip(params, grads):
-        param_val = param.get_value(borrow=True)
-        # momentum value
-        m = theano.shared(np.zeros(param_val.shape, dtype=param_val.dtype))
-        # compute velocity
-        v = lr * grad + momentum * m
-
-        new_values[m] = v
-        new_values[param] = param - v
-
-    return new_values
-
-
-def RMSprop(cost, params, lr=0.001, rho=0.9, epsilon=1e-6, grads=None):
-    # From:
-    # https://github.com/Newmu/Theano-Tutorials/blob/master/4_modern_net.py
-    if grads is None:
-        grads = T.grad(cost=cost, wrt=params)
-    assert len(grads) == len(params)
-
-    updates = []
-    for p, g in zip(params, grads):
-        acc = theano.shared(np.zeros_like(p.get_value(), dtype=np.float32),
-                            name="%s/rms/acc" % p.name)
-        acc_new = rho * acc + (1 - rho) * g ** 2
-        gradient_scaling = T.sqrt(acc_new + epsilon)
-        g = g / gradient_scaling
-        updates.append((acc, acc_new))
-        updates.append((p, p - lr * g))
-    return updates
-
-
-def BatchNorm(x, input_dim, vs, name, training_mode, axes=[0], momentum=0.9):
-    """Apply simple batch normalization.
-    This requires introducing new learned scale parameters, so it's
-    important to use unique names unless you're sure you want to share
-    these parameters.
-    """
-
-    # Create the trained gamma and beta parameters.
-    g = vs.add_param("%s_bn_g" % name, (input_dim),
-        initializer=OneInitializer())
-    b = vs.add_param("%s_bn_b" % name, (input_dim),
-        initializer=ZeroInitializer())
-
-    # Create the training set moving averages for test time use.
-    tracking_std = vs.add_param("%s_bn_ts" % name, (input_dim),
-        initializer=OneInitializer(),
-        trainable=False)
-    tracking_mean = vs.add_param("%s_bn_tm" % name, (input_dim),
-        initializer=ZeroInitializer(),
-        trainable=False)
-
-    # Compute the empirical mean and std.
-    mean = x.mean(axis=axes, keepdims=True)
-    std = T.sqrt(x.var(axis=axes, keepdims=True) + 1e-12)
-
-    # Update the moving averages.
-    vs.add_nongradient_update(tracking_std, (momentum * tracking_std + (1 - momentum) * std).flatten(ndim=1))
-    vs.add_nongradient_update(tracking_mean, (momentum * tracking_mean + (1 - momentum) * mean).flatten(ndim=1))
-
-    # Switch between train and test modes.
-    effective_mean = mean * training_mode + tracking_mean * (1 - training_mode)
-    effective_std = std * training_mode + tracking_std * (1 - training_mode)
-
-    # Apply batch norm.
-    return (x - effective_mean) * (g / effective_std) + b
-
-
-def TrackingUnit(state_prev, inp, inp_dim, hidden_dim, vs,
-                 make_logits=True, logits_use_cell=False, name="track_unit"):
-    """
-    Defines a basic recurrent tracking unit that optionally predicts actions.
-
-    This is just an LSTM layer which combines given state and input, and
-    optionally uses the resulting state to predict parser actions.
-
-    Arguments:
-        state_prev: Theano batch of previous tracking state outputs
-        inp: Theano batch of inputs to tracking unit
-        inp_dim: Dimensionality of `inp`
-        hidden_dim: Size of complete LSTM state representation in `state_prev`
-            (both cell and hidden values)
-        vs: VariableStore
-        make_logits: If true, also compute an output layer from the generated
-            state representation.
-        logits_use_cell: When producing logits, use both the LSTM hidden value
-            and cell value. If false, just use the hidden value. Only has an
-            effect when `make_logits` is `True`.
-        name:
+    Args:
+        lstm_iter: Iterable of ``B`` ~chainer.Variable objects, each with
+            shape ``(1,2*S)``, consisting of ``c`` and ``h`` concatenated on
+            axis 1.
 
     Returns:
-        state: Theano batch of state representations for this timestep; same
-            size as `state_prev`
-        logits: If `make_logits` is `True`, a Theano output layer batch of
-            dimension `batch_size * NUM_TRANSITION_TYPES`. Otherwise do not
-            use.
+        state: :class:`~LSTMState` object, with ``c`` and ``h`` attributes
+            each with shape ``(B,S)``.
     """
-    # Pass previous state and input to an LSTM layer.
-    state = LSTMLayer(state_prev, inp, inp_dim, 2 * hidden_dim, vs, name="%s/lstm" % name)
+    if lstm_iter is None:
+        return None
+    lstm_iter = tuple(lstm_iter)
+    if lstm_iter[0] is None:
+        return None
+    return LSTMState(torch.cat(lstm_iter, 0))
 
-    if make_logits:
-        if logits_use_cell:
-            pred_inp = state
-            pred_inp_dim = hidden_dim * 2
+
+def unbundle(state):
+    """Unbundle a batched LSTM state into a tuple of concatenated LSTM states.
+
+    Used between GPU and CPU computation. Reversed by :func:`~bundle`.
+
+    Args:
+        state: :class:`~LSTMState` object, with ``c`` and ``h`` attributes
+            each with shape ``(B,S)``, or an ``inpt`` to
+            :func:`~LSTMState.__init__` that would produce such an object.
+
+    Returns:
+        lstm_iter: Iterable of ``B`` ~chainer.Variable objects, each with
+            shape ``(1,2*S)``, consisting of ``c`` and ``h`` concatenated on
+            axis 1.
+    """
+    if state is None:
+        return itertools.repeat(None)
+    if not isinstance(state, LSTMState):
+        state = LSTMState(state)
+    return torch.chunk(
+        state.both, state.both.data.size()[0], 0)
+
+
+def extract_gates(x, n):
+    r = x.view(x.size(0), x.size(1) // n, n)
+    return [r[:, :, i] for i in range(n)]
+
+
+def lstm(c_prev, x):
+    a, i, f, o = extract_gates(x, 4)
+
+    a = F.tanh(a)
+    i = F.sigmoid(i)
+    f = F.sigmoid(f)
+    o = F.sigmoid(o)
+
+    c = a * i + f * c_prev
+    h = o * F.tanh(c)
+
+    return c, h
+
+
+class ReduceTreeGRU(nn.Module):
+    """
+    Computes the following TreeGRU (x is optional):
+
+    hprev = left + right
+    r = sigm(Ur_x(x) + Wr(hprev))
+    z = sigm(Uz_x(x) + Wz(hprev))
+    c = tanh(Uc_x(x) + V_l(left * r) + V_r(right * r))
+    h = (1-z) * hprev + z * c
+    or:
+    h = hprev + z * (c - hprev)
+
+    Standard GRU would be:
+
+    r = sigm(Ur_x(x) + Wr(hprev))
+    z = sigm(Uz_x(x) + Wz(hprev))
+    c = tanh(Uc_x(x) + V(hprev * r))
+    h = (1-z) * hprev + z * c
+    or:
+    h = hprev + z * (c - hprev)
+
+    """
+
+    def __init__(self, size, tracker_size=None, use_tracking_in_composition=None):
+        super(ReduceTreeGRU, self).__init__()
+        self.size = size
+        self.W = Linear(initializer=HeKaimingInitializer)(size, 2 * size)
+        self.Vl = Linear(initializer=HeKaimingInitializer)(size, size)
+        self.Vr = Linear(initializer=HeKaimingInitializer)(size, size)
+        if tracker_size is not None and use_tracking_in_composition:
+            self.U = Linear(initializer=HeKaimingInitializer)(tracker_size, 3 * size)
+
+    def forward(self, left, right, tracking=None):
+        def slice_gate(gate_data, hidden_dim, i):
+            return gate_data[:, i * hidden_dim:(i + 1) * hidden_dim]
+
+        batch_size = len(left)
+        size = self.size
+
+        left = torch.cat(left, 0)
+        right = torch.cat(right, 0)
+        hprev = left + right
+
+        W = self.W(hprev)
+        r, z = [slice_gate(W, size, i) for i in range(2)]
+        c = 0
+
+        if hasattr(self, "U"):
+            tracking = bundle(tracking)
+            U = self.U(tracking.h)
+            Ur, Uz, Uc = [slice_gate(U, size, i) for i in range(3)]
+            r = Ur + r
+            z = Uz + z
+            c = Uc + c
+
+        r = F.sigmoid(r)
+        z = F.sigmoid(z)
+        c = F.tanh(c + self.Vl(left * r) + self.Vr(right * r))
+        h = hprev + z * (c - hprev)
+
+        return torch.chunk(h, batch_size, 0)
+
+
+def treelstm(c_left, c_right, gates):
+    hidden_dim = c_left.size()[1]
+
+    def slice_gate(gate_data, i):
+        return gate_data[:, i * hidden_dim:(i + 1) * hidden_dim]
+
+    # Compute and slice gate values
+    i_gate, fl_gate, fr_gate, o_gate, cell_inp = \
+        [slice_gate(gates, i) for i in range(5)]
+
+    # Apply nonlinearities
+    i_gate = F.sigmoid(i_gate)
+    fl_gate = F.sigmoid(fl_gate)
+    fr_gate = F.sigmoid(fr_gate)
+    o_gate = F.sigmoid(o_gate)
+    cell_inp = F.tanh(cell_inp)
+
+    # Compute new cell and hidden value
+    i_val = i_gate * cell_inp
+    c_t = fl_gate * c_left + fr_gate * c_right + i_val
+    h_t = o_gate * F.tanh(c_t)
+
+    return (c_t, h_t)
+
+
+class ModelTrainer(object):
+
+    def __init__(self, model, optimizer):
+        self.model = model
+        self.optimizer = optimizer
+
+    def save(self, filename, step, best_dev_error):
+        if the_gpu() >= 0:
+            recursively_set_device(self.model.state_dict(), gpu=-1)
+            recursively_set_device(self.optimizer.state_dict(), gpu=-1)
+
+        # Always sends Tensors to CPU.
+        torch.save({
+            'step': step,
+            'best_dev_error': best_dev_error,
+            'model_state_dict': self.model.state_dict(),
+            'optimizer_state_dict': self.optimizer.state_dict(),
+        }, filename)
+
+        if the_gpu() >= 0:
+            recursively_set_device(self.model.state_dict(), gpu=the_gpu())
+            recursively_set_device(self.optimizer.state_dict(), gpu=the_gpu())
+
+    def load(self, filename):
+        checkpoint = torch.load(filename)
+        model_state_dict = checkpoint['model_state_dict']
+
+        # HACK: Compatability for saving supervised SPINN and loading RL SPINN.
+        if 'baseline' in self.model.state_dict().keys() and 'baseline' not in model_state_dict:
+            model_state_dict['baseline'] = torch.FloatTensor([0.0])
+
+        self.model.load_state_dict(model_state_dict)
+        self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        return checkpoint['step'], checkpoint['best_dev_error']
+
+
+class Embed(nn.Module):
+    def __init__(self, size, vocab_size, vectors):
+        super(Embed, self).__init__()
+        if vectors is None:
+            self.embed = nn.Embedding(vocab_size, size)
+        self.vectors = vectors
+
+    def forward(self, tokens):
+        if self.vectors is None:
+            embeds = self.embed(tokens.contiguous().view(-1).long())
         else:
-            pred_inp = state[:, :hidden_dim]
-            pred_inp_dim = hidden_dim
+            embeds = self.vectors.take(tokens.data.cpu().numpy().ravel(), axis=0)
+            embeds = to_gpu(Variable(torch.from_numpy(embeds), volatile=tokens.volatile))
 
-        # Pass LSTM states through a Linear layer to predict the next transition.
-        logits = Linear(pred_inp, pred_inp_dim, NUM_TRANSITION_TYPES, vs, name="%s/linear" % name)
-    else:
-        logits = 0.0
-
-    return state, logits
+        return embeds
 
 
-def TreeWangJiangAttentionUnit(attention_state_prev_l, attention_state_prev_r, current_stack_top,
-        premise_stack_tops, projected_stack_tops, attention_dim, vs, name="attention_unit",
-        initializer=None):
-    """
-    This is for use in a Wang and Jiang style mLSTM attention formalism where a TreeLSTM, rather than
-    an LSTM RNN, accumulates attention states. In this setting, the model should contain a single step
-    of 2 * model_dim dimensions, where the left [0:model_dim] half contains the TreeLSTM composition states
-    and the right [model_dim:2 * model_dim] half contains the mTreeLSTM states.
+class GRU(nn.Module):
+    def __init__(self, inp_dim, model_dim, num_layers=1, reverse=False, bidirectional=False, dropout=None):
+        super(GRU, self).__init__()
+        self.model_dim = model_dim
+        self.reverse = reverse
+        self.bidirectional = bidirectional
+        self.bi = 2 if self.bidirectional else 1
+        self.num_layers = num_layers
+        self.rnn = nn.GRU(inp_dim, model_dim / self.bi, num_layers=num_layers,
+            batch_first=True,
+            bidirectional=self.bidirectional)
+
+    def forward(self, x, h0=None):
+        bi = self.bi
+        num_layers = self.num_layers
+        batch_size, seq_len = x.size()[:2]
+        model_dim = self.model_dim
+
+        if self.reverse:
+            x = reverse_tensor(x, dim=1)
+
+        # Initialize state unless it is given.
+        if h0 is None:
+            h0 = to_gpu(Variable(torch.zeros(num_layers * bi, batch_size, model_dim / bi), volatile=not self.training))
+
+        # Expects (input, h_0):
+        #   input => seq_len x batch_size x model_dim
+        #   h_0   => (num_layers x bi[1,2]) x batch_size x model_dim
+        output, hn = self.rnn(x, h0)
+
+        if self.reverse:
+            output = reverse_tensor(output, dim=1)
+
+        return output, hn
+
+
+class IntraAttention(nn.Module):
+    def __init__(self, inp_size, outp_size, distance_bias=True):
+        super(IntraAttention, self).__init__()
+        self.inp_size = inp_size
+        self.outp_size = outp_size
+        self.distance_bias = distance_bias
+        self.f = nn.Linear(inp_size, outp_size)
+
+    def d(self, batch_size, seq_len, max_distance=10, scale=0.01):
+        """
+        Generates a bias term based on distance. Something like:
+
+        [[[0, 1, 2, 3],
+          [1, 0, 1, 2],
+          [2, 1, 0, 1],
+          ...
+          ],
+         [[0, 1, 2, 3],
+          [1, 0, 1, 2],
+          [2, 1, 0, 1],
+          ...
+          ],
+          ...
+         ]
+
+        """
+
+        bias = torch.range(0, seq_len-1).float().unsqueeze(0).repeat(seq_len, 1)
+        diff = torch.range(0, seq_len-1).float().unsqueeze(1).expand_as(bias)
+        bias = (bias - diff).abs()
+        bias = bias.clamp(0, max_distance)
+
+        bias = bias * scale
+
+        bias = bias.unsqueeze(0).expand(batch_size, seq_len, seq_len)
+        bias = bias.contiguous()
+
+        bias = to_gpu(Variable(bias, volatile=not self.training))
+
+        return bias
+
+    def forward(self, x):
+        hidden_dim = self.outp_size
+        distance_bias = self.distance_bias
+        batch_size, seq_len, _ = x.size()
+
+        f = self.f(x.view(batch_size * seq_len, -1)).view(batch_size, seq_len, -1)
+
+        f_broadcast = f.unsqueeze(1).expand(batch_size, seq_len, seq_len, hidden_dim)
+
+        # assert f_broadcast[0, 0, 0, :] == f_broadcast[0, 1, 0, :]
+
+        e = torch.bmm(f, f.transpose(1, 2))
+        e = e.view(batch_size * seq_len, seq_len)
+
+        if self.distance_bias:
+            d = self.d(batch_size, seq_len).view(batch_size * seq_len, seq_len)
+            e = e + d
+
+        e = F.softmax(e)
+        e = e.view(batch_size, seq_len, seq_len, 1)
+        e = e.expand_as(f_broadcast)
+
+        # assert e[0, 0, :, 0].sum() == 1
+
+        a = (f_broadcast * e).sum(2).squeeze()
+
+        return a
+
+
+class EncodeGRU(GRU):
+    def __init__(self, *args, **kwargs):
+        super(EncodeGRU, self).__init__(*args, **kwargs)
+
+    def forward(self, x, h0=None):
+        output, hn = super(EncodeGRU, self).forward(x, h0)
+        return output.contiguous()
+
+
+class LSTM(nn.Module):
+    def __init__(self, inp_dim, model_dim, num_layers=1, reverse=False, bidirectional=False, dropout=None):
+        super(LSTM, self).__init__()
+        self.model_dim = model_dim
+        self.reverse = reverse
+        self.bidirectional = bidirectional
+        self.bi = 2 if self.bidirectional else 1
+        self.num_layers = num_layers
+        self.rnn = nn.LSTM(inp_dim, model_dim / self.bi, num_layers=num_layers,
+            batch_first=True,
+            bidirectional=self.bidirectional,
+            dropout=dropout)
+
+    def forward(self, x, h0=None, c0=None):
+        bi = self.bi
+        num_layers = self.num_layers
+        batch_size, seq_len = x.size()[:2]
+        model_dim = self.model_dim
+
+        if self.reverse:
+            x = reverse_tensor(x, dim=1)
+
+        # Initialize state unless it is given.
+        if h0 is None:
+            h0 = to_gpu(Variable(torch.zeros(num_layers * bi, batch_size, model_dim / bi), volatile=not self.training))
+        if c0 is None:
+            c0 = to_gpu(Variable(torch.zeros(num_layers * bi, batch_size, model_dim / bi), volatile=not self.training))
+
+        # Expects (input, h_0, c_0):
+        #   input => seq_len x batch_size x model_dim
+        #   h_0   => (num_layers x bi[1,2]) x batch_size x model_dim
+        #   c_0   => (num_layers x bi[1,2]) x batch_size x model_dim
+        output, (hn, cn) = self.rnn(x, (h0, c0))
+
+        if self.reverse:
+            output = reverse_tensor(output, dim=1)
+
+        return output
+
+
+class ReduceTreeLSTM(nn.Module):
+    """TreeLSTM composition module for SPINN.
+
+    The TreeLSTM has two to three inputs: the first two are the left and right
+    children being composed; the third is the current state of the tracker
+    LSTM if one is present in the SPINN model.
 
     Args:
-      attention_state_prev_{l, r}: The attention results for the children of this node, if present.
-        Else, zero vectors.
-      current_stack_top: The current stack top (h state only, if applicable).
-      premise_stack_tops: The values to do attention over.
-      projected_stack_tops: Projected vectors to use to produce an attentive
-          weighting alpha_t.
-      attention_dim: The dimension of the vectors over which to do attention.
-      vs: A variable store for the learned parameters.
-      name: An identifier for the learned parameters in this unit.
-      initializer: Used to initialize the learned parameters.
-
-    Dimension notation:
-      B : Batch size
-      k : Model dim
-      L : num_transitions
-    """
-    W_h = vs.add_param("%s_W_h" % name, (attention_dim, attention_dim), initializer=initializer)
-    W_rl = vs.add_param("%s_W_rl" % name, (attention_dim, attention_dim), initializer=initializer)
-    W_rr = vs.add_param("%s_W_rr" % name, (attention_dim, attention_dim), initializer=initializer)
-    w = vs.add_param("%s_w" % name, (attention_dim,), initializer=initializer)
-
-    W_h__h_t = T.dot(current_stack_top, W_h)
-    W_rl__l_prev = T.dot(attention_state_prev_l[:,:attention_dim], W_rl)
-    W_rr__r_prev = T.dot(attention_state_prev_r[:,:attention_dim], W_rr)
-
-    # Shape: L x B x k
-    M_t = T.tanh(projected_stack_tops + (W_h__h_t +  W_rl__l_prev + W_rr__r_prev))
-
-    # Shape: B x L
-    alpha_t = T.nnet.softmax(T.dot(M_t, w).T)
-
-    # Shape B x k
-    Y__alpha_t = T.sum(premise_stack_tops * alpha_t.T[:, :, np.newaxis], axis=0)
-
-    mlstm_input = T.concatenate([Y__alpha_t, current_stack_top], axis=1)
-    lstm_prev = (attention_state_prev_l, attention_state_prev_r)
-    r_t = TreeLSTMLayer(lstm_prev, mlstm_input, 2 * attention_dim, vs,
-            name="%s/lstm" % name, external_state_dim=2 * attention_dim)
-
-    return r_t
-
-
-def WangJiangAttentionUnit(attention_state_prev, current_stack_top, premise_stack_tops, projected_stack_tops, attention_dim,
-                    vs, name="attention_unit", initializer=None):
-    """
-    Args:
-      attention_state_prev: The output of this unit at the previous time step.
-      current_stack_top: The current stack top (h state only, if applicable).
-      premise_stack_tops: The values to do attention over.
-      projected_stack_tops: Projected vectors to use to produce an attentive
-          weighting alpha_t.
-      attention_dim: The dimension of the vectors over which to do attention.
-      vs: A variable store for the learned parameters.
-      name: An identifier for the learned parameters in this unit.
-      initializer: Used to initialize the learned parameters.
-
-    Dimension notation:
-      B : Batch size
-      k : Model dim
-      L : num_transitions
-    """
-    W_h = vs.add_param("%s_W_h" % name, (attention_dim, attention_dim), initializer=initializer)
-    W_r = vs.add_param("%s_W_r" % name, (attention_dim, attention_dim), initializer=initializer)
-    w = vs.add_param("%s_w" % name, (attention_dim,), initializer=initializer)
-
-    W_h__h_t = T.dot(current_stack_top, W_h)
-    W_r__r_t_prev = T.dot(attention_state_prev[:,:attention_dim], W_r)
-
-    # Shape: L x B x k
-    M_t = T.tanh(projected_stack_tops + (W_h__h_t + W_r__r_t_prev))
-
-    # Shape: B x L
-    alpha_t = T.nnet.softmax(T.dot(M_t, w).T)
-
-    # Shape B x k
-    Y__alpha_t = T.sum(premise_stack_tops * alpha_t.T[:, :, np.newaxis], axis=0)
-
-    mlstm_input = T.concatenate([Y__alpha_t, current_stack_top], axis=1)
-
-    r_t = LSTMLayer(attention_state_prev, mlstm_input, 2 * attention_dim, 2 * attention_dim, vs, name="%s/lstm" % name)
-
-    return r_t
-
-def TreeThangAttentionUnit(attention_state_prev_l, attention_state_prev_r, current_stack_top,
-        premise_stack_tops, projected_stack_tops, attention_dim, vs, name="attention_unit",
-        initializer=None):
-    """
-    Args:
-      attention_state_prev_{l, r}: The attention results for the children of this node, if present.
-        Else, zero vectors.
-      current_stack_top: The current stack top (h state only, if applicable).
-      premise_stack_tops: The values to do attention over.
-      projected_stack_tops: Projected vectors to use to produce an attentive
-          weighting alpha_t.
-      attention_dim: The dimension of the vectors over which to do attention.
-      vs: A variable store for the learned parameters.
-      name: An identifier for the learned parameters in this unit.
-      initializer: Used to initialize the learned parameters.
-
-    Dimension notation:
-      B : Batch size
-      k : Model dim
-      L : num_transitions
-    """
-    # Shape: B x L
-    score = T.sum(projected_stack_tops * current_stack_top, axis=2).T
-    alpha_t = T.nnet.softmax(score)
-
-    # Shape B x k
-    Y__alpha_t = T.sum(premise_stack_tops * alpha_t.T[:, :, np.newaxis], axis=0)
-
-    mlstm_input = T.concatenate([Y__alpha_t, current_stack_top], axis=1)
-    lstm_prev = (attention_state_prev_l, attention_state_prev_r)
-    r_t = TreeLSTMLayer(lstm_prev, mlstm_input, 2 * attention_dim, vs,
-            name="%s/lstm" % name, external_state_dim=2 * attention_dim)
-
-    return r_t
-
-
-def ThangAttentionUnit(attention_state_prev, current_stack_top, premise_stack_tops, projected_stack_tops, attention_dim,
-                    vs, name="attention_unit", initializer=None):
-    """
-    Args:
-      attention_state_prev: The output of this unit at the previous time step.
-      current_stack_top: The current stack top (h state only, if applicable).
-      premise_stack_tops: The values to do attention over.
-      projected_stack_tops: Projected vectors to use to produce an attentive
-          weighting alpha_t.
-      attention_dim: The dimension of the vectors over which to do attention.
-      vs: A variable store for the learned parameters.
-      name: An identifier for the learned parameters in this unit.
-      initializer: Used to initialize the learned parameters.
-
-    Dimension notation:
-      B : Batch size
-      k : Model dim
-      L : num_transitions
-    """
-    # Shape: B x L
-    score = T.sum(projected_stack_tops * current_stack_top, axis=2).T
-    alpha_t = T.nnet.softmax(score)
-
-    # Shape B x k
-    Y__alpha_t = T.sum(premise_stack_tops * alpha_t.T[:, :, np.newaxis], axis=0)
-
-    mlstm_input = T.concatenate([Y__alpha_t, current_stack_top], axis=1)
-
-    r_t = LSTMLayer(attention_state_prev, mlstm_input, 2 * attention_dim, 2 * attention_dim, vs, name="%s/lstm" % name)
-
-    return r_t
-
-def RocktaschelAttentionUnit(attention_state_prev, current_stack_top, premise_stack_tops, projected_stack_tops, attention_dim,
-                    vs, name="attention_unit", initializer=None):
-    """
-    Args:
-      attention_state_prev: The output of this unit at the previous time step.
-      current_stack_top: The current stack top (h state only, if applicable).
-      premise_stack_tops: The values to retrieve using attention.
-      projected_stack_tops: Projected vectors to use to produce an attentive
-          weighting alpha_t.
-      attention_dim: The dimension of the vectors over which to do attention.
-      vs: A variable store for the learned parameters.
-      name: An identifier for the learned parameters in this unit.
-      initializer: Used to initialize the learned parameters.
-
-    Dimension notation:
-      B : Batch size
-      k : Model dim
-      L : num_transitions
+        size: The size of the model state.
+        tracker_size: The size of the tracker LSTM hidden state, or None if no
+            tracker is present.
     """
 
-    W_h = vs.add_param("%s_W_h" % name, (attention_dim, attention_dim), initializer=initializer)
-    W_r = vs.add_param("%s_W_r" % name, (attention_dim, attention_dim), initializer=initializer)
-    W_t = vs.add_param("%s_W_t" % name, (attention_dim, attention_dim), initializer=initializer)
-    w = vs.add_param("%s_w" % name, (attention_dim,), initializer=initializer)
+    def __init__(self, size, tracker_size=None, use_tracking_in_composition=None):
+        super(ReduceTreeLSTM, self).__init__()
+        self.left = Linear(initializer=HeKaimingInitializer)(size, 5 * size)
+        self.right = Linear(initializer=HeKaimingInitializer)(size, 5 * size, bias=False)
+        if tracker_size is not None and use_tracking_in_composition:
+            self.track = Linear(initializer=HeKaimingInitializer)(tracker_size, 5 * size, bias=False)
 
-    W_h__h_t = T.dot(current_stack_top, W_h)
-    W_r__r_t_prev = T.dot(attention_state_prev, W_r)
+    def forward(self, left_in, right_in, tracking=None):
+        """Perform batched TreeLSTM composition.
 
-    # Vector-by-matrix addition here: (Right?)
-    # Shape: L x B x k
-    M_t = T.tanh(projected_stack_tops + (W_h__h_t + W_r__r_t_prev))
+        This implements the REDUCE operation of a SPINN in parallel for a
+        batch of nodes. The batch size is flexible; only provide this function
+        the nodes that actually need to be REDUCEd.
 
-    # Shape: B x L
-    alpha_t = T.nnet.softmax(T.dot(M_t, w).T)
+        The TreeLSTM has two to three inputs: the first two are the left and
+        right children being composed; the third is the current state of the
+        tracker LSTM if one is present in the SPINN model. All are provided
+        as iterables and batched internally into tensors.
 
-    # Shape B x k
-    Y__alpha_t = T.sum(premise_stack_tops * alpha_t.T[:, :, np.newaxis], axis=0)
+        Args:
+            left_in: Iterable of ``B`` ~chainer.Variable objects containing
+                ``c`` and ``h`` concatenated for the left child of each node
+                in the batch.
+            right_in: Iterable of ``B`` ~chainer.Variable objects containing
+                ``c`` and ``h`` concatenated for the right child of each node
+                in the batch.
+            tracking: Iterable of ``B`` ~chainer.Variable objects containing
+                ``c`` and ``h`` concatenated for the tracker LSTM state of
+                each node in the batch, or None.
 
-    # Mysterious Rocktaschel-style RNN update step.
-    r_t = Y__alpha_t + T.tanh(T.dot(attention_state_prev, W_t))
-    return r_t
+        Returns:
+            out: Tuple of ``B`` ~chainer.Variable objects containing ``c`` and
+                ``h`` concatenated for the LSTM state of each new node.
+        """
+        left, right = bundle(left_in), bundle(right_in)
+        tracking = bundle(tracking)
+        lstm_in = self.left(left.h)
+        lstm_in += self.right(right.h)
+        if hasattr(self, 'track'):
+            lstm_in += self.track(tracking.h)
+        out = unbundle(treelstm(left.c, right.c, lstm_in))
+        return out
 
 
-def AttentionUnitFinalRepresentation(final_attention_state, final_stack_top, attention_dim, vs, initializer=None, name="attention_unit_final"):
-    """Produces the complete representation of the aligned sentence pair."""
+class MLP(nn.Module):
+    def __init__(self, mlp_input_dim, mlp_dim, num_classes, num_mlp_layers, mlp_bn,
+                 classifier_dropout_rate=0.0):
+        super(MLP, self).__init__()
 
-    W_p = vs.add_param("%s_W_p" % name, (attention_dim, attention_dim), initializer=initializer)
-    W_x = vs.add_param("%s_W_x" % name, (attention_dim, attention_dim), initializer=initializer)
-    h_final = T.tanh(T.dot(final_attention_state, W_p) + T.dot(final_stack_top, W_x))
-    return h_final
+        self.num_mlp_layers = num_mlp_layers
+        self.mlp_bn = mlp_bn
+        self.classifier_dropout_rate = classifier_dropout_rate
+
+        features_dim = mlp_input_dim
+
+        if mlp_bn:
+            self.bn_inp = nn.BatchNorm1d(features_dim)
+        for i in range(num_mlp_layers):
+            setattr(self, 'l{}'.format(i), Linear(initializer=HeKaimingInitializer)(features_dim, mlp_dim))
+            if mlp_bn:
+                setattr(self, 'bn{}'.format(i), nn.BatchNorm1d(mlp_dim))
+            features_dim = mlp_dim
+        setattr(self, 'l{}'.format(num_mlp_layers), Linear(initializer=HeKaimingInitializer)(features_dim, num_classes))
+
+    def forward(self, h):
+        if self.mlp_bn:
+            h = self.bn_inp(h)
+        h = F.dropout(h, self.classifier_dropout_rate, training=self.training)
+        for i in range(self.num_mlp_layers):
+            layer = getattr(self, 'l{}'.format(i))
+            h = layer(h)
+            h = F.relu(h)
+            if self.mlp_bn:
+                bn = getattr(self, 'bn{}'.format(i))
+                h = bn(h)
+            h = F.dropout(h, self.classifier_dropout_rate, training=self.training)
+        layer = getattr(self, 'l{}'.format(self.num_mlp_layers))
+        y = layer(h)
+        return y
 
 
-def AttentionUnitInit(premise_stack_tops, attention_dim, vs, initializer=None, name="attention_unit_init"):
-    """Does an initial reweighting on the input vectors that will be used for attention.
-
-    Unlike the units above, this only needs to be called once per batch, not at every step."""
-
-    W_y = vs.add_param("%s_W_y" % name, (attention_dim, attention_dim), initializer=initializer)
-    return T.dot(premise_stack_tops, W_y)
+class HeKaimingLinear(nn.Linear):
+    def reset_parameters(self):
+        HeKaimingInitializer(self.weight)
+        if self.bias is not None:
+            ZeroInitializer(self.bias)
 
 
+def DefaultUniformInitializer(param):
+    stdv = 1. / math.sqrt(param.size(1))
+    UniformInitializer(param, stdv)
+
+
+def HeKaimingInitializer(param):
+    fan = param.size()
+    init = np.random.normal(scale=np.sqrt(4.0/(fan[0] + fan[1])),
+                                size=fan).astype(np.float32)
+    param.data.set_(torch.from_numpy(init))
+
+
+def UniformInitializer(param, range):
+    shape = param.size()
+    init = np.random.uniform(-range, range, shape).astype(np.float32)
+    param.data.set_(torch.from_numpy(init))
+
+
+def NormalInitializer(param, std):
+    shape = param.size()
+    init = np.random.normal(0.0, std, shape).astype(np.float32)
+    param.data.set_(torch.from_numpy(init))
+
+
+def ZeroInitializer(param):
+    shape = param.size()
+    init = np.zeros(shape).astype(np.float32)
+    param.data.set_(torch.from_numpy(init))
+
+
+def OneInitializer(param):
+    shape = param.size()
+    init = np.ones(shape).astype(np.float32)
+    param.data.set_(torch.from_numpy(init))
+
+
+def ValueInitializer(param, value):
+    shape = param.size()
+    init = np.ones(shape).astype(np.float32) * value
+    param.data.set_(torch.from_numpy(init))
+
+
+def TreeLSTMBiasInitializer(param):
+    shape = param.size()
+
+    hidden_dim = shape[0] / 5
+    init = np.zeros(shape).astype(np.float32)
+    init[hidden_dim:3*hidden_dim] = 1
+
+    param.data.set_(torch.from_numpy(init))
+
+
+def LSTMBiasInitializer(param):
+    shape = param.size()
+
+    hidden_dim = shape[0] / 4
+    init = np.zeros(shape)
+    init[hidden_dim:2*hidden_dim] = 1
+
+    param.data.set_(torch.from_numpy(init))
+
+
+def DoubleIdentityInitializer(param, range):
+    shape = param.size()
+
+    half_d = shape[0] / 2
+    double_identity = np.concatenate((
+        np.identity(half_d), np.identity(half_d))).astype(np.float32)
+
+    param.data.set_(torch.from_numpy(double_identity)).add_(
+        UniformInitializer(param.clone(), range))
+
+
+def PassthroughLSTMInitializer(lstm):
+    G_POSITION = 3
+    F_POSITION = 1
+
+    i_dim = lstm.weight_ih_l0.size()[1]
+    h_dim = lstm.weight_hh_l0.size()[1]
+    assert i_dim == h_dim, "PassthroughLSTM requires input dim == hidden dim."
+
+    hh_init = np.zeros(lstm.weight_hh_l0.size()).astype(np.float32)
+    ih_init = np.zeros(lstm.weight_ih_l0.size()).astype(np.float32)
+    ih_init[G_POSITION * h_dim:(G_POSITION + 1) * h_dim, :] = np.identity(h_dim)
+
+    bhh_init = np.zeros(lstm.bias_hh_l0.size()).astype(np.float32)
+    bih_init = np.ones(lstm.bias_ih_l0.size()).astype(np.float32) * 2
+    bih_init[G_POSITION * h_dim:(G_POSITION + 1) * h_dim] = 0
+    bih_init[F_POSITION * h_dim:(F_POSITION + 1) * h_dim] = -2
+
+    lstm.weight_hh_l0.data.set_(torch.from_numpy(hh_init))
+    lstm.weight_ih_l0.data.set_(torch.from_numpy(ih_init))
+    lstm.bias_hh_l0.data.set_(torch.from_numpy(bhh_init))
+    lstm.bias_ih_l0.data.set_(torch.from_numpy(bih_init))
+
+
+def Linear(initializer=DefaultUniformInitializer, bias_initializer=ZeroInitializer):
+    class CustomLinear(nn.Linear):
+        def reset_parameters(self):
+            initializer(self.weight)
+            if self.bias is not None:
+                bias_initializer(self.bias)
+    return CustomLinear

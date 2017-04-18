@@ -1,0 +1,162 @@
+17-03-21 00:49:46 [1] Flag Values:
+{
+    "actively_decay_learning_rate": true,
+    "batch_size": 32,
+    "branch_name": "mrdrozdov/decrease-verbose",
+    "bucket_eval": true,
+    "ckpt_interval_steps": 5000,
+    "ckpt_on_best_dev_error": true,
+    "ckpt_path": "/Users/Andrew/logs/spinn",
+    "ckpt_step": 1000,
+    "clipping_max_value": 5.0,
+    "data_type": "snli",
+    "debug": false,
+    "deque_length": null,
+    "embedding_data_path": "/Users/Andrew/data/glove/glove.10k.txt",
+    "embedding_keep_rate": 0.9,
+    "encode_bidirectional": false,
+    "encode_num_layers": 1,
+    "encode_reverse": false,
+    "encode_style": null,
+    "eval_data_limit": -1,
+    "eval_data_path": "/Users/Andrew/data/multinli_0.1/multinli_0.1_dev_matched.jsonl",
+    "eval_interval_steps": 500,
+    "eval_report_use_preds": true,
+    "eval_seq_length": null,
+    "evalb": false,
+    "expanded_eval_only_mode": false,
+    "experiment_name": "snli-SPINN-1490550368",
+    "gen_h": true,
+    "gpu": -1,
+    "init_range": 0.005,
+    "l2_lambda": 2.75e-05,
+    "lateral_tracking": true,
+    "learning_rate": 0.0003,
+    "learning_rate_decay_per_10k_steps": 0.75,
+    "load_best": false,
+    "log_path": "/Users/Andrew/logs/spinn",
+    "lowercase": false,
+    "metrics_interval_steps": 10,
+    "metrics_path": "/Users/Andrew/logs/spinn-runs",
+    "mlp_bn": true,
+    "mlp_dim": 1024,
+    "model_dim": 50,
+    "model_type": "SPINN",
+    "num_mlp_layers": 2,
+    "num_samples": 0,
+    "optimizer_type": "RMSprop",
+    "predict_leaf": true,
+    "predict_use_cell": true,
+    "rl_baseline": "ema",
+    "rl_entropy": false,
+    "rl_entropy_beta": 0.001,
+    "rl_epsilon": 1.0,
+    "rl_epsilon_decay": 50000.0,
+    "rl_mu": 0.1,
+    "rl_reward": "standard",
+    "rl_weight": 1.0,
+    "rl_whiten": false,
+    "semantic_classifier_keep_rate": 0.9,
+    "seq_length": 600,
+    "sha": "c421495cd08821cfa13b9cab1451cfbb0c042569",
+    "show_progress_bar": true,
+    "shuffle_eval": false,
+    "shuffle_eval_seed": 123,
+    "smart_batching": true,
+    "statistics_interval_steps": 100,
+    "tracking_lstm_hidden_dim": 40,
+    "training_data_path": "/Users/Andrew/data/multinli_0.1/multinli_0.1_dev_matched.jsonl",
+    "training_steps": 100000,
+    "transition_weight": 1.0,
+    "use_difference_feature": true,
+    "use_encode": false,
+    "use_internal_parser": true,
+    "use_l2_cost": true,
+    "use_lengths": false,
+    "use_peano": true,
+    "use_product_feature": true,
+    "use_tracking_in_composition": true,
+    "validate_transitions": true,
+    "word_embedding_dim": 300,
+    "write_eval_report": false
+}
+17-03-21 00:49:46 [1] In fixed vocabulary mode. Training embeddings.
+17-03-21 00:49:46 [1] Preprocessing training data.
+17-03-21 00:49:47 [1] Preprocessing eval data: python/spinn/data/arithmetic/simple5_1k.tsv
+17-03-21 00:49:47 [1] Building model.
+17-03-21 00:49:47 [1] Architecture: BaseModel (
+  (spinn): RLSPINN (
+    (reduce): Reduce (
+      (left): CustomLinear (25 -> 125)
+      (right): CustomLinear (25 -> 125)
+    )
+    (tracker): Tracker (
+      (buf): CustomLinear (25 -> 160)
+      (stack1): CustomLinear (25 -> 160)
+      (stack2): CustomLinear (25 -> 160)
+      (lateral): CustomLinear (40 -> 160)
+    )
+    (transition_net): Linear (80 -> 2)
+  )
+  (mlp): MLP (
+    (bn_inp): BatchNorm1d(25, eps=1e-05, momentum=0.1, affine=True)
+    (l0): CustomLinear (25 -> 1024)
+    (bn0): BatchNorm1d(1024, eps=1e-05, momentum=0.1, affine=True)
+    (l1): CustomLinear (1024 -> 1024)
+    (bn1): BatchNorm1d(1024, eps=1e-05, momentum=0.1, affine=True)
+    (l2): CustomLinear (1024 -> 21)
+  )
+  (embed): Embed (
+    (embed): Embedding(24, 50)
+  )
+)
+17-03-21 00:49:47 [1] Total params: 1128192.0
+17-03-21 00:49:47 [1]
+17-03-21 00:49:47 [1] # ----- BEGIN: Log Configuration ----- #
+17-03-21 00:49:47 [1] Train-Format: Step: {step} Acc: {class_acc:.5f} {transition_acc:.5f} Cost: {total_cost:.5f} {xent_cost:.5f} {transition_cost:.5f} {l2_cost:.5f} Time: {time:.5f}
+17-03-21 00:49:47 [1] Train-Extra-Format: Train Extra: lr={learning_rate:.7f} inv={invalid:.7f} ninv={ninvalid:.7f} eps={epsilon:.7f}
+17-03-21 00:49:47 [1] Eval-Format: Step: {step} Eval acc: {class_acc:.5f} {transition_acc:.5f} {filename} Time: {time:.5f}
+17-03-21 00:49:47 [1] Eval-Extra-Format: Eval Extra: inv={inv:.7f} ninv={ninv:.7f}
+17-03-21 00:49:47 [1] # ----- END: Log Configuration ----- #
+17-03-21 00:49:47 [1]
+17-03-21 00:49:47 [1] Training.
+17-03-21 00:49:47 [1] Step: 0 Acc: 0.05000 0.90000 Cost: 4.24409 4.08546 0.41994 0.12610 Time: 0.00132
+17-03-21 00:49:47 [1] Train Extra: lr=0.0001000 inv=1.0000000 ninv=0.2000000 eps=1.0000000
+17-03-21 00:49:48 [1] Step: 10 Acc: 0.04750 0.81071 Cost: 3.37351 3.23430 0.40508 0.12590 Time: 0.00089
+17-03-21 00:49:48 [1] Train Extra: lr=0.0001000 inv=0.9700000 ninv=0.1385714 eps=0.9998000
+17-03-21 00:49:49 [1] Step: 10 Eval acc: 0.06042 0.83787 python/spinn/data/arithmetic/simple5_1k.tsv Time: 0.00015
+17-03-21 00:49:49 [1] Eval Extra: inv=0.4000000 ninv=0.1780415
+17-03-21 00:49:50 [1] Step: 20 Acc: 0.12000 0.86169 Cost: 2.83979 2.54850 0.40499 0.12579 Time: 0.00101
+17-03-21 00:49:50 [1] Train Extra: lr=0.0000999 inv=0.9300000 ninv=0.1597938 eps=0.9996001
+17-03-21 00:49:51 [1] Step: 20 Eval acc: 0.04792 0.83364 python/spinn/data/arithmetic/simple5_1k.tsv Time: 0.00015
+17-03-21 00:49:51 [1] Eval Extra: inv=0.2466667 ninv=0.1097923
+17-03-21 00:49:52 [1] Step: 30 Acc: 0.10500 0.83347 Cost: 4.04766 3.97345 0.40940 0.12571 Time: 0.00097
+17-03-21 00:49:52 [1] Train Extra: lr=0.0000999 inv=0.9325000 ninv=0.1504032 eps=0.9994002
+17-03-21 00:49:53 [1] Step: 30 Eval acc: 0.04688 0.82868 python/spinn/data/arithmetic/simple5_1k.tsv Time: 0.00015
+17-03-21 00:49:53 [1] Eval Extra: inv=0.3008333 ninv=0.1339021
+17-03-21 00:49:54 [1] Step: 40 Acc: 0.16500 0.83911 Cost: 2.88326 2.66333 0.39066 0.12564 Time: 0.00096
+17-03-21 00:49:54 [1] Train Extra: lr=0.0000999 inv=0.9325000 ninv=0.1513799 eps=0.9992003
+17-03-21 00:49:54 [1] Step: 40 Eval acc: 0.04063 0.82224 python/spinn/data/arithmetic/simple5_1k.tsv Time: 0.00015
+17-03-21 00:49:54 [1] Eval Extra: inv=0.2370833 ninv=0.1055267
+17-03-21 00:49:56 [1] Step: 50 Acc: 0.11250 0.83321 Cost: 3.10639 2.94814 0.39401 0.12557 Time: 0.00091
+17-03-21 00:49:56 [1] Train Extra: lr=0.0000999 inv=0.9300000 ninv=0.1365639 eps=0.9990005
+17-03-21 00:49:56 [1] Step: 50 Eval acc: 0.03125 0.82243 python/spinn/data/arithmetic/simple5_1k.tsv Time: 0.00015
+17-03-21 00:49:56 [1] Eval Extra: inv=0.2470833 ninv=0.1099777
+17-03-21 00:49:58 [1] Step: 60 Acc: 0.18500 0.86207 Cost: 2.71888 2.52782 0.39317 0.12552 Time: 0.00100
+17-03-21 00:49:58 [1] Train Extra: lr=0.0000998 inv=0.9250000 ninv=0.1594828 eps=0.9988007
+17-03-21 00:49:58 [1] Step: 60 Eval acc: 0.02917 0.81985 python/spinn/data/arithmetic/simple5_1k.tsv Time: 0.00015
+17-03-21 00:49:58 [1] Eval Extra: inv=0.2325000 ninv=0.1034866
+17-03-21 00:50:00 [1] Step: 70 Acc: 0.20000 0.83266 Cost: 2.90003 2.71007 0.39359 0.12547 Time: 0.00095
+17-03-21 00:50:00 [1] Train Extra: lr=0.0000998 inv=0.9350000 ninv=0.1508065 eps=0.9986010
+17-03-21 00:50:00 [1] Step: 70 Eval acc: 0.03333 0.81746 python/spinn/data/arithmetic/simple5_1k.tsv Time: 0.00016
+17-03-21 00:50:00 [1] Eval Extra: inv=0.2304167 ninv=0.1025593
+17-03-21 00:50:02 [1] Step: 80 Acc: 0.17000 0.81679 Cost: 2.66616 2.52116 0.38858 0.12542 Time: 0.00098
+17-03-21 00:50:02 [1] Train Extra: lr=0.0000998 inv=0.9125000 ninv=0.1303571 eps=0.9984013
+17-03-21 00:50:02 [1] Step: 80 Eval acc: 0.04583 0.81930 python/spinn/data/arithmetic/simple5_1k.tsv Time: 0.00016
+17-03-21 00:50:02 [1] Eval Extra: inv=0.2195833 ninv=0.0977374
+17-03-21 00:50:04 [1] Step: 90 Acc: 0.17000 0.83182 Cost: 3.87160 3.83566 0.40252 0.12538 Time: 0.00091
+17-03-21 00:50:04 [1] Train Extra: lr=0.0000997 inv=0.9400000 ninv=0.1424242 eps=0.9982016
+17-03-21 00:50:04 [1] Step: 90 Eval acc: 0.04167 0.81875 python/spinn/data/arithmetic/simple5_1k.tsv Time: 0.00014
+17-03-21 00:50:04 [1] Eval Extra: inv=0.2154167 ninv=0.0958828
+17-03-21 00:50:06 [1] Step: 100 Acc: 0.22000 0.83387 Cost: 2.69664 2.58561 0.38575 0.12534 Time: 0.00099
+17-03-21 00:50:06 [1] Train Extra: lr=0.0000997 inv=0.9325000 ninv=0.1504032 eps=0.9980020

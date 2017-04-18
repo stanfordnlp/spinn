@@ -47,6 +47,8 @@ def convert_binary_bracketed_data(filename):
                         example["tokens"].append(word)
                     example["transitions"].append(1 if word == ")" else 0)
 
+            example["example_id"] = str(len(examples))
+
             examples.append(example)
     return examples
 
