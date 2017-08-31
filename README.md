@@ -1,4 +1,4 @@
-*NOTE:* This codebase is under active development. To exactly reproduce the experiments published in ACL 2016, use [this release][7].
+*NOTE:* This codebase is under active development. To exactly reproduce the experiments published in ACL 2016, use [this release][7]. For the most recent version, see the [NYU fork](https://github.com/nyu-mll/spinn).
 
 # Stack-augmented Parser-Interpreter Neural Network
 
